@@ -55,7 +55,7 @@ public class DashboardService {
                 "expired", (int) expiredCards,
                 "enabled", (int) enabledCards
         ));
-        long onlineCount = userRepository.countOnlineUsers(LocalDateTime.now().minusMinutes(30));
+        long onlineCount = cardRepository.countRecentlyActive(LocalDateTime.now().minusMinutes(30));
         overview.put("online", Map.of("count", (int) onlineCount));
 
         var recentCardsPage = cardRepository.findAll(

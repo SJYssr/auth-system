@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Repository
@@ -50,4 +51,7 @@ public interface CardRepository extends JpaRepository<Card, Integer> {
 
     @Query("SELECT COUNT(c) FROM Card c WHERE c.expiresAt IS NOT NULL AND c.expiresAt < CURRENT_TIMESTAMP")
     long countExpired();
+
+    @Query("SELECT COUNT(c) FROM Card c WHERE c.lastLoginTime IS NOT NULL AND c.lastLoginTime >= :since")
+    long countRecentlyActive(@Param("since") LocalDateTime since);
 }

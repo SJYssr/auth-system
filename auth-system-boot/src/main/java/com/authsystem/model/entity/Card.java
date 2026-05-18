@@ -57,6 +57,9 @@ public class Card {
     @Column(name = "last_login_ip", length = 45)
     private String lastLoginIp;
 
+    @Column(name = "token", length = 64)
+    private String token;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -114,6 +117,9 @@ public class Card {
 
     public String getLastLoginIp() { return lastLoginIp; }
     public void setLastLoginIp(String lastLoginIp) { this.lastLoginIp = lastLoginIp; }
+
+    public String getToken() { return token; }
+    public void setToken(String token) { this.token = token; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS cards (
     activation_ip VARCHAR(45),
     last_login_time DATETIME NULL,
     last_login_ip VARCHAR(45),
+    token VARCHAR(64),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE,
@@ -154,3 +155,6 @@ VALUES ('SJY', 'sjyssr@petalmail.com', '79d8e538249ed882d2012ede95fbaecf', 1, 'e
 INSERT INTO datas (site_name, site_title, keywords, description, contact_email, status)
 SELECT '应用卡密管理系统', '应用卡密管理与授权平台', '卡密管理,应用管理,版本管理', '基于卡密的现代化应用授权管理系统，提供应用管理、卡密生成、版本控制等功能', 'i@zyyo.net', 'enabled'
 WHERE NOT EXISTS (SELECT 1 FROM datas);
+
+-- 为已有数据库添加 token 列（如已存在则忽略错误）
+-- ALTER TABLE cards ADD COLUMN token VARCHAR(64) AFTER last_login_ip;

@@ -203,7 +203,7 @@
           <el-input-number v-model="form.price" :min="0" :precision="2" placeholder="请输入价格" style="width:100%" />
         </el-form-item>
         <el-form-item label="卡密类型" prop="card_type">
-          <el-select v-model="form.card_type" placeholder="请选择类型" style="width: 100%;">
+          <el-select v-model="form.card_type" placeholder="请选择类型" style="width: 100%;" :disabled="isEdit">
             <el-option label="小时卡" value="小时卡" />
             <el-option label="天卡" value="天卡" />
             <el-option label="周卡" value="周卡" />
@@ -212,8 +212,8 @@
           </el-select>
         </el-form-item>
         <el-form-item label="积分数量" prop="points">
-          <el-input-number v-model="form.points" :min="1" :max="99999" placeholder="积分数量" />
-          <span class="form-hint">1积分 = {{ pointUnit }}</span>
+          <el-input-number v-model="form.points" :min="1" :max="99999" placeholder="积分数量" :disabled="isEdit" />
+          <span class="form-hint" v-if="!isEdit">1积分 = {{ pointUnit }}</span>
         </el-form-item>
         <el-form-item label="机器码" prop="mac" v-if="isEdit">
           <el-input v-model="form.mac" placeholder="机器码（可选）" />
