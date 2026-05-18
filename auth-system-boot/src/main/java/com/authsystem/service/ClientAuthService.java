@@ -93,7 +93,6 @@ public class ClientAuthService {
         }
 
         card.setToken(null);
-        card.setLastLoginTime(null);
         card.setUpdatedAt(LocalDateTime.now());
         cardRepository.save(card);
     }

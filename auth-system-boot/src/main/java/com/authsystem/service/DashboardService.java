@@ -12,7 +12,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -55,7 +54,7 @@ public class DashboardService {
                 "expired", (int) expiredCards,
                 "enabled", (int) enabledCards
         ));
-        long onlineCount = cardRepository.countRecentlyActive(LocalDateTime.now().minusMinutes(30));
+        long onlineCount = cardRepository.countOnline();
         overview.put("online", Map.of("count", (int) onlineCount));
 
         var recentCardsPage = cardRepository.findAll(
