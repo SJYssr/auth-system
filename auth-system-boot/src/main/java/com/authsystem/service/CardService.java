@@ -127,23 +127,38 @@ public class CardService {
             }
             card.setCardType(cardType);
         }
-        if (data.containsKey("price")) card.setPrice(new BigDecimal(data.get("price").toString()));
-        if (data.containsKey("points")) card.setPoints(Math.max(1, ((Number) data.get("points")).intValue()));
-        if (data.containsKey("card_remark")) card.setCardRemark((String) data.get("card_remark"));
-        if (data.containsKey("status")) card.setStatus(getValidStatus((String) data.get("status")));
+        if (data.containsKey("price") && data.get("price") != null)
+            card.setPrice(new BigDecimal(data.get("price").toString()));
+        if (data.containsKey("points") && data.get("points") != null)
+            card.setPoints(Math.max(1, ((Number) data.get("points")).intValue()));
+        if (data.containsKey("card_remark") && data.get("card_remark") != null)
+            card.setCardRemark(data.get("card_remark").toString());
+        if (data.containsKey("status") && data.get("status") != null)
+            card.setStatus(getValidStatus(data.get("status").toString()));
         if (data.containsKey("expires_at")) {
-            String expiresAtStr = (String) data.get("expires_at");
-            card.setExpiresAt((expiresAtStr != null && !expiresAtStr.isEmpty())
-                    ? LocalDateTime.parse(expiresAtStr.replace(" ", "T")) : null);
+            Object val = data.get("expires_at");
+            if (val != null && !val.toString().isEmpty()) {
+                card.setExpiresAt(LocalDateTime.parse(val.toString().replace(" ", "T")));
+            } else {
+                card.setExpiresAt(null);
+            }
         }
-        if (data.containsKey("mac")) card.setMac((String) data.get("mac"));
-        if (data.containsKey("login_count")) card.setLoginCount(((Number) data.get("login_count")).intValue());
-        if (data.containsKey("activation_ip")) card.setActivationIp((String) data.get("activation_ip"));
+        if (data.containsKey("mac") && data.get("mac") != null)
+            card.setMac(data.get("mac").toString());
+        if (data.containsKey("login_count") && data.get("login_count") != null)
+            card.setLoginCount(((Number) data.get("login_count")).intValue());
+        if (data.containsKey("activation_ip") && data.get("activation_ip") != null)
+            card.setActivationIp(data.get("activation_ip").toString());
         if (data.containsKey("last_login_time")) {
-            String llt = (String) data.get("last_login_time");
-            card.setLastLoginTime((llt != null && !llt.isEmpty()) ? LocalDateTime.parse(llt.replace(" ", "T")) : null);
+            Object val = data.get("last_login_time");
+            if (val != null && !val.toString().isEmpty()) {
+                card.setLastLoginTime(LocalDateTime.parse(val.toString().replace(" ", "T")));
+            } else {
+                card.setLastLoginTime(null);
+            }
         }
-        if (data.containsKey("last_login_ip")) card.setLastLoginIp((String) data.get("last_login_ip"));
+        if (data.containsKey("last_login_ip") && data.get("last_login_ip") != null)
+            card.setLastLoginIp(data.get("last_login_ip").toString());
         card.setUpdatedAt(LocalDateTime.now());
         return cardRepository.save(card);
     }

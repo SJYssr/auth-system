@@ -47,7 +47,7 @@
       <!-- 左侧柱状图 -->
       <div class="chart-container">
         <div class="chart-header">
-          <div class="chart-title">应用授权分布</div>
+          <div class="chart-title">应用激活分布</div>
         </div>
         <div ref="barChart" class="chart-content"></div>
       </div>
@@ -55,7 +55,7 @@
       <!-- 右侧曲线图 -->
       <div class="chart-container">
         <div class="chart-header">
-          <div class="chart-title">活跃用户趋势</div>
+          <div class="chart-title">收入趋势</div>
         </div>
         <div ref="lineChart" class="chart-content"></div>
       </div>
@@ -63,39 +63,36 @@
 
     <!-- 最近记录：左右两列 -->
     <div class="recent-sections">
-      <!-- 左：最近授权记录 -->
+      <!-- 左：最近激活记录 -->
       <div class="recent-block">
         <div class="section-header">
-          <h3 class="section-title">最近授权记录</h3>
+          <h3 class="section-title">最近激活记录</h3>
           <span class="section-count">{{ recentAuths.length }} 条记录</span>
         </div>
         
         <div class="records-container" v-if="recentAuths.length > 0">
-          <div 
-            v-for="(auth, index) in recentAuths" 
-            :key="index" 
-            class="record-item"
-            :class="auth.status === 'enabled' ? 'status-success' : 'status-disabled'"
+          <div
+            v-for="(item, index) in recentAuths"
+            :key="index"
+            class="record-item status-success"
           >
             <div class="record-content">
               <div class="record-main">
-                <span class="record-app">{{ auth.app_name }}</span>
-                <span class="record-user">{{ auth.user_name }}</span>
+                <span class="record-app">{{ item.app_name }}</span>
+                <span class="record-user">{{ item.card }}</span>
               </div>
               <div class="record-meta">
-                <span class="record-time">{{ formatTime(auth.created_at) }}</span>
-                <span class="record-badge" :class="auth.status === 'enabled' ? 'badge-success' : 'badge-disabled'">
-                  {{ auth.status === 'enabled' ? '启用' : '禁用' }}
-                </span>
+                <span class="record-time">{{ formatTime(item.activated_at) }}</span>
+                <span class="record-badge badge-success">{{ item.card_type }}</span>
               </div>
             </div>
           </div>
         </div>
-        
+
         <div class="empty-state" v-else>
           <div class="empty-content">
             <div class="empty-icon">📋</div>
-            <div class="empty-text">暂无授权记录</div>
+            <div class="empty-text">暂无激活记录</div>
           </div>
         </div>
       </div>
@@ -161,13 +158,10 @@ const activatedCards = computed(() => Number(businessStore.dashboardData?.overvi
 const expiredCards = computed(() => Number(businessStore.dashboardData?.overview?.cards?.expired ?? 0))
 const onlineCount = computed(() => Number(businessStore.dashboardData?.overview?.online?.count ?? 0))
 
-// recent auths
+// recent activated cards
 const recentAuths = computed(() => {
-  const list = businessStore.dashboardData?.recent_auth ?? []
-  return Array.isArray(list) ? list.map((item) => ({
-    ...item,
-    status: item.status === 'enabled' ? 'enabled' : (item.status === 'disabled' ? 'disabled' : item.status)
-  })) : []
+  const list = businessStore.dashboardData?.recent_cards ?? []
+  return Array.isArray(list) ? list : []
 })
 
 // recent logs (from admin_logs)
@@ -200,35 +194,41 @@ const initBarChart = () => {
   if (!barChart.value) return
   const data = businessStore.dashboardData?.app_distribution ?? []
   const x = data.map(d => d.app_name)
-  const y = data.map(d => Number(d.total_auth ?? 0))
   if (!barChartInstance) barChartInstance = echarts.init(barChart.value)
   const option = {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    legend: { data: cardTypes },
+    grid: { top: '15%', left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: { type: 'category', data: x, axisTick: { alignWithLabel: true } },
-    yAxis: { type: 'value' },
-    series: [{ name: '授权数', type: 'bar', barWidth: '50%', data: y, itemStyle: { color: '#4B7BEC' } }]
+    yAxis: { type: 'value', minInterval: 1 },
+    series: cardTypes.map((ct, i) => ({
+      name: ct, type: 'bar', barWidth: '18%',
+      data: data.map(d => Number(d[ct] ?? 0)),
+      itemStyle: { color: cardColors[i] }
+    }))
   }
   barChartInstance.setOption(option, true)
 }
 
+const cardTypes = ['小时卡', '天卡', '月卡', '年卡']
+const cardColors = ['#F59E0B', '#10B981', '#3B82F6', '#8B5CF6']
+
 const initLineChart = () => {
   if (!lineChart.value) return
-  const data = businessStore.dashboardData?.active_users ?? []
-  const x = data.map(d => d.username)
-  const y = data.map(d => Number(d.auth_count ?? 0))
+  const data = businessStore.dashboardData?.revenue ?? []
+  const x = data.map(d => d.app_name)
   if (!lineChartInstance) lineChartInstance = echarts.init(lineChart.value)
   const option = {
-    tooltip: { trigger: 'axis' },
-    grid: { top: '5%', left: '3%', right: '4%', bottom: '3%', containLabel: true },
-    xAxis: { type: 'category', boundaryGap: false, data: x, axisLine: { show: false }, axisTick: { show: false } },
-    yAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false } },
-    series: [{
-      name: '授权数', type: 'line', smooth: true,
-      lineStyle: { width: 3, color: '#10B981' },
-      areaStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(16,185,129,0.45)'},{offset:1,color:'rgba(16,185,129,0.05)'}]) },
-      data: y
-    }]
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { data: cardTypes },
+    grid: { top: '15%', left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'category', data: x, axisTick: { alignWithLabel: true } },
+    yAxis: { type: 'value', name: '收入(元)', minInterval: 1 },
+    series: cardTypes.map((ct, i) => ({
+      name: ct, type: 'bar', barWidth: '18%',
+      data: data.map(d => Number(d[ct] ?? 0)),
+      itemStyle: { color: cardColors[i] }
+    }))
   }
   lineChartInstance.setOption(option, true)
 }

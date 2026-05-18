@@ -57,35 +57,71 @@ public class DashboardService {
         long onlineCount = cardRepository.countOnline();
         overview.put("online", Map.of("count", (int) onlineCount));
 
-        var recentCardsPage = cardRepository.findAll(
-                PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "createdAt")));
+        var recentCardsPage = cardRepository.findByIsActivatedOrderByActivatedAtDesc(1,
+                PageRequest.of(0, 10));
         List<Map<String, Object>> recentCards = new ArrayList<>();
         for (Card c : recentCardsPage.getContent()) {
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("card", c.getCard());
             map.put("card_type", c.getCardType());
-            map.put("points", c.getPoints());
             map.put("status", c.getStatus());
-            map.put("is_activated", c.getIsActivated());
-            map.put("created_at", c.getCreatedAt() != null ? c.getCreatedAt().toString() : null);
             map.put("app_name", c.getApp() != null ? c.getApp().getAppName() : "");
+            map.put("mac", c.getMac() != null ? c.getMac() : "");
+            map.put("activated_at", c.getActivatedAt() != null ? c.getActivatedAt().toString() : "");
             recentCards.add(map);
         }
 
+        List<String> cardTypes = List.of("小时卡", "天卡", "月卡", "年卡");
         List<App> apps = appRepository.findAll();
+
         List<Map<String, Object>> appDistribution = new ArrayList<>();
         for (App a : apps) {
-            long count = cardRepository.countByAppId(a.getId());
+            List<Object[]> rows = cardRepository.revenueByCardType(a.getId());
             Map<String, Object> map = new LinkedHashMap<>();
             map.put("app_name", a.getAppName());
-            map.put("total_cards", (int) count);
-            map.put("activated_cards", 0);
-            map.put("expired_cards", 0);
+            int total = 0;
+            for (String ct : cardTypes) {
+                map.put(ct, 0);
+            }
+            for (Object[] row : rows) {
+                String type = (String) row[0];
+                if (cardTypes.contains(type)) {
+                    int count = ((Number) row[1]).intValue();
+                    map.put(type, count);
+                    total += count;
+                }
+            }
+            map.put("total", total);
             appDistribution.add(map);
         }
-        appDistribution.sort((a, b) -> Integer.compare((int) b.get("total_cards"), (int) a.get("total_cards")));
+        appDistribution.sort((a, b) -> Integer.compare((int) b.get("total"), (int) a.get("total")));
         if (appDistribution.size() > 10) {
             appDistribution = appDistribution.subList(0, 10);
+        }
+
+        List<Map<String, Object>> revenue = new ArrayList<>();
+        for (App a : apps) {
+            List<Object[]> rows = cardRepository.revenueByCardType(a.getId());
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("app_name", a.getAppName());
+            for (String ct : cardTypes) {
+                map.put(ct, 0);
+            }
+            for (Object[] row : rows) {
+                String type = (String) row[0];
+                if (cardTypes.contains(type)) {
+                    map.put(type, ((Number) row[2]).intValue());
+                }
+            }
+            revenue.add(map);
+        }
+        revenue.sort((a, b) -> {
+            int sumA = cardTypes.stream().mapToInt(t -> (int) a.get(t)).sum();
+            int sumB = cardTypes.stream().mapToInt(t -> (int) b.get(t)).sum();
+            return Integer.compare(sumB, sumA);
+        });
+        if (revenue.size() > 10) {
+            revenue = revenue.subList(0, 10);
         }
 
         var recentLogsPage = logRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 10));
@@ -107,6 +143,7 @@ public class DashboardService {
         dashboard.put("overview", overview);
         dashboard.put("recent_cards", recentCards);
         dashboard.put("app_distribution", appDistribution);
+        dashboard.put("revenue", revenue);
         dashboard.put("recent_logs", recentLogs);
         return dashboard;
     }

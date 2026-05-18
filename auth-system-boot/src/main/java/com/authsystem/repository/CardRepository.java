@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -53,4 +54,9 @@ public interface CardRepository extends JpaRepository<Card, Integer> {
 
     @Query("SELECT COUNT(c) FROM Card c WHERE c.token IS NOT NULL")
     long countOnline();
+
+    @Query(value = "SELECT c.card_type, COUNT(c.id), COALESCE(SUM(c.price), 0) FROM cards c WHERE c.app_id = :appId AND c.is_activated = 1 GROUP BY c.card_type", nativeQuery = true)
+    List<Object[]> revenueByCardType(@Param("appId") Integer appId);
+
+    Page<Card> findByIsActivatedOrderByActivatedAtDesc(Integer isActivated, Pageable pageable);
 }
