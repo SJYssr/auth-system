@@ -6,7 +6,7 @@ import com.authsystem.model.entity.Log;
 import com.authsystem.repository.AppRepository;
 import com.authsystem.repository.CardRepository;
 import com.authsystem.repository.LogRepository;
-import com.authsystem.repository.UserRepository;
+import com.authsystem.repository.AdminRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -28,7 +28,7 @@ public class DashboardService {
     private LogRepository logRepository;
 
     @Autowired
-    private UserRepository userRepository;
+    private AdminRepository adminRepository;
 
     public Map<String, Object> getDashboard() {
         long totalApps = appRepository.count();

@@ -1,7 +1,7 @@
 package com.authsystem.service;
 
 import com.authsystem.model.entity.Log;
-import com.authsystem.model.entity.User;
+import com.authsystem.model.entity.Admin;
 import com.authsystem.repository.LogRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +10,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -77,11 +78,14 @@ public class LogService {
         return result;
     }
 
-    public void log(User user, String action, String module, String targetType,
+    private static final int MAX_LOG_COUNT = 500;
+
+    @Transactional
+    public void log(Admin admin, String action, String module, String targetType,
                     Integer targetId, String targetName, String description, String requestData) {
         Log log = new Log();
-        log.setUserId(user != null ? user.getId() : null);
-        log.setUsername(user != null ? user.getUsername() : null);
+        log.setUserId(admin != null ? admin.getId() : null);
+        log.setUsername(admin != null ? admin.getUsername() : null);
         log.setAction(action);
         log.setModule(module);
         log.setTargetType(targetType);
@@ -93,7 +97,8 @@ public class LogService {
         log.setRequestData(requestData);
         log.setResponseStatus("success");
         log.setCreatedAt(LocalDateTime.now());
-        logRepository.save(log);
+        logRepository.saveAndFlush(log);
+        logRepository.deleteOldestExceeding(MAX_LOG_COUNT);
     }
 
     private String getClientIP() {

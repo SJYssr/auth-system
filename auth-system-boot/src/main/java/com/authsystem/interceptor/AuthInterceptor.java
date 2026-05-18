@@ -1,7 +1,7 @@
 package com.authsystem.interceptor;
 
-import com.authsystem.model.entity.User;
-import com.authsystem.repository.UserRepository;
+import com.authsystem.model.entity.Admin;
+import com.authsystem.repository.AdminRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,7 +14,7 @@ import java.util.Optional;
 public class AuthInterceptor implements HandlerInterceptor {
 
     @Autowired
-    private UserRepository userRepository;
+    private AdminRepository adminRepository;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -36,27 +36,27 @@ public class AuthInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        Optional<User> userOpt = userRepository.findByToken(token);
-        if (userOpt.isEmpty()) {
+        Optional<Admin> adminOpt = adminRepository.findByToken(token);
+        if (adminOpt.isEmpty()) {
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"success\":false,\"data\":null,\"message\":\"无效的认证令牌\"}");
             return false;
         }
 
-        User user = userOpt.get();
-        if (!"enabled".equals(user.getStatus())) {
+        Admin admin = adminOpt.get();
+        if (!"enabled".equals(admin.getStatus())) {
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"success\":false,\"data\":null,\"message\":\"账户已被禁用\"}");
             return false;
         }
 
-        if (user.getIsSuperuser() != 1) {
+        if (admin.getIsSuperuser() != 1) {
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"success\":false,\"data\":null,\"message\":\"需要超级用户权限\"}");
             return false;
         }
 
-        request.setAttribute("currentUser", user);
+        request.setAttribute("currentUser", admin);
         return true;
     }
 }

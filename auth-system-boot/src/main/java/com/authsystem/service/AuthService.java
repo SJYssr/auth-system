@@ -1,7 +1,7 @@
 package com.authsystem.service;
 
-import com.authsystem.model.entity.User;
-import com.authsystem.repository.UserRepository;
+import com.authsystem.model.entity.Admin;
+import com.authsystem.repository.AdminRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -17,39 +17,39 @@ import java.util.Optional;
 public class AuthService {
 
     @Autowired
-    private UserRepository userRepository;
+    private AdminRepository adminRepository;
 
     private static final String SECRET_KEY = "your_secret_key_here_change_in_production";
 
     public Map<String, Object> login(String username, String password) {
         String passwordHash = md5(password);
 
-        Optional<User> userOpt = userRepository.findByUsername(username);
-        if (userOpt.isEmpty() || !userOpt.get().getPassword().equals(passwordHash)
-                || userOpt.get().getIsSuperuser() != 1
-                || !"enabled".equals(userOpt.get().getStatus())) {
+        Optional<Admin> adminOpt = adminRepository.findByUsername(username);
+        if (adminOpt.isEmpty() || !adminOpt.get().getPassword().equals(passwordHash)
+                || adminOpt.get().getIsSuperuser() != 1
+                || !"enabled".equals(adminOpt.get().getStatus())) {
             return null;
         }
 
-        User user = userOpt.get();
-        String token = generateToken(user.getId());
-        user.setToken(token);
-        user.setLastLogin(LocalDateTime.now());
-        userRepository.save(user);
+        Admin admin = adminOpt.get();
+        String token = generateToken(admin.getId());
+        admin.setToken(token);
+        admin.setLastLogin(LocalDateTime.now());
+        adminRepository.save(admin);
 
         Map<String, Object> result = new HashMap<>();
         result.put("token", token);
         Map<String, Object> userMap = new HashMap<>();
-        userMap.put("id", user.getId());
-        userMap.put("username", user.getUsername());
-        userMap.put("email", user.getEmail());
-        userMap.put("is_superuser", user.getIsSuperuser() == 1);
+        userMap.put("id", admin.getId());
+        userMap.put("username", admin.getUsername());
+        userMap.put("email", admin.getEmail());
+        userMap.put("is_superuser", admin.getIsSuperuser() == 1);
         result.put("user", userMap);
         return result;
     }
 
-    public User validateToken(String token) {
-        return userRepository.findByToken(token).orElse(null);
+    public Admin validateToken(String token) {
+        return adminRepository.findByToken(token).orElse(null);
     }
 
     public static String generateToken(Integer userId) {

@@ -32,7 +32,7 @@
           @change="handleSearch"
         >
           <el-option label="全部" value="" />
-          <el-option label="用户管理" value="users" />
+          <el-option label="管理员管理" value="admins" />
           <el-option label="余额管理" value="balance" />
           <el-option label="应用管理" value="apps" />
           <el-option label="授权管理" value="auths" />

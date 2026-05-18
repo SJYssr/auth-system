@@ -2,7 +2,7 @@ CREATE DATABASE IF NOT EXISTS auth_system CHARACTER SET utf8mb4 COLLATE utf8mb4_
 
 USE auth_system;
 
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS admins (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
     email VARCHAR(100) NOT NULL UNIQUE,
@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS users (
     last_login DATETIME NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_users_username (username),
-    INDEX idx_users_token (token),
-    INDEX idx_users_status (status)
+    INDEX idx_admins_username (username),
+    INDEX idx_admins_token (token),
+    INDEX idx_admins_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS apps (
@@ -149,7 +149,7 @@ INSERT IGNORE INTO error_codes (code, message, description, solution) VALUES
 ('-1008', '版本号已存在', '该版本号已被使用', '请使用不同的版本号'),
 ('-1009', '服务器内部错误', '服务器发生未知错误', '请稍后重试或联系技术支持');
 
-INSERT IGNORE INTO users (username, email, password, is_superuser, status, created_at)
+INSERT IGNORE INTO admins (username, email, password, is_superuser, status, created_at)
 VALUES ('SJY', 'sjyssr@petalmail.com', '79d8e538249ed882d2012ede95fbaecf', 1, 'enabled', NOW());
 
 INSERT INTO datas (site_name, site_title, keywords, description, contact_email, status)

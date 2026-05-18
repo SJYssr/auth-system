@@ -2,7 +2,7 @@ package com.authsystem.controller;
 
 import com.authsystem.dto.ApiResponse;
 import com.authsystem.model.entity.App;
-import com.authsystem.model.entity.User;
+import com.authsystem.model.entity.Admin;
 import com.authsystem.service.*;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,8 +33,8 @@ public class PublicController {
             logService.log(null, "login", "system", null, null, null, "管理员登录失败: " + username, null);
             return ok(new ApiResponse(false, null, "用户名或密码错误，或非管理员账户"));
         }
-        User loginUser = authService.validateToken((String) result.get("token"));
-        logService.log(loginUser, "login", "system", null, null, null, "管理员登录成功", null);
+        Admin loginAdmin = authService.validateToken((String) result.get("token"));
+        logService.log(loginAdmin, "login", "system", null, null, null, "管理员登录成功", null);
         return ok(new ApiResponse(true, result, "登录成功"));
     }
 
@@ -43,16 +43,16 @@ public class PublicController {
         String token = getToken();
         Map<String, Object> initData = initService.getInitData(token);
         if (token != null && !token.isEmpty()) {
-            User user = authService.validateToken(token);
-            if (user != null && "enabled".equals(user.getStatus())) {
+            Admin admin = authService.validateToken(token);
+            if (admin != null && "enabled".equals(admin.getStatus())) {
                 Map<String, Object> loginStatus = new LinkedHashMap<>();
                 loginStatus.put("is_logged_in", true);
                 Map<String, Object> userMap = new LinkedHashMap<>();
-                userMap.put("id", user.getId());
-                userMap.put("username", user.getUsername());
-                userMap.put("email", user.getEmail());
-                userMap.put("is_superuser", user.getIsSuperuser() == 1);
-                userMap.put("status", user.getStatus());
+                userMap.put("id", admin.getId());
+                userMap.put("username", admin.getUsername());
+                userMap.put("email", admin.getEmail());
+                userMap.put("is_superuser", admin.getIsSuperuser() == 1);
+                userMap.put("status", admin.getStatus());
                 loginStatus.put("user", userMap);
                 initData.put("login_status", loginStatus);
             }

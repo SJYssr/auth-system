@@ -14,7 +14,6 @@
           <span>{{ siteName }}</span>
         </div>
         <div class="header-actions">
-          <router-link to="/admin" class="primary-button">管理后台</router-link>
         </div>
       </div>
     </header>
@@ -47,10 +46,6 @@
             </div>
             <p class="footer-description">专业的授权管理系统</p>
             <p class="footer-copyright">© 2025 zyyo. 保留所有权利</p>
-          </div>
-          
-          <div class="footer-links">
-            <router-link to="/admin" class="footer-link">管理后台</router-link>
           </div>
           
           <div class="footer-contact" v-if="initializeInfo.website?.email || initializeInfo.website?.phone">

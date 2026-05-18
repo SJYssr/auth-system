@@ -47,4 +47,9 @@ public interface LogRepository extends JpaRepository<Log, Integer> {
     @Transactional
     @Query("DELETE FROM Log l")
     int deleteAllLogs();
+
+    @Modifying
+    @Transactional
+    @Query(value = "DELETE FROM logs WHERE id NOT IN (SELECT id FROM (SELECT id FROM logs ORDER BY created_at DESC LIMIT :limit) t)", nativeQuery = true)
+    int deleteOldestExceeding(@Param("limit") int limit);
 }

@@ -256,8 +256,8 @@ public class AdminController {
     }
 
     // helpers
-    private User currentUser() {
-        return (User) request.getAttribute("currentUser");
+    private Admin currentUser() {
+        return (Admin) request.getAttribute("currentUser");
     }
 
     private String str(Map<String, Object> map, String key) {
