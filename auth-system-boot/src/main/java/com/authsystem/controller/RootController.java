@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 @RestController
@@ -77,6 +79,63 @@ public class RootController {
         try {
             clientAuthService.cardLogout(softid, card, token);
             return ResponseEntity.ok(Map.of("result", "1"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.ok(Map.of("errcode", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/download")
+    public ResponseEntity<Map<String, Object>> download(@RequestBody Map<String, Object> body) {
+        String softid = str(body, "Softid");
+        if (isEmpty(softid)) {
+            return ResponseEntity.ok(Map.of("errcode", "-1001"));
+        }
+        try {
+            String url = appService.getDownloadUrl(softid);
+            return ResponseEntity.ok(Map.of("url", url));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.ok(Map.of("errcode", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/usage")
+    public ResponseEntity<Map<String, Object>> usage(@RequestBody Map<String, Object> body) {
+        String softid = str(body, "Softid");
+        if (isEmpty(softid)) {
+            return ResponseEntity.ok(Map.of("errcode", "-1001"));
+        }
+        try {
+            String url = appService.getUsageGuide(softid);
+            return ResponseEntity.ok(Map.of("url", url));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.ok(Map.of("errcode", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/purchase")
+    public ResponseEntity<Map<String, Object>> purchase(@RequestBody Map<String, Object> body) {
+        String softid = str(body, "Softid");
+        if (isEmpty(softid)) {
+            return ResponseEntity.ok(Map.of("errcode", "-1001"));
+        }
+        try {
+            String url = appService.getPurchaseUrl(softid);
+            return ResponseEntity.ok(Map.of("url", url));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.ok(Map.of("errcode", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/expiry")
+    public ResponseEntity<Map<String, Object>> expiry(@RequestBody Map<String, Object> body) {
+        String softid = str(body, "Softid");
+        String card = str(body, "Card");
+        if (isEmpty(softid) || isEmpty(card)) {
+            return ResponseEntity.ok(Map.of("errcode", "-1001"));
+        }
+        try {
+            LocalDateTime expiresAt = clientAuthService.getExpiry(softid, card);
+            return ResponseEntity.ok(Map.of("expires_at", expiresAt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.ok(Map.of("errcode", e.getMessage()));
         }

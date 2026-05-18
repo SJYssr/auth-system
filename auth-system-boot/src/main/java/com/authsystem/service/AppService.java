@@ -214,6 +214,30 @@ public class AppService {
         return latest != null ? latest.getVersion() : "";
     }
 
+    public String getDownloadUrl(String softid) {
+        App app = getBySoftid(softid);
+        if (app == null || !"enabled".equals(app.getStatus())) {
+            throw new IllegalArgumentException("-1007");
+        }
+        return app.getDownloadUrl() != null ? app.getDownloadUrl() : "";
+    }
+
+    public String getUsageGuide(String softid) {
+        App app = getBySoftid(softid);
+        if (app == null || !"enabled".equals(app.getStatus())) {
+            throw new IllegalArgumentException("-1007");
+        }
+        return app.getUsageGuide() != null ? app.getUsageGuide() : "";
+    }
+
+    public String getPurchaseUrl(String softid) {
+        App app = getBySoftid(softid);
+        if (app == null || !"enabled".equals(app.getStatus())) {
+            throw new IllegalArgumentException("-1007");
+        }
+        return app.getPurchaseUrl() != null ? app.getPurchaseUrl() : "";
+    }
+
     public long countByStatus(String status) {
         return appRepository.countByStatus(status);
     }

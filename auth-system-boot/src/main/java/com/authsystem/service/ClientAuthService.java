@@ -97,6 +97,26 @@ public class ClientAuthService {
         cardRepository.save(card);
     }
 
+    public LocalDateTime getExpiry(String softid, String cardNumber) {
+        App app = appRepository.findBySoftid(softid).orElse(null);
+        if (app == null || !"enabled".equals(app.getStatus())) {
+            throw new IllegalArgumentException("-1007");
+        }
+
+        Card card = cardRepository.findByCard(cardNumber)
+                .orElseThrow(() -> new IllegalArgumentException("-1004"));
+
+        if (!card.getAppId().equals(app.getId())) {
+            throw new IllegalArgumentException("-1004");
+        }
+
+        if (card.getExpiresAt() == null) {
+            throw new IllegalArgumentException("-1009");
+        }
+
+        return card.getExpiresAt();
+    }
+
     private LocalDateTime calcExpiry(String cardType, int points, LocalDateTime base) {
         return switch (cardType) {
             case "小时卡" -> base.plusHours(points);

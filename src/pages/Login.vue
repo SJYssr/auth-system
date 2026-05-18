@@ -9,6 +9,12 @@
         <el-form-item prop="password">
           <el-input v-model="form.password" type="password" placeholder="密码" prefix-icon="Lock" show-password size="large" />
         </el-form-item>
+        <el-form-item prop="captcha_code">
+          <div class="captcha-row">
+            <el-input v-model="form.captcha_code" placeholder="验证码" size="large" style="flex:1" />
+            <img :src="captchaImage" class="captcha-img" @click="fetchCaptcha" title="点击刷新验证码" />
+          </div>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" size="large" :loading="loading" @click="handleLogin" style="width: 100%;">
             登 录
@@ -20,20 +26,32 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/stores/modules/app'
+import request from '@/utils/request'
 
 const router = useRouter()
 const store = useAppStore()
 
 const loading = ref(false)
 const formRef = ref(null)
-const form = reactive({ username: '', password: '' })
+const captchaImage = ref('')
+const captchaKey = ref('')
+const form = reactive({ username: '', password: '', captcha_code: '' })
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  captcha_code: [{ required: true, message: '请输入验证码', trigger: 'blur' }]
+}
+
+const fetchCaptcha = async () => {
+  try {
+    const res = await request.get('/public/captcha')
+    captchaImage.value = res.data.image
+    captchaKey.value = res.data.key
+  } catch {}
 }
 
 const handleLogin = async () => {
@@ -41,17 +59,26 @@ const handleLogin = async () => {
   await formRef.value.validate()
   try {
     loading.value = true
-    const response = await store.login(form)
+    const response = await store.login({
+      username: form.username,
+      password: form.password,
+      captcha_key: captchaKey.value,
+      captcha_code: form.captcha_code
+    })
     localStorage.setItem('token', response.data.token)
     await store.initialize()
     ElMessage.success('登录成功')
     router.push('/admin/dashboard')
   } catch (error) {
+    fetchCaptcha()
+    form.captcha_code = ''
     ElMessage.error(error.message || '登录失败')
   } finally {
     loading.value = false
   }
 }
+
+onMounted(() => { fetchCaptcha() })
 </script>
 
 <style scoped>
@@ -74,5 +101,18 @@ const handleLogin = async () => {
   margin: 0 0 32px;
   font-size: 22px;
   color: #1f2937;
+}
+.captcha-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.captcha-img {
+  height: 40px;
+  width: 100px;
+  border-radius: 6px;
+  border: 1px solid #dcdfe6;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 </style>

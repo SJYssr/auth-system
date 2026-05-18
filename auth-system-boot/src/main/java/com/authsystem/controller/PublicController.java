@@ -20,14 +20,25 @@ public class PublicController {
     @Autowired private AppService appService;
     @Autowired private InitService initService;
     @Autowired private LogService logService;
+    @Autowired private CaptchaService captchaService;
     @Autowired private HttpServletRequest request;
+
+    @GetMapping("/captcha")
+    public ResponseEntity<ApiResponse> captcha() {
+        return ok(new ApiResponse(true, captchaService.generate(), null));
+    }
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse> login(@RequestBody Map<String, Object> body) {
         String username = str(body, "username");
         String password = str(body, "password");
-        if (isEmpty(username) || isEmpty(password))
-            return ok(new ApiResponse(false, null, "用户名和密码不能为空"));
+        String captchaKey = str(body, "captcha_key");
+        String captchaCode = str(body, "captcha_code");
+        if (isEmpty(username) || isEmpty(password) || isEmpty(captchaKey) || isEmpty(captchaCode))
+            return ok(new ApiResponse(false, null, "用户名、密码和验证码不能为空"));
+        if (!captchaService.verify(captchaKey, captchaCode)) {
+            return ok(new ApiResponse(false, null, "验证码错误"));
+        }
         Map<String, Object> result = authService.login(username, password);
         if (result == null) {
             logService.log(null, "login", "system", null, null, null, "管理员登录失败: " + username, null);
