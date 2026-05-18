@@ -27,17 +27,17 @@ public class RootController {
         }
     }
 
-    @PostMapping(value = "/version", produces = "text/plain;charset=UTF-8")
-    public ResponseEntity<String> getVersion(@RequestBody Map<String, Object> body) {
+    @PostMapping("/version")
+    public ResponseEntity<Map<String, Object>> getVersion(@RequestBody Map<String, Object> body) {
         String softid = str(body, "Softid");
         if (isEmpty(softid)) {
-            return ResponseEntity.ok("-1001");
+            return ResponseEntity.ok(Map.of("errcode", "-1001"));
         }
         try {
             String version = appService.getLatestVersion(softid);
-            return ResponseEntity.ok(version);
+            return ResponseEntity.ok(Map.of("version", version));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.ok(e.getMessage());
+            return ResponseEntity.ok(Map.of("errcode", e.getMessage()));
         }
     }
 
