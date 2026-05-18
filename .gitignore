@@ -1,0 +1,5 @@
+/.claude
+/auth-system-boot/.idea
+/auth-system-boot/target
+/dist
+/node_modules
