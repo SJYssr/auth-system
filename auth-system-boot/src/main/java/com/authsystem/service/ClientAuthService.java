@@ -1,9 +1,11 @@
 package com.authsystem.service;
 
 import com.authsystem.model.entity.App;
+import com.authsystem.model.entity.AppVersion;
 import com.authsystem.model.entity.Card;
 import com.authsystem.repository.AppRepository;
 import com.authsystem.repository.CardRepository;
+import com.authsystem.repository.AppVersionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,14 +22,25 @@ public class ClientAuthService {
     @Autowired
     private AppRepository appRepository;
 
+    @Autowired
+    private AppVersionRepository versionRepository;
+
     private static final String TOKEN_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private static final SecureRandom RANDOM = new SecureRandom();
 
     @Transactional
-    public String cardLogin(String softid, String cardNumber, String mac, String ipAddress) {
+    public String cardLogin(String softid, String cardNumber, String mac, String clientVersion, String ipAddress) {
         App app = appRepository.findBySoftid(softid).orElse(null);
         if (app == null || !"enabled".equals(app.getStatus())) {
             throw new IllegalArgumentException("-1007");
+        }
+
+        if (app.getForceUpdate() != null && app.getForceUpdate() == 1) {
+            AppVersion latest = versionRepository.findTopByAppIdAndStatusOrderByCreatedAtDesc(app.getId(), "enabled");
+            String latestVersion = latest != null ? latest.getVersion() : "";
+            if (!latestVersion.isEmpty() && !latestVersion.equals(clientVersion)) {
+                throw new IllegalArgumentException("-1008");
+            }
         }
 
         Card card = cardRepository.findByCard(cardNumber)

@@ -225,14 +225,14 @@
           <el-input v-model="form.activation_ip" placeholder="激活IP或地址（可选）" disabled />
         </el-form-item>
         <el-form-item label="激活时间" prop="activated_at" v-if="isEdit">
-          <el-input :model-value="form.activated_at" disabled placeholder="激活时间" />
+          <el-input :model-value="formatTime(form.activated_at)" disabled placeholder="激活时间" />
         </el-form-item>
         <el-form-item label="到期时间" prop="expires_at" v-if="isEdit">
           <el-date-picker v-model="form.expires_at" type="datetime" placeholder="选择到期时间（可选）"
             format="YYYY-MM-DD HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%;" />
         </el-form-item>
         <el-form-item label="上次登陆时间" prop="last_login_time" v-if="isEdit">
-          <el-input :model-value="form.last_login_time" disabled placeholder="上次登陆时间" />
+          <el-input :model-value="formatTime(form.last_login_time)" disabled placeholder="上次登陆时间" />
         </el-form-item>
         <el-form-item label="上次登陆IP" prop="last_login_ip" v-if="isEdit">
           <el-input :model-value="form.last_login_ip" disabled placeholder="上次登陆IP" />
@@ -337,6 +337,22 @@ const rules = {
   app_id: [{ required: true, message: '请选择软件', trigger: 'change' }],
   card_type: [{ required: true, message: '请选择卡密类型', trigger: 'change' }],
   points: [{ required: true, message: '请输入积分数量', trigger: 'blur' }]
+}
+
+const formatTime = (input) => {
+  if (!input) return ''
+  try {
+    const s = String(input).replace(/-/g, '/').replace('T', ' ').replace(/\.\d+Z?$/, '')
+    const d = new Date(s)
+    if (isNaN(d.getTime())) return String(input)
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mm = String(d.getMinutes()).padStart(2, '0')
+    const ss = String(d.getSeconds()).padStart(2, '0')
+    return `${y}-${m}-${day} ${hh}:${mm}:${ss}`
+  } catch { return String(input) }
 }
 
 const pointUnit = computed(() => {

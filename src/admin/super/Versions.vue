@@ -65,13 +65,6 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="强制更新" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.force_update ? 'danger' : 'info'" size="small">
-              {{ row.force_update ? '强制' : '普通' }}
-            </el-tag>
-          </template>
-        </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="160" />
         <el-table-column prop="updated_at" label="更新时间" width="160" />
         <el-table-column label="操作" width="160" fixed="right">
@@ -118,15 +111,6 @@
             inactive-value="disabled"
             active-text="启用"
             inactive-text="禁用"
-          />
-        </el-form-item>
-        <el-form-item label="强制更新" prop="force_update">
-          <el-switch
-            v-model="form.force_update"
-            :active-value="1"
-            :inactive-value="0"
-            active-text="强制"
-            inactive-text="普通"
           />
         </el-form-item>
       </el-form>
@@ -181,8 +165,7 @@ const form = ref({
   app_id: appId.value,
   version: '',
   version_name: '',
-  status: 'enabled',
-  force_update: 0
+  status: 'enabled'
 })
 
 const rules = {
@@ -261,8 +244,7 @@ const handleAdd = () => {
     app_id: appId.value,
     version: '',
     version_name: '',
-    status: 'enabled',
-    force_update: 0
+    status: 'enabled'
   }
   drawerVisible.value = true
 }
@@ -273,8 +255,7 @@ const handleEdit = (row) => {
     app_id: row.app_id,
     version: row.version || '',
     version_name: row.version_name || '',
-    status: row.status || 'enabled',
-    force_update: row.force_update || 0
+    status: row.status || 'enabled'
   }
   drawerVisible.value = true
 }

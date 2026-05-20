@@ -136,6 +136,7 @@ public class AppService {
         app.setUsageGuide((String) data.getOrDefault("usage_guide", ""));
         app.setPurchaseUrl((String) data.getOrDefault("purchase_url", ""));
         app.setAnnouncement((String) data.getOrDefault("announcement", ""));
+        app.setForceUpdate(toInt(data.getOrDefault("force_update", 0)));
         app.setStatus(getValidStatus((String) data.get("status")));
         app.setSoftid(generateSoftid());
         app.setCreatedAt(LocalDateTime.now());
@@ -175,8 +176,10 @@ public class AppService {
         if (data.containsKey("usage_guide")) app.setUsageGuide((String) data.get("usage_guide"));
         if (data.containsKey("purchase_url")) app.setPurchaseUrl((String) data.get("purchase_url"));
         if (data.containsKey("announcement")) app.setAnnouncement((String) data.get("announcement"));
+        if (data.containsKey("force_update")) app.setForceUpdate(toInt(data.getOrDefault("force_update", 0)));
+        if (data.containsKey("version")) app.setVersion((String) data.get("version"));
+        if (data.containsKey("version_name")) app.setVersionName((String) data.get("version_name"));
         if (data.containsKey("status")) app.setStatus(getValidStatus((String) data.get("status")));
-        // 版本号和版本名称在编辑时禁止修改
         app.setUpdatedAt(LocalDateTime.now());
         return appRepository.save(app);
     }
@@ -200,6 +203,14 @@ public class AppService {
             throw new IllegalArgumentException("-1007");
         }
         return app.getAnnouncement() != null ? app.getAnnouncement() : "";
+    }
+
+    public int getForceUpdate(String softid) {
+        App app = getBySoftid(softid);
+        if (app == null || !"enabled".equals(app.getStatus())) {
+            throw new IllegalArgumentException("-1007");
+        }
+        return app.getForceUpdate() != null ? app.getForceUpdate() : 0;
     }
 
     public String getLatestVersion(String softid) {
@@ -264,6 +275,13 @@ public class AppService {
     private int parseIntParam(Map<String, String> params, String key, int defaultValue) {
         try { return Integer.parseInt(params.getOrDefault(key, String.valueOf(defaultValue))); }
         catch (NumberFormatException e) { return defaultValue; }
+    }
+
+    private Integer toInt(Object v) {
+        if (v == null) return 0;
+        if (v instanceof Number) return ((Number) v).intValue();
+        if (v instanceof String && !((String) v).isEmpty()) return Integer.parseInt((String) v);
+        return 0;
     }
 
     private String emptyToNull(String s) {

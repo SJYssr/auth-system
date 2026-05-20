@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
@@ -138,7 +139,7 @@ public class CardService {
         if (data.containsKey("expires_at")) {
             Object val = data.get("expires_at");
             if (val != null && !val.toString().isEmpty()) {
-                card.setExpiresAt(LocalDateTime.parse(val.toString().replace(" ", "T")));
+                card.setExpiresAt(parseDateTime(val.toString()));
             } else {
                 card.setExpiresAt(null);
             }
@@ -152,7 +153,7 @@ public class CardService {
         if (data.containsKey("last_login_time")) {
             Object val = data.get("last_login_time");
             if (val != null && !val.toString().isEmpty()) {
-                card.setLastLoginTime(LocalDateTime.parse(val.toString().replace(" ", "T")));
+                card.setLastLoginTime(parseDateTime(val.toString()));
             } else {
                 card.setLastLoginTime(null);
             }
@@ -200,6 +201,16 @@ public class CardService {
         String val = params.get(key);
         if (val == null || val.isEmpty()) return null;
         try { return Integer.parseInt(val); } catch (NumberFormatException e) { return null; }
+    }
+
+    private LocalDateTime parseDateTime(String s) {
+        String t = s.replace(" ", "T");
+        if (!t.contains("T")) return null;
+        try {
+            return LocalDateTime.parse(t, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String emptyToNull(String s) {

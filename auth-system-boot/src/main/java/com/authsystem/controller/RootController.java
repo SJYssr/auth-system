@@ -56,12 +56,13 @@ public class RootController {
         String softid = str(body, "Softid");
         String card = str(body, "Card");
         String mac = str(body, "Mac");
+        String version = str(body, "Version");
         if (isEmpty(softid) || isEmpty(card) || isEmpty(mac)) {
             return ResponseEntity.ok(Map.of("errcode", "-1001"));
         }
         try {
             String ip = getClientIp();
-            String token = clientAuthService.cardLogin(softid, card, mac, ip);
+            String token = clientAuthService.cardLogin(softid, card, mac, version, ip);
             return ResponseEntity.ok(Map.of("token", token));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.ok(Map.of("errcode", e.getMessage()));

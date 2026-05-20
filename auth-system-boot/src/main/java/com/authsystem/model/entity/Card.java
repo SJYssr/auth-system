@@ -1,5 +1,6 @@
 package com.authsystem.model.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -66,6 +67,7 @@ public class Card {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "app_id", insertable = false, updatable = false)
     private App app;

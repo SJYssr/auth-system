@@ -107,10 +107,19 @@
           <el-input v-model="form.description" type="textarea" :rows="3" placeholder="请输入应用描述" />
         </el-form-item>
         <el-form-item label="版本号" prop="version">
-          <el-input v-model="form.version" placeholder="请输入版本号" :disabled="isEdit" />
+          <el-input v-model="form.version" placeholder="请输入版本号" />
         </el-form-item>
         <el-form-item label="版本名称" prop="version_name">
-          <el-input v-model="form.version_name" placeholder="请输入版本名称" :disabled="isEdit" />
+          <el-input v-model="form.version_name" placeholder="请输入版本名称" />
+        </el-form-item>
+        <el-form-item label="强制更新" prop="force_update">
+          <el-switch
+            v-model="form.force_update"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="强制"
+            inactive-text="普通"
+          />
         </el-form-item>
         <el-form-item label="开发者" prop="developer">
           <el-input v-model="form.developer" placeholder="请输入开发者名称" />
@@ -354,6 +363,7 @@ const form = ref({
   usage_guide: '',
   purchase_url: '',
   announcement: '',
+  force_update: 0,
   status: 'enabled'
 })
 
@@ -370,6 +380,7 @@ const handleAdd = () => {
     usage_guide: '',
     purchase_url: '',
     announcement: '',
+    force_update: 0,
     status: 'enabled'
   }
   drawerVisible.value = true
@@ -388,6 +399,7 @@ const handleEdit = (row) => {
     usage_guide: row.usage_guide || '',
     purchase_url: row.purchase_url || '',
     announcement: row.announcement || '',
+    force_update: row.force_update || 0,
     status: row.status
   }
   drawerVisible.value = true

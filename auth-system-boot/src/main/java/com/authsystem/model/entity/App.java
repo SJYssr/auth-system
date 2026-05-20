@@ -47,6 +47,9 @@ public class App {
     @Column(name = "announcement", columnDefinition = "TEXT")
     private String announcement;
 
+    @Column(name = "force_update")
+    private Integer forceUpdate = 0;
+
     @Column(length = 20)
     private String status = "enabled";
 
@@ -94,6 +97,9 @@ public class App {
 
     public String getAnnouncement() { return announcement; }
     public void setAnnouncement(String announcement) { this.announcement = announcement; }
+
+    public Integer getForceUpdate() { return forceUpdate; }
+    public void setForceUpdate(Integer forceUpdate) { this.forceUpdate = forceUpdate; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
