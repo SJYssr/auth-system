@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { superAppService, superDashboardService, superDataService, superLogService, publicAppsService, publicAppDetailService, superCardService, superVersionService } from '@/utils/service'
+import { superAppService, superDashboardService, superDataService, superLogService, publicAppsService, superCardService, superVersionService } from '@/utils/service'
 
 export const useBusinessStore = defineStore('business', () => {
   const apps = ref({})
@@ -10,15 +10,9 @@ export const useBusinessStore = defineStore('business', () => {
   const versions = ref({})
   const dashboardData = ref({
     overview: {
-      visit_count: 9120,
-      online_visitors: 182,
-      click_count: 9520,
-      new_users: 156,
-      visit_trend: 20,
-      visitor_trend: 10,
-      click_trend: 12,
-      user_trend: 30,
-      apps: { total: 0, active: 0 }
+      apps: { total: 0, active: 0 },
+      cards: { total: 0, activated: 0, expired: 0 },
+      online: { count: 0 }
     },
     app_distribution: []
   })
@@ -88,7 +82,7 @@ export const useBusinessStore = defineStore('business', () => {
   })
 
   const getPublicAppDetail = (id) => handleAsync(async () => {
-    const response = await publicAppDetailService.getDetail(id)
+    const response = await publicAppsService.getDetail(id)
     return response
   })
 

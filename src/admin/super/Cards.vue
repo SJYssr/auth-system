@@ -423,7 +423,7 @@ const handleCurrentChange = async (val) => {
     pagination.value.page = val
     await store.fetchCards(buildSearchParams())
     pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
-  } catch (error) { }
+  } catch (error) { console.error('分页切换失败', error) }
   finally {
     await delay(100)
     tableLoading.value = false
@@ -437,7 +437,7 @@ const handleSizeChange = async (val) => {
     pagination.value.page = 1
     await store.fetchCards(buildSearchParams())
     pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
-  } catch (error) { }
+  } catch (error) { console.error('分页大小切换失败', error) }
   finally {
     await delay(100)
     tableLoading.value = false
@@ -513,7 +513,7 @@ const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除该卡密吗？', '警告', { type: 'warning' })
     tableLoading.value = true
-    const response = await store.deleteCard(row.id)
+    const response = store.deleteCard(row.id)
     ElMessage.success(response.message || '删除成功')
     await store.fetchCards(buildSearchParams())
     pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
@@ -544,9 +544,7 @@ const handleBatchDelete = async () => {
   try {
     await ElMessageBox.confirm(`确定要删除选中的 ${selectedRows.value.length} 张卡密吗？`, '警告', { type: 'warning' })
     tableLoading.value = true
-    for (const row of selectedRows.value) {
-      await store.deleteCard(row.id)
-    }
+    await Promise.all(selectedRows.value.map(row => store.deleteCard(row.id)))
     ElMessage.success(`成功删除 ${selectedRows.value.length} 张卡密`)
     selectedRows.value = []
     await store.fetchCards(buildSearchParams())
@@ -563,7 +561,7 @@ const handleBatchDisable = async () => {
   try {
     await ElMessageBox.confirm(`确定要禁用选中的 ${selectedRows.value.length} 张卡密吗？`, '提示', { type: 'warning' })
     tableLoading.value = true
-    for (const row of selectedRows.value) {
+    await Promise.all(selectedRows.value.map(row => store.deleteCard(row.id)))
       await superCardService.update(row.id, { status: 'disabled' })
     }
     ElMessage.success(`成功禁用 ${selectedRows.value.length} 张卡密`)
@@ -581,7 +579,7 @@ const handleBatchEnable = async () => {
   if (selectedRows.value.length === 0) return
   try {
     tableLoading.value = true
-    for (const row of selectedRows.value) {
+    await Promise.all(selectedRows.value.map(row => store.deleteCard(row.id)))
       await superCardService.update(row.id, { status: 'enabled' })
     }
     ElMessage.success(`成功解禁 ${selectedRows.value.length} 张卡密`)

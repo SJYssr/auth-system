@@ -31,28 +31,32 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         if (token == null || token.isEmpty()) {
+            response.setStatus(401);
             response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"success\":false,\"data\":null,\"message\":\"未提供认证令牌\"}");
+            response.getWriter().write("{\"success\":false,\"message\":\"未提供认证令牌\"}");
             return false;
         }
 
         Optional<Admin> adminOpt = adminRepository.findByToken(token);
         if (adminOpt.isEmpty()) {
+            response.setStatus(401);
             response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"success\":false,\"data\":null,\"message\":\"无效的认证令牌\"}");
+            response.getWriter().write("{\"success\":false,\"message\":\"无效的认证令牌\"}");
             return false;
         }
 
         Admin admin = adminOpt.get();
         if (!"enabled".equals(admin.getStatus())) {
+            response.setStatus(403);
             response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"success\":false,\"data\":null,\"message\":\"账户已被禁用\"}");
+            response.getWriter().write("{\"success\":false,\"message\":\"账户已被禁用\"}");
             return false;
         }
 
         if (admin.getIsSuperuser() != 1) {
+            response.setStatus(403);
             response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"success\":false,\"data\":null,\"message\":\"需要超级用户权限\"}");
+            response.getWriter().write("{\"success\":false,\"message\":\"需要超级用户权限\"}");
             return false;
         }
 

@@ -288,7 +288,7 @@ const handleCurrentChange = async (val) => {
     }
     await store.fetchSuperApps(searchParams);
     pagination.value.total_records = Number(apps.value.pagination.total_records) || 0;
-  } catch (error) { }
+  } catch (error) { console.error('操作失败', error) }
   finally {
     await delay(100)
     tableLoading.value = false;
@@ -306,7 +306,7 @@ const handleSizeChange = async (val) => {
     }
     await store.fetchSuperApps(searchParams);
     pagination.value.total_records = Number(apps.value.pagination.total_records) || 0;
-  } catch (error) { }
+  } catch (error) { console.error('操作失败', error) }
   finally {
     await delay(100)
     tableLoading.value = false;
@@ -334,16 +334,6 @@ const rules = {
 }
 
 
-// 辅助方法
-const getAuthRate = (app) => {
-  if (!app) return 0
-  const enabledAuths = Number(app.enabled_auths)
-  const totalAuths = Number(app.total_auths)
-  if (isNaN(enabledAuths) || isNaN(totalAuths) || totalAuths === 0) {
-    return 0
-  }
-  return Math.round((enabledAuths / totalAuths) * 100)
-}
 
 
 

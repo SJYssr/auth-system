@@ -15,10 +15,6 @@ const publicAppsService = {
     getDetail: (id) => request.get(`/public/apps/${id}`)
 }
 
-const publicAppDetailService = {
-    getDetail: (appId) => request.get(`/public/apps/${appId}`)
-}
-
 const superDashboardService = {
     getData: () => request.get('/admin/dashboard')
 }
@@ -72,7 +68,6 @@ export {
   publicLoginService,
   publicInitService,
   publicAppsService,
-  publicAppDetailService,
   superAppService,
   superDashboardService,
   superDataService,

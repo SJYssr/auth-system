@@ -32,10 +32,11 @@
           @change="handleSearch"
         >
           <el-option label="全部" value="" />
-          <el-option label="管理员管理" value="admins" />
-          <el-option label="余额管理" value="balance" />
+          <el-option label="系统登录" value="system" />
           <el-option label="应用管理" value="apps" />
-          <el-option label="授权管理" value="auths" />
+          <el-option label="卡密管理" value="cards" />
+          <el-option label="版本管理" value="versions" />
+          <el-option label="日志管理" value="logs" />
         </el-select>
         <el-select
           v-model="searchForm.status"

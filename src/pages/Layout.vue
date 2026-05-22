@@ -44,8 +44,8 @@
               />
               <span class="footer-brand-name">zyyo</span>
             </div>
-            <p class="footer-description">专业的授权管理系统</p>
-            <p class="footer-copyright">© 2025 zyyo. 保留所有权利</p>
+            <p class="footer-description">{{ siteName }} - 应用授权管理</p>
+            <p class="footer-copyright">© {{ new Date().getFullYear() }} zyyo. 保留所有权利</p>
           </div>
           
           <div class="footer-contact" v-if="initializeInfo.website?.email || initializeInfo.website?.phone">

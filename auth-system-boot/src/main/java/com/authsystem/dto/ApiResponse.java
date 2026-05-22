@@ -9,12 +9,20 @@ public class ApiResponse {
     private boolean success;
     private Object data;
     private String message;
+    private String errcode;
     private Map<String, Object> pagination;
 
     public ApiResponse(boolean success, Object data, String message) {
         this.success = success;
         this.data = data;
         this.message = message;
+    }
+
+    public ApiResponse(boolean success, Object data, String message, String errcode) {
+        this.success = success;
+        this.data = data;
+        this.message = message;
+        this.errcode = errcode;
     }
 
     public ApiResponse(boolean success, Object data, String message, Map<String, Object> pagination) {
@@ -32,6 +40,9 @@ public class ApiResponse {
 
     public String getMessage() { return message; }
     public void setMessage(String message) { this.message = message; }
+
+    public String getErrcode() { return errcode; }
+    public void setErrcode(String errcode) { this.errcode = errcode; }
 
     public Map<String, Object> getPagination() { return pagination; }
     public void setPagination(Map<String, Object> pagination) { this.pagination = pagination; }

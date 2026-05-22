@@ -107,16 +107,21 @@ const router = createRouter({
   routes
 })
 
+let initLoading = false
+
 router.beforeEach(async (to, from, next) => {
   NProgress.start()
   const appStore = useAppStore()
   const { initializeInfo } = storeToRefs(appStore)
 
-  if (Object.keys(initializeInfo.value).length === 0) {
+  if (Object.keys(initializeInfo.value).length === 0 && !initLoading) {
+    initLoading = true
     try {
       await appStore.initialize()
     } catch (error) {
       ElMessage.error(error.message || '初始化失败')
+    } finally {
+      initLoading = false
     }
   }
 

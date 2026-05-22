@@ -3,6 +3,8 @@ package com.authsystem.service;
 import com.authsystem.model.entity.Admin;
 import com.authsystem.repository.AdminRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -19,19 +21,33 @@ public class AuthService {
     @Autowired
     private AdminRepository adminRepository;
 
-    private static final String SECRET_KEY = "your_secret_key_here_change_in_production";
+    private static final BCryptPasswordEncoder ENCODER = new BCryptPasswordEncoder();
+
+    @Value("${auth.secret-key}")
+    private String secretKey;
 
     public Map<String, Object> login(String username, String password) {
-        String passwordHash = md5(password);
-
         Optional<Admin> adminOpt = adminRepository.findByUsername(username);
-        if (adminOpt.isEmpty() || !adminOpt.get().getPassword().equals(passwordHash)
-                || adminOpt.get().getIsSuperuser() != 1
-                || !"enabled".equals(adminOpt.get().getStatus())) {
+        if (adminOpt.isEmpty() || !"enabled".equals(adminOpt.get().getStatus())) {
             return null;
         }
 
         Admin admin = adminOpt.get();
+        String stored = admin.getPassword();
+
+        if (!verifyPassword(password, stored)) {
+            return null;
+        }
+
+        if (admin.getIsSuperuser() != 1) {
+            return null;
+        }
+
+        // 如果是旧 MD5 格式，升级为 BCrypt
+        if (stored != null && stored.length() == 32) {
+            admin.setPassword(ENCODER.encode(password));
+        }
+
         String token = generateToken(admin.getId());
         admin.setToken(token);
         admin.setLastLogin(LocalDateTime.now());
@@ -48,13 +64,27 @@ public class AuthService {
         return result;
     }
 
+    private boolean verifyPassword(String raw, String stored) {
+        if (stored == null) return false;
+        // BCrypt hash 以 $2a$ 开头
+        if (stored.startsWith("$2a$")) {
+            return ENCODER.matches(raw, stored);
+        }
+        // 旧 MD5 兼容
+        return md5(raw).equals(stored);
+    }
+
     public Admin validateToken(String token) {
         return adminRepository.findByToken(token).orElse(null);
     }
 
-    public static String generateToken(Integer userId) {
-        String raw = userId + System.currentTimeMillis() + SECRET_KEY;
+    public String generateToken(Integer userId) {
+        String raw = userId + System.currentTimeMillis() + secretKey;
         return sha256(raw);
+    }
+
+    public static String encodePassword(String raw) {
+        return ENCODER.encode(raw);
     }
 
     public static String md5(String input) {

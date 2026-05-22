@@ -8,6 +8,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,20 +21,43 @@ public class CaptchaService {
     private static final int WIDTH = 120;
     private static final int HEIGHT = 44;
     private static final int LENGTH = 4;
+    private static final long TTL_MS = 5 * 60 * 1000; // 5分钟过期
 
-    private final Map<String, String> store = new ConcurrentHashMap<>();
+    private final Map<String, Entry> store = new ConcurrentHashMap<>();
+    private long lastCleanup = System.currentTimeMillis();
+
+    private static class Entry {
+        final String code;
+        final long createdAt;
+        Entry(String code) { this.code = code; this.createdAt = System.currentTimeMillis(); }
+    }
 
     public Map<String, String> generate() {
+        cleanup();
         String key = UUID.randomUUID().toString().replace("-", "");
         String code = randomCode();
-        store.put(key, code);
+        store.put(key, new Entry(code));
         return Map.of("key", key, "image", "data:image/png;base64," + generateImage(code));
     }
 
     public boolean verify(String key, String code) {
         if (key == null || code == null) return false;
-        String stored = store.remove(key);
-        return stored != null && stored.equalsIgnoreCase(code);
+        Entry entry = store.remove(key);
+        if (entry == null) return false;
+        if (System.currentTimeMillis() - entry.createdAt > TTL_MS) return false;
+        return entry.code.equalsIgnoreCase(code);
+    }
+
+    private void cleanup() {
+        long now = System.currentTimeMillis();
+        if (now - lastCleanup < 60_000) return; // 每分钟最多清理一次
+        lastCleanup = now;
+        Iterator<Map.Entry<String, Entry>> it = store.entrySet().iterator();
+        while (it.hasNext()) {
+            if (now - it.next().getValue().createdAt > TTL_MS) {
+                it.remove();
+            }
+        }
     }
 
     private String randomCode() {
