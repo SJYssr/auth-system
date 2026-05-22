@@ -14,6 +14,9 @@ public class App {
     @Column(name = "softid", unique = true, length = 18)
     private String softid;
 
+    @Column(name = "user_id")
+    private Integer userId;
+
     @Column(name = "app_name", nullable = false, unique = true, length = 100)
     private String appName;
 
@@ -64,6 +67,9 @@ public class App {
 
     public String getSoftid() { return softid; }
     public void setSoftid(String softid) { this.softid = softid; }
+
+    public Integer getUserId() { return userId; }
+    public void setUserId(Integer userId) { this.userId = userId; }
 
     public String getAppName() { return appName; }
     public void setAppName(String appName) { this.appName = appName; }

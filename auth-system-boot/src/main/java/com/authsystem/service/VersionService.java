@@ -24,10 +24,11 @@ public class VersionService {
         Pageable pageable = PageRequest.of(page - 1, perPage, Sort.by(Sort.Direction.DESC, "createdAt"));
 
         Integer appId = parseIntegerParam(params, "app_id");
+        Integer userId = parseUserIdParam(params, "user_id");
         String status = emptyToNull(params.get("status"));
         String keyword = emptyToNull(params.get("keyword"));
 
-        Page<AppVersion> versionPage = versionRepository.findWithFilters(appId, status, keyword, pageable);
+        Page<AppVersion> versionPage = versionRepository.findWithFilters(appId, userId, status, keyword, pageable);
 
         List<Map<String, Object>> versionList = new ArrayList<>();
         for (AppVersion v : versionPage.getContent()) {
@@ -74,6 +75,7 @@ public class VersionService {
 
         AppVersion ver = new AppVersion();
         ver.setAppId(appId);
+        if (data.containsKey("user_id")) ver.setUserId(toInt(data.get("user_id")));
         ver.setVersion(version);
         ver.setVersionName(versionName);
         ver.setStatus(getValidStatus((String) data.getOrDefault("status", "enabled")));
@@ -120,6 +122,13 @@ public class VersionService {
     private Integer parseIntegerParam(Map<String, String> params, String key) {
         String val = params.get(key);
         if (val == null || val.isEmpty()) return null;
+        try { return Integer.parseInt(val); } catch (NumberFormatException e) { return null; }
+    }
+
+    private Integer parseUserIdParam(Map<String, String> params, String key) {
+        String val = params.get(key);
+        if (val == null || val.isEmpty()) return null;
+        if ("__admin__".equals(val)) return -1;
         try { return Integer.parseInt(val); } catch (NumberFormatException e) { return null; }
     }
 

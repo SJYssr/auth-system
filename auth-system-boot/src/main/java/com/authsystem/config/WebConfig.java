@@ -1,6 +1,7 @@
 package com.authsystem.config;
 
 import com.authsystem.interceptor.AuthInterceptor;
+import com.authsystem.interceptor.UserInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -12,6 +13,9 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Autowired
     private AuthInterceptor authInterceptor;
+
+    @Autowired
+    private UserInterceptor userInterceptor;
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
@@ -26,5 +30,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authInterceptor)
                 .addPathPatterns("/api/admin/**");
+        registry.addInterceptor(userInterceptor)
+                .addPathPatterns("/api/user/**");
     }
 }

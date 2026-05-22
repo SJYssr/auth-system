@@ -38,29 +38,27 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         Optional<Admin> adminOpt = adminRepository.findByToken(token);
-        if (adminOpt.isEmpty()) {
-            response.setStatus(401);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"success\":false,\"message\":\"无效的认证令牌\"}");
-            return false;
+        if (adminOpt.isPresent()) {
+            Admin admin = adminOpt.get();
+            if (!"enabled".equals(admin.getStatus())) {
+                response.setStatus(403);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"success\":false,\"message\":\"账户已被禁用\"}");
+                return false;
+            }
+            if (admin.getIsSuperuser() != 1) {
+                response.setStatus(403);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"success\":false,\"message\":\"需要超级用户权限\"}");
+                return false;
+            }
+            request.setAttribute("currentUser", admin);
+            return true;
         }
 
-        Admin admin = adminOpt.get();
-        if (!"enabled".equals(admin.getStatus())) {
-            response.setStatus(403);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"success\":false,\"message\":\"账户已被禁用\"}");
-            return false;
-        }
-
-        if (admin.getIsSuperuser() != 1) {
-            response.setStatus(403);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"success\":false,\"message\":\"需要超级用户权限\"}");
-            return false;
-        }
-
-        request.setAttribute("currentUser", admin);
-        return true;
+        response.setStatus(401);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write("{\"success\":false,\"message\":\"无效的令牌\"}");
+        return false;
     }
 }

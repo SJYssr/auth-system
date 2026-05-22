@@ -30,6 +30,8 @@ public class AdminController {
         return ok(new ApiResponse(true, dashboardService.getDashboard(), null));
     }
 
+
+
     // ===== Apps =====
     @GetMapping("/apps")
     public ResponseEntity<ApiResponse> listApps(@RequestParam Map<String, String> params) {

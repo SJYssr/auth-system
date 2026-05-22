@@ -107,9 +107,9 @@ public class PublicController {
         String token = getToken();
         Map<String, Object> initData = initService.getInitData(token);
         if (token != null && !token.isEmpty()) {
+            Map<String, Object> loginStatus = new LinkedHashMap<>();
             Admin admin = authService.validateToken(token);
             if (admin != null && "enabled".equals(admin.getStatus())) {
-                Map<String, Object> loginStatus = new LinkedHashMap<>();
                 loginStatus.put("is_logged_in", true);
                 Map<String, Object> userMap = new LinkedHashMap<>();
                 userMap.put("id", admin.getId());
@@ -117,7 +117,20 @@ public class PublicController {
                 userMap.put("email", admin.getEmail());
                 userMap.put("is_superuser", admin.getIsSuperuser() == 1);
                 userMap.put("status", admin.getStatus());
+                userMap.put("role", "admin");
                 loginStatus.put("user", userMap);
+            } else {
+                java.util.Optional<com.authsystem.model.entity.User> userOpt = userRepository.findByToken(token);
+                if (userOpt.isPresent() && "enabled".equals(userOpt.get().getStatus())) {
+                    loginStatus.put("is_logged_in", true);
+                    Map<String, Object> userMap = new LinkedHashMap<>();
+                    userMap.put("id", userOpt.get().getId());
+                    userMap.put("username", userOpt.get().getUsername());
+                    userMap.put("role", "user");
+                    loginStatus.put("user", userMap);
+                }
+            }
+            if (!loginStatus.isEmpty()) {
                 initData.put("login_status", loginStatus);
             }
         }

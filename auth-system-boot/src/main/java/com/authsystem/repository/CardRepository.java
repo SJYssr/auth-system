@@ -35,6 +35,7 @@ public interface CardRepository extends JpaRepository<Card, Integer> {
 
     @Query("SELECT c FROM Card c WHERE " +
            "(:appId IS NULL OR c.appId = :appId) AND " +
+           "(:userId IS NULL OR (:userId = -1 AND c.userId IS NULL) OR c.userId = :userId) AND " +
            "(:cardType IS NULL OR c.cardType = :cardType) AND " +
            "(:status IS NULL OR c.status = :status) AND " +
            "(:isActivated IS NULL OR c.isActivated = :isActivated) AND " +
@@ -44,6 +45,7 @@ public interface CardRepository extends JpaRepository<Card, Integer> {
            "  (:isExpired = 1 AND c.expiresAt IS NOT NULL AND c.expiresAt < CURRENT_TIMESTAMP) OR " +
            "  (:isExpired = 0 AND (c.expiresAt IS NULL OR c.expiresAt >= CURRENT_TIMESTAMP)))")
     Page<Card> findWithFilters(@Param("appId") Integer appId,
+                               @Param("userId") Integer userId,
                                @Param("cardType") String cardType,
                                @Param("status") String status,
                                @Param("isActivated") Integer isActivated,

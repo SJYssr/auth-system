@@ -14,6 +14,9 @@ public class AppVersion {
     @Column(name = "app_id", nullable = false)
     private Integer appId;
 
+    @Column(name = "user_id")
+    private Integer userId;
+
     @Column(name = "version", nullable = false, length = 20)
     private String version;
 
@@ -41,6 +44,9 @@ public class AppVersion {
 
     public Integer getAppId() { return appId; }
     public void setAppId(Integer appId) { this.appId = appId; }
+
+    public Integer getUserId() { return userId; }
+    public void setUserId(Integer userId) { this.userId = userId; }
 
     public String getVersion() { return version; }
     public void setVersion(String version) { this.version = version; }

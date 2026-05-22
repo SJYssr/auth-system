@@ -10,7 +10,7 @@
 
     <div class="table-section">
       <div class="toolbar-section">
-        <el-button type="primary" @click="handleAdd"><el-icon><Plus /></el-icon>新增错误码</el-button>
+        <el-button v-if="!isUserRole" type="primary" @click="handleAdd"><el-icon><Plus /></el-icon>新增错误码</el-button>
       </div>
       <el-table :data="list" v-loading="loading">
         <el-table-column type="index" label="序号" width="60" />
@@ -19,7 +19,7 @@
         <el-table-column prop="description" label="说明" min-width="200" show-overflow-tooltip />
         <el-table-column prop="solution" label="解决方案" min-width="200" show-overflow-tooltip />
 
-        <el-table-column label="操作" width="160">
+        <el-table-column label="操作" width="160" v-if="!isUserRole">
           <template #default="{row}">
             <el-button-group>
               <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
@@ -60,9 +60,13 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Refresh } from '@element-plus/icons-vue'
 import { superErrorCodeService } from '@/utils/service'
+
+const route = useRoute()
+const isUserRole = computed(() => route.path.startsWith('/useradmin/'))
 
 const list = ref([])
 const loading = ref(true)

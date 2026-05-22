@@ -26,9 +26,7 @@
           </div>
         </el-form-item>
         <el-form-item>
-          <el-button size="large" :loading="loading" @click="handleLogin" class="login-btn">
-            登 录
-          </el-button>
+          <el-button size="large" :loading="loading" @click="handleLogin" class="login-btn">登 录</el-button>
         </el-form-item>
       </el-form>
       <div class="card-footer">
@@ -41,11 +39,13 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/stores/modules/app'
 import { storeToRefs } from 'pinia'
 import request from '@/utils/request'
 
+const router = useRouter()
 const store = useAppStore()
 const { initializeInfo } = storeToRefs(store)
 
@@ -82,7 +82,10 @@ const handleLogin = async () => {
       captcha_key: captchaKey.value,
       captcha_code: form.captcha_code
     })
-    ElMessage.success(`登录成功，欢迎 ${res.data.username}`)
+    localStorage.setItem('token', res.data.token)
+    await store.initialize()
+    ElMessage.success('登录成功')
+    router.push('/useradmin/dashboard')
   } catch (error) {
     fetchCaptcha()
     form.captcha_code = ''
@@ -93,18 +96,13 @@ const handleLogin = async () => {
 }
 
 onMounted(() => {
-  if (initializeInfo.value?.website?.logo_url) {
-    logoSrc.value = initializeInfo.value.website.logo_url
-  }
+  if (initializeInfo.value?.website?.logo_url) logoSrc.value = initializeInfo.value.website.logo_url
   fetchCaptcha()
 })
 </script>
 
 <style scoped>
-.login-page {
-  display: flex; align-items: center; justify-content: center;
-  flex: 1; padding: 40px 20px;
-}
+.login-page { display: flex; align-items: center; justify-content: center; flex: 1; padding: 40px 20px; }
 .login-card {
   width: 420px; padding: 48px 40px 36px;
   background: rgba(255, 255, 255, 0.07);
@@ -120,8 +118,7 @@ onMounted(() => {
 .logo-icon {
   display: inline-flex; align-items: center; justify-content: center;
   width: 64px; height: 64px; border-radius: 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
   margin-bottom: 16px; overflow: hidden;
 }
 .logo-img { width: 100%; height: 100%; object-fit: cover; }
@@ -134,11 +131,7 @@ onMounted(() => {
 .switch-link:hover { color: #fff; }
 .captcha-row { display: flex; gap: 10px; align-items: center; }
 .captcha-input { flex: 1; }
-.captcha-img {
-  height: 42px; width: 110px; border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  cursor: pointer; flex-shrink: 0; background: rgba(0, 0, 0, 0.2);
-}
+.captcha-img { height: 42px; width: 110px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.18); cursor: pointer; flex-shrink: 0; background: rgba(0,0,0,0.2); }
 </style>
 
 <style>
@@ -148,24 +141,15 @@ onMounted(() => {
   border-radius: 12px !important;
   box-shadow: none !important;
 }
-.login-page .glass-input .el-input__wrapper:hover {
-  border-color: rgba(255, 255, 255, 0.3) !important;
-}
+.login-page .glass-input .el-input__wrapper:hover { border-color: rgba(255,255,255,0.3) !important; }
 .login-page .glass-input.is-focus .el-input__wrapper {
-  background: rgba(0, 0, 0, 0.3) !important;
-  border-color: rgba(255, 255, 255, 0.5) !important;
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.08) !important;
+  background: rgba(0,0,0,0.3) !important;
+  border-color: rgba(255,255,255,0.5) !important;
+  box-shadow: 0 0 16px rgba(255,255,255,0.08) !important;
 }
-.login-page .glass-input .el-input__inner {
-  color: #fff !important;
-}
-.login-page .glass-input .el-input__inner::placeholder {
-  color: rgba(255, 255, 255, 0.38) !important;
-}
-.login-page .glass-input .el-input__suffix,
-.login-page .glass-input .el-input__prefix {
-  color: rgba(255, 255, 255, 0.5) !important;
-}
+.login-page .glass-input .el-input__inner { color: #fff !important; }
+.login-page .glass-input .el-input__inner::placeholder { color: rgba(255,255,255,0.38) !important; }
+.login-page .glass-input .el-input__suffix, .login-page .glass-input .el-input__prefix { color: rgba(255,255,255,0.5) !important; }
 .login-page .glass-input .el-input__inner:-webkit-autofill,
 .login-page .glass-input .el-input__inner:-webkit-autofill:hover,
 .login-page .glass-input .el-input__inner:-webkit-autofill:focus,
@@ -175,9 +159,7 @@ onMounted(() => {
   caret-color: #fff !important;
   transition: background-color 9999s ease-in-out 0s !important;
 }
-.login-page .glass-input .el-input__wrapper:has(.el-input__inner:-webkit-autofill) {
-  background: rgba(0, 0, 0, 0.2) !important;
-}
+.login-page .glass-input .el-input__wrapper:has(.el-input__inner:-webkit-autofill) { background: rgba(0,0,0,0.2) !important; }
 .login-page .login-btn {
   width: 100% !important; height: 48px !important;
   border-radius: 12px !important; border: none !important;
@@ -186,9 +168,5 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.9) !important;
   color: #0f172a !important;
 }
-.login-page .login-btn:hover {
-  background: #fff !important;
-  transform: translateY(-2px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
-}
+.login-page .login-btn:hover { background: #fff !important; transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,0.3); }
 </style>

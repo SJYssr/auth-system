@@ -4,6 +4,7 @@ import Login from '@/pages/Login.vue'
 import UserLogin from '@/pages/UserLogin.vue'
 import UserRegister from '@/pages/UserRegister.vue'
 import Admin from '@/admin/Admin.vue'
+import UserAdmin from '@/admin/UserAdmin.vue'
 import Dashboard from '@/admin/super/Dashboard.vue'
 import Apps from '@/admin/super/Apps.vue'
 import Datas from '@/admin/super/Datas.vue'
@@ -56,6 +57,19 @@ const routes = [
     ]
   },
   {
+    path: '/useradmin',
+    component: UserAdmin,
+    meta: { requiresAuth: true },
+    children: [
+      { path: 'dashboard', component: Dashboard, meta: { title: '仪表盘' } },
+      { path: 'apps', component: () => import('@/pages/user/UserApps.vue'), meta: { title: '应用列表' } },
+      { path: 'cards', component: () => import('@/pages/user/UserCards.vue'), meta: { title: '卡密列表' } },
+      { path: 'versions', component: () => import('@/pages/user/UserVersions.vue'), meta: { title: '版本管理' } },
+      { path: 'apis', component: () => import('@/admin/super/ApiList.vue'), meta: { title: 'API列表' } },
+      { path: 'error-codes', component: () => import('@/admin/super/ErrorCodes.vue'), meta: { title: '错误码对照表' } },
+    ]
+  },
+  {
     path: '/',
     component: Layout,
     children: [
@@ -93,7 +107,7 @@ router.beforeEach(async (to, from, next) => {
 
   if (to.matched.some(r => r.meta.requiresAuth) && !isLoggedIn) {
     ElMessage.warning('请先登录')
-    return next('/admin')
+    return next('/login')
   }
 
   if (isLoggedIn && to.path === '/admin' && !to.matched.some(r => r.meta.requiresAuth)) {

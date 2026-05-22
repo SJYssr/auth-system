@@ -144,8 +144,8 @@
         <div class="tech-category">
           <h3>后端神器</h3>
           <div class="tech-items">
-            <div class="tech-item">PHP 99+（来自未来的版本）</div>
-            <div class="tech-item">超级SQLite（能存储整个宇宙）</div>
+            <div class="tech-item">SpringBoot 99+（来自未来的版本）</div>
+            <div class="tech-item">超级MySQL（能存储整个宇宙）</div>
             <div class="tech-item">火箭Redis（比火箭还快）</div>
             <div class="tech-item">无敌JWT（连外星人都破解不了）</div>
           </div>
