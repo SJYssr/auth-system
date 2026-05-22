@@ -219,7 +219,7 @@
         <h2>准备开始了吗？</h2>
         <p>立即体验业界领先的软件授权管理系统</p>
         <div class="contact-buttons">
-          <router-link to="/login" class="btn-primary">
+          <router-link to="/admin" class="btn-primary">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M21 12H9"/>
             </svg>

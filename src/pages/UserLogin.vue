@@ -9,7 +9,7 @@
           <span class="logo-emoji">🔐</span>
         </div>
         <h2>{{ siteName }}</h2>
-        <p class="subtitle">管理员登录</p>
+        <p class="subtitle">用户登录</p>
       </div>
 
       <el-form ref="formRef" :model="form" :rules="rules" label-width="0" @keyup.enter="handleLogin">
@@ -32,7 +32,8 @@
         </el-form-item>
       </el-form>
       <div class="card-footer">
-        <router-link to="/login" class="switch-link">用户登录</router-link>
+        <span class="switch-text">还没有账号？</span>
+        <router-link to="/register" class="switch-link">去注册</router-link>
       </div>
     </div>
   </div>
@@ -40,13 +41,11 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/stores/modules/app'
 import { storeToRefs } from 'pinia'
 import request from '@/utils/request'
 
-const router = useRouter()
 const store = useAppStore()
 const { initializeInfo } = storeToRefs(store)
 
@@ -77,16 +76,13 @@ const handleLogin = async () => {
   await formRef.value.validate()
   try {
     loading.value = true
-    const response = await store.login({
+    const res = await request.post('/public/user-login', {
       username: form.username,
       password: form.password,
       captcha_key: captchaKey.value,
       captcha_code: form.captcha_code
     })
-    localStorage.setItem('token', response.data.token)
-    await store.initialize()
-    ElMessage.success('登录成功')
-    router.push('/admin/dashboard')
+    ElMessage.success(`登录成功，欢迎 ${res.data.username}`)
   } catch (error) {
     fetchCaptcha()
     form.captcha_code = ''
@@ -133,7 +129,8 @@ onMounted(() => {
 .card-header h2 { font-size: 24px; font-weight: 700; color: #fff; margin: 0; letter-spacing: 1px; }
 .subtitle { font-size: 13px; color: rgba(255, 255, 255, 0.45); margin: 8px 0 0; }
 .card-footer { text-align: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
-.switch-link { color: rgba(255, 255, 255, 0.5); font-size: 13px; text-decoration: none; transition: color 0.2s; }
+.switch-text { color: rgba(255, 255, 255, 0.4); font-size: 13px; }
+.switch-link { color: rgba(255, 255, 255, 0.7); font-size: 13px; text-decoration: none; transition: color 0.2s; font-weight: 500; }
 .switch-link:hover { color: #fff; }
 .captcha-row { display: flex; gap: 10px; align-items: center; }
 .captcha-input { flex: 1; }
@@ -169,7 +166,6 @@ onMounted(() => {
 .login-page .glass-input .el-input__prefix {
   color: rgba(255, 255, 255, 0.5) !important;
 }
-/* Chrome 自动填充覆盖 */
 .login-page .glass-input .el-input__inner:-webkit-autofill,
 .login-page .glass-input .el-input__inner:-webkit-autofill:hover,
 .login-page .glass-input .el-input__inner:-webkit-autofill:focus,

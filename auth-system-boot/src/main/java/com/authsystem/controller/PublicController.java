@@ -21,6 +21,7 @@ public class PublicController {
     @Autowired private InitService initService;
     @Autowired private LogService logService;
     @Autowired private CaptchaService captchaService;
+    @Autowired private com.authsystem.repository.UserRepository userRepository;
     @Autowired private HttpServletRequest request;
 
     @GetMapping("/captcha")
@@ -47,6 +48,58 @@ public class PublicController {
         Admin loginAdmin = authService.validateToken((String) result.get("token"));
         logService.log(loginAdmin, "login", "system", null, null, null, "管理员登录成功", null);
         return ok(new ApiResponse(true, result, "登录成功"));
+    }
+
+    @PostMapping("/user-login")
+    public ResponseEntity<ApiResponse> userLogin(@RequestBody Map<String, Object> body) {
+        String username = str(body, "username");
+        String password = str(body, "password");
+        String captchaKey = str(body, "captcha_key");
+        String captchaCode = str(body, "captcha_code");
+        if (isEmpty(username) || isEmpty(password) || isEmpty(captchaKey) || isEmpty(captchaCode))
+            return ok(new ApiResponse(false, null, "用户名、密码和验证码不能为空"));
+        if (!captchaService.verify(captchaKey, captchaCode))
+            return ok(new ApiResponse(false, null, "验证码错误"));
+
+        java.util.Optional<com.authsystem.model.entity.User> userOpt = userRepository.findByUsername(username);
+        if (userOpt.isEmpty() || !"enabled".equals(userOpt.get().getStatus())
+                || !AuthService.getEncoder().matches(password, userOpt.get().getPassword())) {
+            return ok(new ApiResponse(false, null, "用户名或密码错误"));
+        }
+
+        com.authsystem.model.entity.User user = userOpt.get();
+        String token = AuthService.generateTokenStatic(user.getId(), authService.getSecret());
+        user.setToken(token);
+        user.setLastLogin(java.time.LocalDateTime.now());
+        userRepository.save(user);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("token", token);
+        result.put("username", user.getUsername());
+        return ok(new ApiResponse(true, result, "登录成功"));
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<ApiResponse> register(@RequestBody Map<String, Object> body) {
+        String username = str(body, "username");
+        String email = str(body, "email");
+        String password = str(body, "password");
+        if (isEmpty(username) || isEmpty(email) || isEmpty(password))
+            return ok(new ApiResponse(false, null, "用户名、邮箱和密码不能为空"));
+        if (username.length() < 3)
+            return ok(new ApiResponse(false, null, "用户名至少3位"));
+        if (password.length() < 6)
+            return ok(new ApiResponse(false, null, "密码至少6位"));
+        if (userRepository.findByUsername(username).isPresent())
+            return ok(new ApiResponse(false, null, "用户名已存在"));
+        com.authsystem.model.entity.User user = new com.authsystem.model.entity.User();
+        user.setUsername(username);
+        user.setPassword(AuthService.encodePassword(password));
+        user.setStatus("enabled");
+        user.setCreatedAt(java.time.LocalDateTime.now());
+        user.setUpdatedAt(java.time.LocalDateTime.now());
+        userRepository.save(user);
+        return ok(new ApiResponse(true, null, "注册成功"));
     }
 
     @GetMapping("/init")

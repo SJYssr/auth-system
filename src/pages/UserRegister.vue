@@ -9,30 +9,31 @@
           <span class="logo-emoji">🔐</span>
         </div>
         <h2>{{ siteName }}</h2>
-        <p class="subtitle">管理员登录</p>
+        <p class="subtitle">创建您的账号</p>
       </div>
 
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="0" @keyup.enter="handleLogin">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="0" @keyup.enter="handleRegister">
         <el-form-item prop="username">
           <el-input v-model="form.username" placeholder="用户名" size="large" class="glass-input" />
         </el-form-item>
-        <el-form-item prop="password">
-          <el-input v-model="form.password" type="password" placeholder="密码" show-password size="large" class="glass-input" />
+        <el-form-item prop="email">
+          <el-input v-model="form.email" placeholder="电子邮箱" size="large" class="glass-input" />
         </el-form-item>
-        <el-form-item prop="captcha_code">
-          <div class="captcha-row">
-            <el-input v-model="form.captcha_code" placeholder="验证码" size="large" class="glass-input captcha-input" />
-            <img :src="captchaImage" class="captcha-img" @click="fetchCaptcha" title="点击刷新验证码" />
-          </div>
+        <el-form-item prop="password">
+          <el-input v-model="form.password" type="password" placeholder="密码（至少6位）" show-password size="large" class="glass-input" />
+        </el-form-item>
+        <el-form-item prop="confirmPassword">
+          <el-input v-model="form.confirmPassword" type="password" placeholder="确认密码" show-password size="large" class="glass-input" />
         </el-form-item>
         <el-form-item>
-          <el-button size="large" :loading="loading" @click="handleLogin" class="login-btn">
-            登 录
+          <el-button size="large" :loading="loading" @click="handleRegister" class="login-btn">
+            注 册
           </el-button>
         </el-form-item>
       </el-form>
       <div class="card-footer">
-        <router-link to="/login" class="switch-link">用户登录</router-link>
+        <span class="switch-text">已经有账号了？</span>
+        <router-link to="/login" class="switch-link">立即登录</router-link>
       </div>
     </div>
   </div>
@@ -40,57 +41,58 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/stores/modules/app'
 import { storeToRefs } from 'pinia'
 import request from '@/utils/request'
 
-const router = useRouter()
 const store = useAppStore()
 const { initializeInfo } = storeToRefs(store)
 
 const loading = ref(false)
 const formRef = ref(null)
-const captchaImage = ref('')
-const captchaKey = ref('')
 const logoSrc = ref('')
-const form = reactive({ username: '', password: '', captcha_code: '' })
+const form = reactive({ username: '', email: '', password: '', confirmPassword: '' })
+
+const validateConfirm = (rule, value, callback) => {
+  if (value !== form.password) callback(new Error('两次密码输入不一致'))
+  else callback()
+}
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
-  captcha_code: [{ required: true, message: '请输入验证码', trigger: 'blur' }]
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 3, message: '用户名至少3位', trigger: 'blur' }
+  ],
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码至少6位', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, message: '请确认密码', trigger: 'blur' },
+    { validator: validateConfirm, trigger: 'blur' }
+  ]
 }
 
 const siteName = computed(() => initializeInfo.value?.website?.site_name || '授权管理系统')
 
-const fetchCaptcha = async () => {
-  try {
-    const res = await request.get('/public/captcha')
-    captchaImage.value = res.data.image
-    captchaKey.value = res.data.key
-  } catch {}
-}
-
-const handleLogin = async () => {
+const handleRegister = async () => {
   if (!formRef.value) return
   await formRef.value.validate()
   try {
     loading.value = true
-    const response = await store.login({
+    await request.post('/public/register', {
       username: form.username,
-      password: form.password,
-      captcha_key: captchaKey.value,
-      captcha_code: form.captcha_code
+      email: form.email,
+      password: form.password
     })
-    localStorage.setItem('token', response.data.token)
-    await store.initialize()
-    ElMessage.success('登录成功')
-    router.push('/admin/dashboard')
+    ElMessage.success('注册成功，请登录')
+    formRef.value.resetFields()
   } catch (error) {
-    fetchCaptcha()
-    form.captcha_code = ''
-    ElMessage.error(error.message || '登录失败')
+    ElMessage.error(error.message || '注册失败')
   } finally {
     loading.value = false
   }
@@ -100,7 +102,6 @@ onMounted(() => {
   if (initializeInfo.value?.website?.logo_url) {
     logoSrc.value = initializeInfo.value.website.logo_url
   }
-  fetchCaptcha()
 })
 </script>
 
@@ -133,15 +134,9 @@ onMounted(() => {
 .card-header h2 { font-size: 24px; font-weight: 700; color: #fff; margin: 0; letter-spacing: 1px; }
 .subtitle { font-size: 13px; color: rgba(255, 255, 255, 0.45); margin: 8px 0 0; }
 .card-footer { text-align: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
-.switch-link { color: rgba(255, 255, 255, 0.5); font-size: 13px; text-decoration: none; transition: color 0.2s; }
+.switch-text { color: rgba(255, 255, 255, 0.4); font-size: 13px; }
+.switch-link { color: rgba(255, 255, 255, 0.7); font-size: 13px; text-decoration: none; transition: color 0.2s; font-weight: 500; }
 .switch-link:hover { color: #fff; }
-.captcha-row { display: flex; gap: 10px; align-items: center; }
-.captcha-input { flex: 1; }
-.captcha-img {
-  height: 42px; width: 110px; border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  cursor: pointer; flex-shrink: 0; background: rgba(0, 0, 0, 0.2);
-}
 </style>
 
 <style>
@@ -168,19 +163,6 @@ onMounted(() => {
 .login-page .glass-input .el-input__suffix,
 .login-page .glass-input .el-input__prefix {
   color: rgba(255, 255, 255, 0.5) !important;
-}
-/* Chrome 自动填充覆盖 */
-.login-page .glass-input .el-input__inner:-webkit-autofill,
-.login-page .glass-input .el-input__inner:-webkit-autofill:hover,
-.login-page .glass-input .el-input__inner:-webkit-autofill:focus,
-.login-page .glass-input .el-input__inner:-webkit-autofill:active {
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: #fff !important;
-  caret-color: #fff !important;
-  transition: background-color 9999s ease-in-out 0s !important;
-}
-.login-page .glass-input .el-input__wrapper:has(.el-input__inner:-webkit-autofill) {
-  background: rgba(0, 0, 0, 0.2) !important;
 }
 .login-page .login-btn {
   width: 100% !important; height: 48px !important;

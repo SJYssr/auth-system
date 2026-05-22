@@ -26,6 +26,8 @@ public class AuthService {
     @Value("${auth.secret-key}")
     private String secretKey;
 
+    public String getSecret() { return secretKey; }
+
     public Map<String, Object> login(String username, String password) {
         Optional<Admin> adminOpt = adminRepository.findByUsername(username);
         if (adminOpt.isEmpty() || !"enabled".equals(adminOpt.get().getStatus())) {
@@ -83,8 +85,17 @@ public class AuthService {
         return sha256(raw);
     }
 
+    public static BCryptPasswordEncoder getEncoder() {
+        return ENCODER;
+    }
+
     public static String encodePassword(String raw) {
         return ENCODER.encode(raw);
+    }
+
+    public static String generateTokenStatic(Integer userId, String secret) {
+        String raw = userId + System.currentTimeMillis() + secret;
+        return sha256(raw);
     }
 
     public static String md5(String input) {
