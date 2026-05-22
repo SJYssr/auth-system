@@ -64,8 +64,8 @@ public interface CardRepository extends JpaRepository<Card, Integer> {
     @Query("SELECT COUNT(c) FROM Card c WHERE c.expiresAt IS NOT NULL AND c.expiresAt < CURRENT_TIMESTAMP")
     long countExpired();
 
-    @Query("SELECT COUNT(c) FROM Card c WHERE c.token IS NOT NULL")
-    long countOnline();
+    @Query("SELECT COUNT(c) FROM Card c WHERE c.token IS NOT NULL AND c.lastLoginTime >= :since")
+    long countOnline(@Param("since") LocalDateTime since);
 
     @Query(value = "SELECT c.card_type, COUNT(c.id), COALESCE(SUM(c.price), 0) FROM cards c WHERE c.app_id = :appId AND c.is_activated = 1 GROUP BY c.card_type", nativeQuery = true)
     List<Object[]> revenueByCardType(@Param("appId") Integer appId);

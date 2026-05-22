@@ -9,9 +9,9 @@ import com.authsystem.repository.LogRepository;
 import com.authsystem.repository.AdminRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -54,7 +54,7 @@ public class DashboardService {
                 "expired", (int) expiredCards,
                 "enabled", (int) enabledCards
         ));
-        long onlineCount = cardRepository.countOnline();
+        long onlineCount = cardRepository.countOnline(LocalDateTime.now().minusHours(24));
         overview.put("online", Map.of("count", (int) onlineCount));
 
         var recentCardsPage = cardRepository.findByIsActivatedOrderByActivatedAtDesc(1,
