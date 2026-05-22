@@ -157,8 +157,8 @@ INSERT IGNORE INTO error_codes (code, message, description, solution) VALUES
 INSERT IGNORE INTO admins (username, email, password, is_superuser, status, created_at)
 VALUES ('SJY', 'sjyssr@petalmail.com', '79d8e538249ed882d2012ede95fbaecf', 1, 'enabled', NOW());
 
-INSERT INTO datas (site_name, site_title, keywords, description, contact_email, status)
-SELECT '应用卡密管理系统', '应用卡密管理与授权平台', '卡密管理,应用管理,版本管理', '基于卡密的现代化应用授权管理系统，提供应用管理、卡密生成、版本控制等功能', 'i@zyyo.net', 'enabled'
+INSERT INTO datas (site_name, contact_email)
+SELECT '应用卡密管理系统', 'i@zyyo.net'
 WHERE NOT EXISTS (SELECT 1 FROM datas);
 
 -- 为已有数据库添加 token 列（如已存在则忽略错误）

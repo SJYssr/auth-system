@@ -170,17 +170,13 @@ public class AdminController {
 
     @PutMapping("/site-data")
     public ResponseEntity<ApiResponse> updateSiteData(@RequestBody Map<String, Object> body) {
-        String[] required = {"site_name", "site_title", "keywords", "description", "logo_url",
-                "favicon_url", "icp_number", "contact_email", "contact_phone", "contact_address", "copyright", "status"};
+        String[] required = {"site_name", "logo_url", "favicon_url", "contact_email", "contact_phone"};
         for (String field : required) {
             if (!body.containsKey(field) || body.get(field) == null || body.get(field).toString().isEmpty())
                 return ok(new ApiResponse(false, null, field + "不能为空"));
         }
         String email = str(body, "contact_email");
         if (!email.contains("@")) return ok(new ApiResponse(false, null, "邮箱格式不正确"));
-        String status = str(body, "status");
-        if (!"enabled".equals(status) && !"disabled".equals(status))
-            return ok(new ApiResponse(false, null, "无效的状态值"));
         siteDataService.updateSiteData(body);
         return ok(new ApiResponse(true, null, "网站信息更新成功"));
     }

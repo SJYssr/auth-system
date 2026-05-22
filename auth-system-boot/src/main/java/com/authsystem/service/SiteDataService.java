@@ -27,22 +27,11 @@ public class SiteDataService {
                 });
 
         site.setSiteName((String) data.get("site_name"));
-        site.setSiteTitle((String) data.get("site_title"));
-        site.setKeywords((String) data.get("keywords"));
-        site.setDescription((String) data.get("description"));
         site.setLogoUrl((String) data.get("logo_url"));
         site.setFaviconUrl((String) data.get("favicon_url"));
-        site.setIcpNumber((String) data.get("icp_number"));
         site.setContactEmail((String) data.get("contact_email"));
         site.setContactPhone((String) data.get("contact_phone"));
-        site.setContactAddress((String) data.get("contact_address"));
-        site.setCopyright((String) data.get("copyright"));
-        site.setStatus(getValidStatus((String) data.get("status")));
         site.setUpdatedAt(LocalDateTime.now());
         return siteDataRepository.save(site);
-    }
-
-    private String getValidStatus(String status) {
-        return (status != null && (status.equals("enabled") || status.equals("disabled"))) ? status : "enabled";
     }
 }
