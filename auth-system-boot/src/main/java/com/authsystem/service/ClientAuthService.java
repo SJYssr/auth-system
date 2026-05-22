@@ -43,7 +43,7 @@ public class ClientAuthService {
             }
         }
 
-        Card card = cardRepository.findByCard(cardNumber)
+        Card card = cardRepository.findByCardForUpdate(cardNumber)
                 .orElseThrow(() -> new IllegalArgumentException("-1004"));
 
         if (!card.getAppId().equals(app.getId())) {
@@ -65,9 +65,10 @@ public class ClientAuthService {
             }
             card.setLastLoginTime(LocalDateTime.now());
             card.setLastLoginIp(ipAddress);
-            card.setLoginCount(card.getLoginCount() + 1);
             card.setToken(token);
             card.setUpdatedAt(LocalDateTime.now());
+            cardRepository.save(card);
+            cardRepository.incrementLoginCount(card.getId(), LocalDateTime.now());
         } else {
             LocalDateTime now = LocalDateTime.now();
             int points = Math.max(1, card.getPoints());
@@ -79,12 +80,11 @@ public class ClientAuthService {
             card.setIsActivated(1);
             card.setPoints(0);
             card.setExpiresAt(calcExpiry(card.getCardType(), points, now));
-            card.setLoginCount(card.getLoginCount() + 1);
             card.setToken(token);
             card.setUpdatedAt(now);
+            cardRepository.save(card);
+            cardRepository.incrementLoginCount(card.getId(), now);
         }
-
-        cardRepository.save(card);
         return token;
     }
 
