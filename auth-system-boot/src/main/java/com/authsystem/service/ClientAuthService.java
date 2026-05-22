@@ -38,7 +38,7 @@ public class ClientAuthService {
         if (app.getForceUpdate() != null && app.getForceUpdate() == 1) {
             AppVersion latest = versionRepository.findTopByAppIdAndStatusOrderByCreatedAtDesc(app.getId(), "enabled");
             String latestVersion = latest != null ? latest.getVersion() : "";
-            if (!latestVersion.isEmpty() && !latestVersion.equals(clientVersion)) {
+            if (!latestVersion.isEmpty() && !latestVersion.equalsIgnoreCase(clientVersion)) {
                 throw new IllegalArgumentException("-1008");
             }
         }
@@ -55,8 +55,9 @@ public class ClientAuthService {
         }
 
         String token = generateToken();
+        String normalizedMac = mac != null ? mac.toUpperCase() : "";
         if (card.getIsActivated() == 1) {
-            if (!mac.equals(card.getMac())) {
+            if (!normalizedMac.equals(card.getMac())) {
                 throw new IllegalArgumentException("-1002");
             }
             if (card.getExpiresAt() != null && card.getExpiresAt().isBefore(LocalDateTime.now())) {
@@ -70,7 +71,7 @@ public class ClientAuthService {
         } else {
             LocalDateTime now = LocalDateTime.now();
             int points = Math.max(1, card.getPoints());
-            card.setMac(mac);
+            card.setMac(normalizedMac);
             card.setActivatedAt(now);
             card.setActivationIp(ipAddress);
             card.setLastLoginTime(now);
@@ -101,7 +102,7 @@ public class ClientAuthService {
             throw new IllegalArgumentException("-1004");
         }
 
-        if (card.getToken() == null || !card.getToken().equals(token)) {
+        if (card.getToken() == null || !card.getToken().equalsIgnoreCase(token)) {
             throw new IllegalArgumentException("-1002");
         }
 

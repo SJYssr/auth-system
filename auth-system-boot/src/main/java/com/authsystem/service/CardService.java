@@ -21,7 +21,7 @@ public class CardService {
     @Autowired
     private CardRepository cardRepository;
 
-    private static final String CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private static final String CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private static final Set<String> VALID_CARD_TYPES = Set.of("小时卡", "天卡", "周卡", "月卡", "年卡");
 
     public Map<String, Object> getCards(Map<String, String> params) {

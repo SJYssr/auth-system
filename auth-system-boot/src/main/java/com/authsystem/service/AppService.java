@@ -27,7 +27,7 @@ public class AppService {
     @Autowired
     private AppVersionRepository versionRepository;
 
-    private static final String CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private static final String CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
     public Map<String, Object> getApps(Map<String, String> params) {
         int page = Math.max(1, parseIntParam(params, "page", 1));
