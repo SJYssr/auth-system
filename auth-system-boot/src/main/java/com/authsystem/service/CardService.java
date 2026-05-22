@@ -37,9 +37,8 @@ public class CardService {
         String cardRemark = emptyToNull(params.get("card_remark"));
         Integer isExpired = parseIntegerParam(params, "is_expired");
 
-        Integer userId = parseUserIdParam(params, "user_id");
         Page<Card> cardPage = cardRepository.findWithFilters(
-                appId, userId, cardType, status, isActivated, cardContent, cardRemark, isExpired, pageable);
+                appId, cardType, status, isActivated, cardContent, cardRemark, isExpired, pageable);
 
         Map<String, Object> pagination = new LinkedHashMap<>();
         pagination.put("current_page", page);
@@ -102,7 +101,6 @@ public class CardService {
         for (int i = 0; i < count; i++) {
             Card card = new Card();
             card.setAppId(appId);
-            if (data.containsKey("user_id")) card.setUserId(((Number) data.get("user_id")).intValue());
             card.setCard(cardPrefix + generateCard());
             card.setCardType(cardType);
             card.setPrice(price);
@@ -213,13 +211,6 @@ public class CardService {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    private Integer parseUserIdParam(Map<String, String> params, String key) {
-        String val = params.get(key);
-        if (val == null || val.isEmpty()) return null;
-        if ("__admin__".equals(val)) return -1;
-        try { return Integer.parseInt(val); } catch (NumberFormatException e) { return null; }
     }
 
     private String emptyToNull(String s) {

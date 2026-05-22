@@ -301,7 +301,7 @@ const handleProductAction = (product) => {
   if (!isLoggedIn) {
     // 未登录，跳转到登录页面
     ElMessage.info('请先登录后再进行购买')
-    router.push('/admin')
+    router.push('/login')
     return
   }
 

@@ -144,8 +144,8 @@
         <div class="tech-category">
           <h3>后端神器</h3>
           <div class="tech-items">
-            <div class="tech-item">SpringBoot 99+（来自未来的版本）</div>
-            <div class="tech-item">超级MySQL（能存储整个宇宙）</div>
+            <div class="tech-item">PHP 99+（来自未来的版本）</div>
+            <div class="tech-item">超级SQLite（能存储整个宇宙）</div>
             <div class="tech-item">火箭Redis（比火箭还快）</div>
             <div class="tech-item">无敌JWT（连外星人都破解不了）</div>
           </div>
@@ -219,7 +219,7 @@
         <h2>准备开始了吗？</h2>
         <p>立即体验业界领先的软件授权管理系统</p>
         <div class="contact-buttons">
-          <router-link to="/admin" class="btn-primary">
+          <router-link to="/login" class="btn-primary">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M21 12H9"/>
             </svg>

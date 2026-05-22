@@ -21,7 +21,6 @@ public class PublicController {
     @Autowired private InitService initService;
     @Autowired private LogService logService;
     @Autowired private CaptchaService captchaService;
-    @Autowired private com.authsystem.repository.UserRepository userRepository;
     @Autowired private HttpServletRequest request;
 
     @GetMapping("/captcha")
@@ -42,7 +41,7 @@ public class PublicController {
         }
         Map<String, Object> result = authService.login(username, password);
         if (result == null) {
-            logService.log(null, "login", "system", null, null, null, "管理员登录失败: " + username, null, "failure");
+            logService.log(null, "login", "system", null, null, null, "管理员登录失败: " + username, null);
             return ok(new ApiResponse(false, null, "用户名或密码错误，或非管理员账户"));
         }
         Admin loginAdmin = authService.validateToken((String) result.get("token"));
@@ -50,66 +49,14 @@ public class PublicController {
         return ok(new ApiResponse(true, result, "登录成功"));
     }
 
-    @PostMapping("/user-login")
-    public ResponseEntity<ApiResponse> userLogin(@RequestBody Map<String, Object> body) {
-        String username = str(body, "username");
-        String password = str(body, "password");
-        String captchaKey = str(body, "captcha_key");
-        String captchaCode = str(body, "captcha_code");
-        if (isEmpty(username) || isEmpty(password) || isEmpty(captchaKey) || isEmpty(captchaCode))
-            return ok(new ApiResponse(false, null, "用户名、密码和验证码不能为空"));
-        if (!captchaService.verify(captchaKey, captchaCode))
-            return ok(new ApiResponse(false, null, "验证码错误"));
-
-        java.util.Optional<com.authsystem.model.entity.User> userOpt = userRepository.findByUsername(username);
-        if (userOpt.isEmpty() || !"enabled".equals(userOpt.get().getStatus())
-                || !AuthService.getEncoder().matches(password, userOpt.get().getPassword())) {
-            return ok(new ApiResponse(false, null, "用户名或密码错误"));
-        }
-
-        com.authsystem.model.entity.User user = userOpt.get();
-        String token = AuthService.generateTokenStatic(user.getId(), authService.getSecret());
-        user.setToken(token);
-        user.setLastLogin(java.time.LocalDateTime.now());
-        userRepository.save(user);
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("token", token);
-        result.put("username", user.getUsername());
-        return ok(new ApiResponse(true, result, "登录成功"));
-    }
-
-    @PostMapping("/register")
-    public ResponseEntity<ApiResponse> register(@RequestBody Map<String, Object> body) {
-        String username = str(body, "username");
-        String email = str(body, "email");
-        String password = str(body, "password");
-        if (isEmpty(username) || isEmpty(email) || isEmpty(password))
-            return ok(new ApiResponse(false, null, "用户名、邮箱和密码不能为空"));
-        if (username.length() < 3)
-            return ok(new ApiResponse(false, null, "用户名至少3位"));
-        if (password.length() < 6)
-            return ok(new ApiResponse(false, null, "密码至少6位"));
-        if (userRepository.findByUsername(username).isPresent())
-            return ok(new ApiResponse(false, null, "用户名已存在"));
-        com.authsystem.model.entity.User user = new com.authsystem.model.entity.User();
-        user.setUsername(username);
-        user.setPassword(AuthService.encodePassword(password));
-        user.setStatus("enabled");
-        user.setCreatedAt(java.time.LocalDateTime.now());
-        user.setUpdatedAt(java.time.LocalDateTime.now());
-        userRepository.save(user);
-        return ok(new ApiResponse(true, null, "注册成功"));
-    }
-
     @GetMapping("/init")
     public ResponseEntity<ApiResponse> init() {
         String token = getToken();
         Map<String, Object> initData = initService.getInitData(token);
         if (token != null && !token.isEmpty()) {
-            Map<String, Object> loginStatus = new LinkedHashMap<>();
             Admin admin = authService.validateToken(token);
             if (admin != null && "enabled".equals(admin.getStatus())) {
+                Map<String, Object> loginStatus = new LinkedHashMap<>();
                 loginStatus.put("is_logged_in", true);
                 Map<String, Object> userMap = new LinkedHashMap<>();
                 userMap.put("id", admin.getId());
@@ -117,20 +64,7 @@ public class PublicController {
                 userMap.put("email", admin.getEmail());
                 userMap.put("is_superuser", admin.getIsSuperuser() == 1);
                 userMap.put("status", admin.getStatus());
-                userMap.put("role", "admin");
                 loginStatus.put("user", userMap);
-            } else {
-                java.util.Optional<com.authsystem.model.entity.User> userOpt = userRepository.findByToken(token);
-                if (userOpt.isPresent() && "enabled".equals(userOpt.get().getStatus())) {
-                    loginStatus.put("is_logged_in", true);
-                    Map<String, Object> userMap = new LinkedHashMap<>();
-                    userMap.put("id", userOpt.get().getId());
-                    userMap.put("username", userOpt.get().getUsername());
-                    userMap.put("role", "user");
-                    loginStatus.put("user", userMap);
-                }
-            }
-            if (!loginStatus.isEmpty()) {
                 initData.put("login_status", loginStatus);
             }
         }

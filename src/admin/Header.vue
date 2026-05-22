@@ -93,7 +93,7 @@
               </div>
               <div class="user-details">
                 <div class="user-name-large">{{ store.initializeInfo?.login_status?.user?.username || '未登录' }}</div>
-                <div class="user-role">{{ (store.initializeInfo?.login_status?.user?.role === 'admin') ? '管理员' : '用户' }}</div>
+                <div class="user-role">管理员</div>
               </div>
             </div>
           </div>
@@ -194,7 +194,7 @@ const handleIconClick = (iconType) => {
       break
     case 'settings':
       // 后期可扩展：快速设置面板
-      if (!window.location.pathname.startsWith('/useradmin')) router.push('/admin/datas')
+      router.push('/admin/datas')
       break
   }
 }
@@ -210,10 +210,10 @@ const handleCommand = async (command) => {
   switch (command) {
     case 'logout':
       await store.logout()
-      router.push(window.location.pathname.startsWith('/useradmin') ? '/login' : '/admin')
+      router.push('/')
       break
     case 'home':
-      router.push(window.location.pathname.startsWith('/useradmin') ? '/login' : '/admin')
+      router.push('/')
       break
   }
 }

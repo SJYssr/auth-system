@@ -43,12 +43,6 @@
                   <el-button type="primary" link @click="previewImage(form.favicon_url)">预览</el-button>
                 </div>
               </el-form-item>
-              <el-form-item label="登录背景图">
-                <div class="image-input">
-                  <el-input v-model="form.login_bg_url" placeholder="登录/注册页背景图地址" />
-                  <el-button type="primary" link @click="previewImage(form.login_bg_url)">预览</el-button>
-                </div>
-              </el-form-item>
             </div>
           </el-tab-pane>
         </el-tabs>
@@ -90,7 +84,6 @@ const form = ref({
   icp_number: '',
   logo_url: '',
   favicon_url: '',
-  login_bg_url: '',
   contact_email: '',
   contact_phone: ''
 })
@@ -133,7 +126,6 @@ onMounted(async () => {
     icp_number: websiteInfo.value?.icp_number || '',
     logo_url: websiteInfo.value?.logo_url || '',
     favicon_url: websiteInfo.value?.favicon_url || '',
-    login_bg_url: websiteInfo.value?.login_bg_url || '',
     contact_email: websiteInfo.value?.contact_email || '',
     contact_phone: websiteInfo.value?.contact_phone || ''
   }

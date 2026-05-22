@@ -64,31 +64,6 @@ const superVersionService = {
     delete: (id) => request.delete(`/admin/versions/${id}`)
 }
 
-const userAppService = {
-    getAll: (params = {}) => request.get('/user/apps', { params }),
-    create: (data) => request.post('/user/apps', data),
-    update: (id, data) => request.put(`/user/apps/${id}`, data),
-    delete: (id) => request.delete(`/user/apps/${id}`)
-}
-
-const userCardService = {
-    getAll: (params = {}) => request.get('/user/cards', { params }),
-    create: (data) => request.post('/user/cards', data),
-    update: (id, data) => request.put(`/user/cards/${id}`, data),
-    delete: (id) => request.delete(`/user/cards/${id}`)
-}
-
-const userVersionService = {
-    getAll: (params = {}) => request.get('/user/versions', { params }),
-    create: (data) => request.post('/user/versions', data),
-    update: (id, data) => request.put(`/user/versions/${id}`, data),
-    delete: (id) => request.delete(`/user/versions/${id}`)
-}
-
-const userDashboardService = {
-    getData: () => request.get('/user/dashboard')
-}
-
 export {
   publicLoginService,
   publicInitService,
@@ -101,8 +76,4 @@ export {
   superVersionService,
   superApiService,
   superErrorCodeService,
-  userAppService,
-  userCardService,
-  userVersionService,
-  userDashboardService,
 }

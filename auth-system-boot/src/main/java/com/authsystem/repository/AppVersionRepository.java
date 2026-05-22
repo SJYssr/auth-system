@@ -13,11 +13,9 @@ public interface AppVersionRepository extends JpaRepository<AppVersion, Integer>
 
     @Query("SELECT v FROM AppVersion v WHERE " +
            "(:appId IS NULL OR v.appId = :appId) AND " +
-           "(:userId IS NULL OR (:userId = -1 AND v.userId IS NULL) OR v.userId = :userId) AND " +
            "(:status IS NULL OR v.status = :status) AND " +
            "(:keyword IS NULL OR v.version LIKE %:keyword% OR v.versionName LIKE %:keyword%)")
     Page<AppVersion> findWithFilters(@Param("appId") Integer appId,
-                                     @Param("userId") Integer userId,
                                      @Param("status") String status,
                                      @Param("keyword") String keyword,
                                      Pageable pageable);

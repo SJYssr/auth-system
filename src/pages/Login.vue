@@ -1,60 +1,44 @@
 <template>
   <div class="login-page">
     <div class="login-card">
-      <div class="card-header">
-        <div class="logo-icon" v-if="logoSrc">
-          <img :src="logoSrc" @error="logoSrc=''" class="logo-img" />
-        </div>
-        <div class="logo-icon" v-else>
-          <span class="logo-emoji">🔐</span>
-        </div>
-        <h2>{{ siteName }}</h2>
-        <p class="subtitle">管理员登录</p>
-      </div>
-
+      <h2>管理员登录</h2>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="0" @keyup.enter="handleLogin">
         <el-form-item prop="username">
-          <el-input v-model="form.username" placeholder="用户名" size="large" class="glass-input" />
+          <el-input v-model="form.username" placeholder="用户名" prefix-icon="User" size="large" />
         </el-form-item>
         <el-form-item prop="password">
-          <el-input v-model="form.password" type="password" placeholder="密码" show-password size="large" class="glass-input" />
+          <el-input v-model="form.password" type="password" placeholder="密码" prefix-icon="Lock" show-password size="large" />
         </el-form-item>
         <el-form-item prop="captcha_code">
           <div class="captcha-row">
-            <el-input v-model="form.captcha_code" placeholder="验证码" size="large" class="glass-input captcha-input" />
+            <el-input v-model="form.captcha_code" placeholder="验证码" size="large" style="flex:1" />
             <img :src="captchaImage" class="captcha-img" @click="fetchCaptcha" title="点击刷新验证码" />
           </div>
         </el-form-item>
         <el-form-item>
-          <el-button size="large" :loading="loading" @click="handleLogin" class="login-btn">
+          <el-button type="primary" size="large" :loading="loading" @click="handleLogin" style="width: 100%;">
             登 录
           </el-button>
         </el-form-item>
       </el-form>
-      <div class="card-footer">
-        <router-link to="/login" class="switch-link">用户登录</router-link>
-      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/stores/modules/app'
-import { storeToRefs } from 'pinia'
 import request from '@/utils/request'
 
 const router = useRouter()
 const store = useAppStore()
-const { initializeInfo } = storeToRefs(store)
 
 const loading = ref(false)
 const formRef = ref(null)
 const captchaImage = ref('')
 const captchaKey = ref('')
-const logoSrc = ref('')
 const form = reactive({ username: '', password: '', captcha_code: '' })
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
@@ -62,14 +46,12 @@ const rules = {
   captcha_code: [{ required: true, message: '请输入验证码', trigger: 'blur' }]
 }
 
-const siteName = computed(() => initializeInfo.value?.website?.site_name || '授权管理系统')
-
 const fetchCaptcha = async () => {
   try {
     const res = await request.get('/public/captcha')
     captchaImage.value = res.data.image
     captchaKey.value = res.data.key
-  } catch {}
+  } catch { /* 验证码加载失败，点击刷新重试 */ }
 }
 
 const handleLogin = async () => {
@@ -96,103 +78,41 @@ const handleLogin = async () => {
   }
 }
 
-onMounted(() => {
-  if (initializeInfo.value?.website?.logo_url) {
-    logoSrc.value = initializeInfo.value.website.logo_url
-  }
-  fetchCaptcha()
-})
+onMounted(() => { fetchCaptcha() })
 </script>
 
 <style scoped>
 .login-page {
-  display: flex; align-items: center; justify-content: center;
-  flex: 1; padding: 40px 20px;
+  min-height: 80vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
 }
 .login-card {
-  width: 420px; padding: 48px 40px 36px;
-  background: rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
-  border-top: 1px solid rgba(255, 255, 255, 0.25);
-  border-left: 1px solid rgba(255, 255, 255, 0.25);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 24px;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.35);
+  width: 400px;
+  padding: 40px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
 }
-.card-header { text-align: center; margin-bottom: 36px; }
-.logo-icon {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 64px; height: 64px; border-radius: 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  margin-bottom: 16px; overflow: hidden;
+.login-card h2 {
+  text-align: center;
+  margin: 0 0 32px;
+  font-size: 22px;
+  color: #1f2937;
 }
-.logo-img { width: 100%; height: 100%; object-fit: cover; }
-.logo-emoji { font-size: 28px; }
-.card-header h2 { font-size: 24px; font-weight: 700; color: #fff; margin: 0; letter-spacing: 1px; }
-.subtitle { font-size: 13px; color: rgba(255, 255, 255, 0.45); margin: 8px 0 0; }
-.card-footer { text-align: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
-.switch-link { color: rgba(255, 255, 255, 0.5); font-size: 13px; text-decoration: none; transition: color 0.2s; }
-.switch-link:hover { color: #fff; }
-.captcha-row { display: flex; gap: 10px; align-items: center; }
-.captcha-input { flex: 1; }
+.captcha-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
 .captcha-img {
-  height: 42px; width: 110px; border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  cursor: pointer; flex-shrink: 0; background: rgba(0, 0, 0, 0.2);
-}
-</style>
-
-<style>
-.login-page .glass-input .el-input__wrapper {
-  background: rgba(0, 0, 0, 0.2) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  border-radius: 12px !important;
-  box-shadow: none !important;
-}
-.login-page .glass-input .el-input__wrapper:hover {
-  border-color: rgba(255, 255, 255, 0.3) !important;
-}
-.login-page .glass-input.is-focus .el-input__wrapper {
-  background: rgba(0, 0, 0, 0.3) !important;
-  border-color: rgba(255, 255, 255, 0.5) !important;
-  box-shadow: 0 0 16px rgba(255, 255, 255, 0.08) !important;
-}
-.login-page .glass-input .el-input__inner {
-  color: #fff !important;
-}
-.login-page .glass-input .el-input__inner::placeholder {
-  color: rgba(255, 255, 255, 0.38) !important;
-}
-.login-page .glass-input .el-input__suffix,
-.login-page .glass-input .el-input__prefix {
-  color: rgba(255, 255, 255, 0.5) !important;
-}
-/* Chrome 自动填充覆盖 */
-.login-page .glass-input .el-input__inner:-webkit-autofill,
-.login-page .glass-input .el-input__inner:-webkit-autofill:hover,
-.login-page .glass-input .el-input__inner:-webkit-autofill:focus,
-.login-page .glass-input .el-input__inner:-webkit-autofill:active {
-  -webkit-background-clip: text !important;
-  -webkit-text-fill-color: #fff !important;
-  caret-color: #fff !important;
-  transition: background-color 9999s ease-in-out 0s !important;
-}
-.login-page .glass-input .el-input__wrapper:has(.el-input__inner:-webkit-autofill) {
-  background: rgba(0, 0, 0, 0.2) !important;
-}
-.login-page .login-btn {
-  width: 100% !important; height: 48px !important;
-  border-radius: 12px !important; border: none !important;
-  font-size: 15px !important; font-weight: 700 !important;
-  letter-spacing: 2px !important;
-  background: rgba(255, 255, 255, 0.9) !important;
-  color: #0f172a !important;
-}
-.login-page .login-btn:hover {
-  background: #fff !important;
-  transform: translateY(-2px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+  height: 40px;
+  width: 100px;
+  border-radius: 6px;
+  border: 1px solid #dcdfe6;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 </style>

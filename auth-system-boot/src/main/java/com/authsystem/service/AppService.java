@@ -63,9 +63,8 @@ public class AppService {
         String status = emptyToNull(params.get("status"));
         String startDate = emptyToNull(params.get("start_date"));
         String endDate = emptyToNull(params.get("end_date"));
-        Integer userId = parseUserIdParam(params, "user_id");
 
-        Page<App> appPage = appRepository.findWithAdminFilters(keyword, status, userId, startDate, endDate, pageable);
+        Page<App> appPage = appRepository.findWithAdminFilters(keyword, status, startDate, endDate, pageable);
 
         List<Map<String, Object>> appList = new ArrayList<>();
         for (App a : appPage.getContent()) {
@@ -139,7 +138,6 @@ public class AppService {
         app.setAnnouncement((String) data.getOrDefault("announcement", ""));
         app.setForceUpdate(toInt(data.getOrDefault("force_update", 0)));
         app.setStatus(getValidStatus((String) data.get("status")));
-        if (data.containsKey("user_id")) app.setUserId(toInt(data.get("user_id")));
         app.setSoftid(generateSoftid());
         app.setCreatedAt(LocalDateTime.now());
         app.setUpdatedAt(LocalDateTime.now());
@@ -284,13 +282,6 @@ public class AppService {
         if (v instanceof Number) return ((Number) v).intValue();
         if (v instanceof String && !((String) v).isEmpty()) return Integer.parseInt((String) v);
         return 0;
-    }
-
-    private Integer parseUserIdParam(Map<String, String> params, String key) {
-        String val = params.get(key);
-        if (val == null || val.isEmpty()) return null;
-        if ("__admin__".equals(val)) return -1;
-        try { return Integer.parseInt(val); } catch (NumberFormatException e) { return null; }
     }
 
     private String emptyToNull(String s) {

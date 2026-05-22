@@ -26,12 +26,10 @@ public interface AppRepository extends JpaRepository<App, Integer> {
     @Query("SELECT a FROM App a WHERE " +
            "(:keyword IS NULL OR a.appName LIKE %:keyword% OR a.description LIKE %:keyword%) AND " +
            "(:status IS NULL OR a.status = :status) AND " +
-           "(:userId IS NULL OR (:userId = -1 AND a.userId IS NULL) OR a.userId = :userId) AND " +
            "(:startDate IS NULL OR FUNCTION('DATE', a.createdAt) >= :startDate) AND " +
            "(:endDate IS NULL OR FUNCTION('DATE', a.createdAt) <= :endDate)")
     Page<App> findWithAdminFilters(@Param("keyword") String keyword,
                                    @Param("status") String status,
-                                   @Param("userId") Integer userId,
                                    @Param("startDate") String startDate,
                                    @Param("endDate") String endDate,
                                    Pageable pageable);

@@ -561,7 +561,9 @@ const handleBatchDisable = async () => {
   try {
     await ElMessageBox.confirm(`确定要禁用选中的 ${selectedRows.value.length} 张卡密吗？`, '提示', { type: 'warning' })
     tableLoading.value = true
-    await Promise.all(selectedRows.value.map(row => superCardService.update(row.id, { status: 'disabled' })))
+    for (const row of selectedRows.value) {
+      await superCardService.update(row.id, { status: 'disabled' })
+    }
     ElMessage.success(`成功禁用 ${selectedRows.value.length} 张卡密`)
     selectedRows.value = []
     await store.fetchCards(buildSearchParams())
@@ -577,7 +579,9 @@ const handleBatchEnable = async () => {
   if (selectedRows.value.length === 0) return
   try {
     tableLoading.value = true
-    await Promise.all(selectedRows.value.map(row => superCardService.update(row.id, { status: 'enabled' })))
+    for (const row of selectedRows.value) {
+      await superCardService.update(row.id, { status: 'enabled' })
+    }
     ElMessage.success(`成功解禁 ${selectedRows.value.length} 张卡密`)
     selectedRows.value = []
     await store.fetchCards(buildSearchParams())

@@ -29,8 +29,7 @@ sharedRequest.interceptors.response.use(
     error => {
         if (error.response && error.response.status === 401) {
             localStorage.removeItem('token')
-            const p = window.location.pathname
-            window.location.href = p.startsWith('/admin') ? '/admin' : '/login'
+            window.location.href = '/login'
         }
         return Promise.reject(error)
     }

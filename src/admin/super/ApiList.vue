@@ -10,7 +10,7 @@
 
     <div class="table-section">
       <div class="toolbar-section">
-        <el-button v-if="!isUserRole" type="primary" @click="handleAdd"><el-icon><Plus /></el-icon>新增接口</el-button>
+        <el-button type="primary" @click="handleAdd"><el-icon><Plus /></el-icon>新增接口</el-button>
       </div>
       <el-table :data="list" v-loading="loading">
         <el-table-column type="index" label="序号" width="60" />
@@ -23,7 +23,7 @@
             <el-button type="primary" link size="small" @click="showDetail(row)">点击查看具体描述</el-button>
           </template>
         </el-table-column>
-        <el-table-column v-if="!isUserRole" label="操作" width="160">
+        <el-table-column label="操作" width="160">
           <template #default="{row}">
             <el-button-group>
               <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
@@ -136,13 +136,9 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Refresh, Delete } from '@element-plus/icons-vue'
 import { superApiService } from '@/utils/service'
-
-const route = useRoute()
-const isUserRole = computed(() => route.path.startsWith('/useradmin/'))
 
 const list = ref([])
 const loading = ref(true)

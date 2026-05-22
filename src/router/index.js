@@ -1,10 +1,7 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import Layout from '@/pages/Layout.vue'
 import Login from '@/pages/Login.vue'
-import UserLogin from '@/pages/UserLogin.vue'
-import UserRegister from '@/pages/UserRegister.vue'
 import Admin from '@/admin/Admin.vue'
-import UserAdmin from '@/admin/UserAdmin.vue'
 import Dashboard from '@/admin/super/Dashboard.vue'
 import Apps from '@/admin/super/Apps.vue'
 import Datas from '@/admin/super/Datas.vue'
@@ -20,68 +17,93 @@ import { storeToRefs } from 'pinia'
 
 const routes = [
   {
-    path: '/admin',
+    path: '/',
     component: Layout,
     children: [
       {
         path: '',
-        name: 'Login',
         component: Login,
         meta: { requiresAuth: false, title: '管理员登录' }
+      },
+      {
+        path: '/products',
+        name: 'Products',
+        component: () => import('@/pages/Products.vue'),
+        meta: { requiresAuth: false, title: '产品中心' }
+      },
+      {
+        path: '/about',
+        name: 'About',
+        component: () => import('@/pages/About.vue'),
+        meta: { requiresAuth: false, title: '关于我们' }
+      },
+      {
+        path: '/app/:id',
+        name: 'AppDetail',
+        component: () => import('@/pages/AppDetail.vue'),
+        meta: { requiresAuth: false, title: '应用详情' }
       }
     ]
   },
   {
-    path: '/login',
-    component: Layout,
-    children: [{ path: '', name: 'UserLogin', component: UserLogin, meta: { requiresAuth: false, title: '用户登录' } }]
-  },
-  {
-    path: '/register',
-    component: Layout,
-    children: [{ path: '', name: 'UserRegister', component: UserRegister, meta: { requiresAuth: false, title: '用户注册' } }]
-  },
-  {
     path: '/admin',
     component: Admin,
-    meta: { requiresAuth: true },
+    meta: { keepAlive: true, requiresAuth: true },
     children: [
-      { path: 'dashboard', name: 'Dashboard', component: Dashboard, meta: { title: '管理面板' } },
-      { path: 'apps', name: 'Apps', component: Apps, meta: { title: '应用管理' } },
-      { path: 'cards', name: 'Cards', component: () => import('@/admin/super/Cards.vue'), meta: { title: '卡密管理' } },
-      { path: 'versions', name: 'Versions', component: () => import('@/admin/super/Versions.vue'), meta: { title: '版本管理' } },
-      { path: 'datas', name: 'Datas', component: Datas, meta: { title: '网站设置' } },
-      { path: 'admin-logs', name: 'AdminLogs', component: AdminLogs, meta: { title: '操作日志' } },
-      { path: 'apis', name: 'ApiList', component: () => import('@/admin/super/ApiList.vue'), meta: { title: 'API列表' } },
-      { path: 'error-codes', name: 'ErrorCodes', component: () => import('@/admin/super/ErrorCodes.vue'), meta: { title: '错误码对照表' } }
-    ]
-  },
-  {
-    path: '/useradmin',
-    component: UserAdmin,
-    meta: { requiresAuth: true },
-    children: [
-      { path: 'dashboard', component: Dashboard, meta: { title: '仪表盘' } },
-      { path: 'apps', component: () => import('@/pages/user/UserApps.vue'), meta: { title: '应用列表' } },
-      { path: 'cards', component: () => import('@/pages/user/UserCards.vue'), meta: { title: '卡密列表' } },
-      { path: 'versions', component: () => import('@/pages/user/UserVersions.vue'), meta: { title: '版本管理' } },
-      { path: 'apis', component: () => import('@/admin/super/ApiList.vue'), meta: { title: 'API列表' } },
-      { path: 'error-codes', component: () => import('@/admin/super/ErrorCodes.vue'), meta: { title: '错误码对照表' } },
-    ]
-  },
-  {
-    path: '/',
-    component: Layout,
-    children: [
-      { path: '/products', name: 'Products', component: () => import('@/pages/Products.vue'), meta: { requiresAuth: false, title: '产品中心' } },
-      { path: '/about', name: 'About', component: () => import('@/pages/About.vue'), meta: { requiresAuth: false, title: '关于我们' } },
-      { path: '/app/:id', name: 'AppDetail', component: () => import('@/pages/AppDetail.vue'), meta: { requiresAuth: false, title: '应用详情' } }
+      {
+        path: 'dashboard',
+        name: 'Dashboard',
+        component: Dashboard,
+        meta: { keepAlive: true, title: '管理面板' }
+      },
+      {
+        path: 'apps',
+        name: 'Apps',
+        component: Apps,
+        meta: { keepAlive: true, title: '应用管理' }
+      },
+      {
+        path: 'cards',
+        name: 'Cards',
+        component: () => import('@/admin/super/Cards.vue'),
+        meta: { keepAlive: true, title: '卡密管理' }
+      },
+      {
+        path: 'versions',
+        name: 'Versions',
+        component: () => import('@/admin/super/Versions.vue'),
+        meta: { keepAlive: true, title: '版本管理' }
+      },
+      {
+        path: 'datas',
+        name: 'Datas',
+        component: Datas,
+        meta: { keepAlive: true, title: '网站设置' }
+      },
+      {
+        path: 'admin-logs',
+        name: 'AdminLogs',
+        component: AdminLogs,
+        meta: { keepAlive: true, title: '操作日志' }
+      },
+      {
+        path: 'apis',
+        name: 'ApiList',
+        component: () => import('@/admin/super/ApiList.vue'),
+        meta: { keepAlive: true, title: 'API列表' }
+      },
+      {
+        path: 'error-codes',
+        name: 'ErrorCodes',
+        component: () => import('@/admin/super/ErrorCodes.vue'),
+        meta: { keepAlive: true, title: '错误码对照表' }
+      }
     ]
   }
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes
 })
 
@@ -105,21 +127,23 @@ router.beforeEach(async (to, from, next) => {
 
   const isLoggedIn = initializeInfo.value.login_status?.is_logged_in
 
-  if (to.matched.some(r => r.meta.requiresAuth) && !isLoggedIn) {
-    ElMessage.warning('请先登录')
-    return next('/login')
-  }
-
-  if (isLoggedIn && to.path === '/admin' && !to.matched.some(r => r.meta.requiresAuth)) {
+  // 已登录用户访问登录页 → 直接进后台
+  if (isLoggedIn && to.path === '/') {
     return next('/admin/dashboard')
   }
 
-  if (to.path === '/') {
-    return next('/login')
+  // 未登录用户访问需要认证的页面 → 回到登录页
+  if (to.matched.some(r => r.meta.requiresAuth) && !isLoggedIn) {
+    ElMessage.warning('请先登录')
+    return next('/')
+  }
+
+  if (to.path === '/admin' || to.path === '/admin/') {
+    return next('/admin/dashboard')
   }
 
   if (to.matched.length === 0) {
-    return next('/login')
+    return next('/')
   }
 
   next()

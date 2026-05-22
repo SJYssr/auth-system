@@ -16,9 +16,6 @@ public class Card {
     @Column(name = "app_id", nullable = false)
     private Integer appId;
 
-    @Column(name = "user_id")
-    private Integer userId;
-
     @Column(name = "card", nullable = false, unique = true, length = 128)
     private String card;
 
@@ -84,9 +81,6 @@ public class Card {
 
     public Integer getAppId() { return appId; }
     public void setAppId(Integer appId) { this.appId = appId; }
-
-    public Integer getUserId() { return userId; }
-    public void setUserId(Integer userId) { this.userId = userId; }
 
     public String getCard() { return card; }
     public void setCard(String card) { this.card = card; }

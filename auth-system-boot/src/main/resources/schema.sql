@@ -18,24 +18,9 @@ CREATE TABLE IF NOT EXISTS admins (
     INDEX idx_admins_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS users (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(50) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    status VARCHAR(20) DEFAULT 'enabled',
-    token VARCHAR(255),
-    last_login DATETIME NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_users_username (username),
-    INDEX idx_users_token (token),
-    INDEX idx_users_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE IF NOT EXISTS apps (
     id INT AUTO_INCREMENT PRIMARY KEY,
     softid VARCHAR(18) UNIQUE,
-    user_id INT,
     app_name VARCHAR(100) NOT NULL UNIQUE,
     description TEXT,
     version VARCHAR(20) DEFAULT '1.0.0',
@@ -59,7 +44,6 @@ CREATE TABLE IF NOT EXISTS apps (
 CREATE TABLE IF NOT EXISTS cards (
     id INT AUTO_INCREMENT PRIMARY KEY,
     app_id INT NOT NULL,
-    user_id INT,
     card VARCHAR(128) NOT NULL UNIQUE,
     card_type VARCHAR(50) DEFAULT '天卡',
     price DECIMAL(10,2) DEFAULT 0.00,
@@ -87,7 +71,6 @@ CREATE TABLE IF NOT EXISTS cards (
 CREATE TABLE IF NOT EXISTS app_versions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     app_id INT NOT NULL,
-    user_id INT,
     version VARCHAR(20) NOT NULL,
     version_name VARCHAR(100),
     status VARCHAR(20) DEFAULT 'enabled',
