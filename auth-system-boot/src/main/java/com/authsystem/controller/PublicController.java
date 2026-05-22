@@ -41,7 +41,7 @@ public class PublicController {
         }
         Map<String, Object> result = authService.login(username, password);
         if (result == null) {
-            logService.log(null, "login", "system", null, null, null, "管理员登录失败: " + username, null);
+            logService.log(null, "login", "system", null, null, null, "管理员登录失败: " + username, null, "failure");
             return ok(new ApiResponse(false, null, "用户名或密码错误，或非管理员账户"));
         }
         Admin loginAdmin = authService.validateToken((String) result.get("token"));

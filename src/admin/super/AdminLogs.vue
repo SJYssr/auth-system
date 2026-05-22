@@ -47,7 +47,7 @@
         >
           <el-option label="全部" value="" />
           <el-option label="成功" value="success" />
-          <el-option label="失败" value="error" />
+          <el-option label="失败" value="failure" />
         </el-select>
         <el-date-picker
           v-model="dateRange"

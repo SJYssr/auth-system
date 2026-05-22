@@ -83,6 +83,12 @@ public class LogService {
     @Transactional
     public void log(Admin admin, String action, String module, String targetType,
                     Integer targetId, String targetName, String description, String requestData) {
+        log(admin, action, module, targetType, targetId, targetName, description, requestData, "success");
+    }
+
+    @Transactional
+    public void log(Admin admin, String action, String module, String targetType,
+                    Integer targetId, String targetName, String description, String requestData, String responseStatus) {
         Log log = new Log();
         log.setUserId(admin != null ? admin.getId() : null);
         log.setUsername(admin != null ? admin.getUsername() : null);
@@ -95,7 +101,7 @@ public class LogService {
         log.setIpAddress(getClientIP());
         log.setUserAgent(request.getHeader("User-Agent"));
         log.setRequestData(requestData);
-        log.setResponseStatus("success");
+        log.setResponseStatus(responseStatus);
         log.setCreatedAt(LocalDateTime.now());
         logRepository.saveAndFlush(log);
         logRepository.deleteOldestExceeding(MAX_LOG_COUNT);
