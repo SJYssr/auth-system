@@ -11,6 +11,12 @@ import java.util.Map;
 @Service
 public class SiteDataService {
 
+    private static boolean isValidUrl(String url) {
+        if (url == null || url.isEmpty()) return true;
+        String lower = url.toLowerCase();
+        return lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("/");
+    }
+
     @Autowired
     private SiteDataRepository siteDataRepository;
 
@@ -26,9 +32,18 @@ public class SiteDataService {
                     return s;
                 });
 
+        String logoUrl = (String) data.get("logo_url");
+        String faviconUrl = (String) data.get("favicon_url");
+        if (!isValidUrl(logoUrl) || !isValidUrl(faviconUrl))
+            throw new IllegalArgumentException("图片地址仅支持 http/https 或相对路径");
+
         site.setSiteName((String) data.get("site_name"));
-        site.setLogoUrl((String) data.get("logo_url"));
-        site.setFaviconUrl((String) data.get("favicon_url"));
+        site.setDescription((String) data.get("description"));
+        site.setCopyright((String) data.get("copyright"));
+        site.setCopyrightSince((String) data.get("copyright_since"));
+        site.setIcpNumber((String) data.get("icp_number"));
+        site.setLogoUrl(logoUrl);
+        site.setFaviconUrl(faviconUrl);
         site.setContactEmail((String) data.get("contact_email"));
         site.setContactPhone((String) data.get("contact_phone"));
         site.setUpdatedAt(LocalDateTime.now());

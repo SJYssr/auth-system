@@ -51,7 +51,7 @@ const fetchCaptcha = async () => {
     const res = await request.get('/public/captcha')
     captchaImage.value = res.data.image
     captchaKey.value = res.data.key
-  } catch {}
+  } catch { /* 验证码加载失败，点击刷新重试 */ }
 }
 
 const handleLogin = async () => {

@@ -44,6 +44,9 @@ public class SiteData {
     @Column(columnDefinition = "TEXT")
     private String copyright;
 
+    @Column(name = "copyright_since", length = 10)
+    private String copyrightSince;
+
     @Column(length = 20)
     private String status = "enabled";
 
@@ -88,6 +91,9 @@ public class SiteData {
 
     public String getCopyright() { return copyright; }
     public void setCopyright(String copyright) { this.copyright = copyright; }
+
+    public String getCopyrightSince() { return copyrightSince; }
+    public void setCopyrightSince(String copyrightSince) { this.copyrightSince = copyrightSince; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

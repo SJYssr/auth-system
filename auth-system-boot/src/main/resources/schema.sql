@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS datas (
     contact_phone VARCHAR(20),
     contact_address TEXT,
     copyright TEXT,
+    copyright_since VARCHAR(10),
     status VARCHAR(20) DEFAULT 'enabled',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -158,8 +159,8 @@ INSERT IGNORE INTO error_codes (code, message, description, solution) VALUES
 INSERT IGNORE INTO admins (username, email, password, is_superuser, status, created_at)
 VALUES ('SJY', 'sjyssr@petalmail.com', '79d8e538249ed882d2012ede95fbaecf', 1, 'enabled', NOW());
 
-INSERT INTO datas (site_name, contact_email)
-SELECT '应用卡密管理系统', 'i@zyyo.net'
+INSERT INTO datas (site_name, description, copyright, copyright_since, contact_email)
+SELECT '应用卡密管理系统', '专业的应用授权管理平台', 'zyyo. 保留所有权利', '2025', 'i@zyyo.net'
 WHERE NOT EXISTS (SELECT 1 FROM datas);
 
 -- 为已有数据库添加 token 列（如已存在则忽略错误）

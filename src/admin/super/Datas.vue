@@ -8,6 +8,18 @@
               <el-form-item label="网站名称" prop="site_name">
                 <el-input v-model="form.site_name" placeholder="请输入网站名称" />
               </el-form-item>
+              <el-form-item label="底部描述">
+                <el-input v-model="form.description" placeholder="请输入底部描述文字" />
+              </el-form-item>
+              <el-form-item label="版权信息">
+                <el-input v-model="form.copyright" placeholder="如：zyyo. 保留所有权利" />
+              </el-form-item>
+              <el-form-item label="版权起始年份">
+                <el-input v-model="form.copyright_since" placeholder="如：2025，留空则仅显示当前年份" maxlength="4" />
+              </el-form-item>
+              <el-form-item label="ICP备案号">
+                <el-input v-model="form.icp_number" placeholder="如：京ICP备XXXXXXXX号" />
+              </el-form-item>
               <el-form-item label="联系邮箱" prop="contact_email">
                 <el-input v-model="form.contact_email" placeholder="请输入联系邮箱" />
               </el-form-item>
@@ -66,6 +78,10 @@ const activeTab = ref('basic')
 
 const form = ref({
   site_name: '',
+  description: '',
+  copyright: '',
+  copyright_since: '',
+  icp_number: '',
   logo_url: '',
   favicon_url: '',
   contact_email: '',
@@ -104,6 +120,10 @@ onMounted(async () => {
   await store.getWebsiteInfo()
   form.value = {
     site_name: websiteInfo.value?.site_name || '',
+    description: websiteInfo.value?.description || '',
+    copyright: websiteInfo.value?.copyright || '',
+    copyright_since: websiteInfo.value?.copyright_since || '',
+    icp_number: websiteInfo.value?.icp_number || '',
     logo_url: websiteInfo.value?.logo_url || '',
     favicon_url: websiteInfo.value?.favicon_url || '',
     contact_email: websiteInfo.value?.contact_email || '',

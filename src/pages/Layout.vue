@@ -42,10 +42,11 @@
                 width="20" 
                 height="20" 
               />
-              <span class="footer-brand-name">zyyo</span>
+              <span class="footer-brand-name">{{ siteName }}</span>
             </div>
-            <p class="footer-description">{{ siteName }} - 应用授权管理</p>
-            <p class="footer-copyright">© {{ new Date().getFullYear() }} zyyo. 保留所有权利</p>
+            <p class="footer-description" v-if="initializeInfo.website?.description">{{ initializeInfo.website.description }}</p>
+            <p class="footer-copyright" v-if="initializeInfo.website?.copyright">© {{ copyrightYear }} {{ initializeInfo.website.copyright }}</p>
+            <p class="footer-copyright" v-if="initializeInfo.website?.icp_number">{{ initializeInfo.website.icp_number }}</p>
           </div>
           
           <div class="footer-contact" v-if="initializeInfo.website?.email || initializeInfo.website?.phone">
@@ -63,17 +64,31 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useAppStore } from '@/stores/modules/app'
 
 const appStore = useAppStore()
 
-const logoSrc = ref('/logo.png')
-
 const initializeInfo = computed(() => appStore.initializeInfo || {})
 const siteName = computed(() => initializeInfo.value.website?.site_name || '授权管理系统')
+const copyrightYear = computed(() => {
+  const since = initializeInfo.value.website?.copyright_since
+  const now = new Date().getFullYear()
+  return since ? `${since}-${now}` : `${now}`
+})
+const logoSrc = ref('/logo.png')
 
-// 方法
+watch(() => initializeInfo.value.website, (site) => {
+  if (!site) return
+  if (site.logo_url) logoSrc.value = site.logo_url
+  if (site.site_name) document.title = site.site_name
+  if (site.favicon_url) {
+    let link = document.querySelector('link[rel="icon"]')
+    if (!link) { link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link) }
+    link.href = site.favicon_url
+  }
+}, { immediate: true })
+
 const handleLogoError = () => {
   logoSrc.value = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzM5OGVmNCIvPgo8cGF0aCBkPSJNMTYgOGMtNC40IDAtOCAzLjYtOCA4czMuNiA4IDggOCA4LTMuNiA4LTgtMy42LTgtOC04em0wIDEyYy0yLjIgMC00LTEuOC00LTRzMS44LTQgNC00IDQgMS44IDQgNC0xLjggNC00IDR6IiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K'
 }
