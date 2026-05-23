@@ -65,6 +65,17 @@ body {
 }
 
 
+/* 弹窗自适应 */
+.el-dialog {
+  width: var(--el-dialog-width, 50%) !important;
+  max-width: min(90vw, 560px) !important;
+}
+
+.el-drawer {
+  width: var(--el-drawer-size, 30%) !important;
+  max-width: min(90vw, 500px) !important;
+}
+
 @media (max-width: 768px) {
   .search-filters {
     flex-direction: column;
@@ -77,6 +88,16 @@ body {
 
   .table-section {
     padding: 16px;
+  }
+
+  .el-dialog {
+    width: 92vw !important;
+    max-width: 92vw !important;
+  }
+
+  .el-drawer {
+    width: 92vw !important;
+    max-width: 92vw !important;
   }
 }
 </style>
