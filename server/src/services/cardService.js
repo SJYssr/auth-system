@@ -1,17 +1,19 @@
 /**
  * 卡密管理服务
- * 对应 Java 的 CardService
  */
 const crypto = require('crypto');
 const pool = require('../config/db');
 
-/** 生成14位随机卡密 */
+/** 生成14位随机卡密（无模偏差） */
 function generateCardCode() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const maxValid = 256 - (256 % chars.length); // 248
   let code = '';
-  const bytes = crypto.randomBytes(14);
-  for (let i = 0; i < 14; i++) {
-    code += chars.charAt(bytes[i] % chars.length);
+  while (code.length < 14) {
+    const byte = crypto.randomBytes(1)[0];
+    if (byte < maxValid) {
+      code += chars.charAt(byte % chars.length);
+    }
   }
   return code;
 }
@@ -20,7 +22,7 @@ function generateCardCode() {
 async function createCards(appId, count = 1, cardType = '天卡', price = 0, points = 1, remark = '') {
   const cards = [];
   let attempts = 0;
-  const maxRetries = count * 3; // 最多重试3倍次数去重
+  const maxRetries = count * 3;
 
   while (cards.length < count && attempts < maxRetries) {
     attempts++;
@@ -32,7 +34,7 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
       );
       cards.push(cardCode);
     } catch (err) {
-      if (err.code === 'ER_DUP_ENTRY') continue; // 重复就重试
+      if (err.code === 'ER_DUP_ENTRY') continue;
       throw err;
     }
   }
@@ -56,7 +58,6 @@ async function getList(filters = {}, page = 1, pageSize = 20) {
     [...values, String(pageSize), String(offset)]
   );
 
-  // 计数查询
   let countSql = 'SELECT COUNT(*) as total FROM cards c WHERE 1=1';
   const countValues = [];
   if (filters.app_id) { countSql += ' AND c.app_id = ?'; countValues.push(filters.app_id); }

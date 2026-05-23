@@ -7,6 +7,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const http = require('http');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,85 +18,171 @@ app.set('trust proxy', 1);
 
 // 安全响应头
 app.use(helmet({
-  contentSecurityPolicy: false // 由前端 Vite 处理
-}));
-
-// CORS - 生产环境
-const allowedOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
-  : ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000',
-     'http://8.141.118.244', 'http://8.141.118.244:3000'];
-
-app.use(cors({
-  origin: (origin, cb) => {
-    // 同源请求（无 origin 头）或白名单中的 origin 放行
-    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) {
-      cb(null, true);
-    } else {
-      cb(new Error('Not allowed by CORS'));
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"]
     }
-  },
-  credentials: true
+  }
 }));
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-app.use(morgan('[:date[iso]] :method :url :status :response-time ms'));
 
-// 全局限流
-const globalLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 200,
-  message: { success: false, message: '请求过于频繁，请稍后再试' }
-});
-app.use(globalLimiter);
+/** 自动获取公网 IP（多服务容错） */
+async function detectPublicIp() {
+  const services = [
+    { host: 'checkip.amazonaws.com', path: '/', family: 4 },
+    { host: 'ifconfig.me', path: '/ip', family: 4 },
+    { host: 'api.ipify.org', path: '/', family: 4 },
+  ];
+  for (const svc of services) {
+    try {
+      const ip = await new Promise((resolve, reject) => {
+        const req = http.get({ host: svc.host, path: svc.path, family: svc.family, timeout: 4000 }, (res) => {
+          let data = '';
+          res.on('data', (chunk) => data += chunk);
+          res.on('end', () => {
+            const trimmed = data.trim();
+            // 校验是否为合法 IPv4
+            if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(trimmed)) {
+              resolve(trimmed);
+            } else {
+              reject(new Error(`无效IP: ${trimmed}`));
+            }
+          });
+        });
+        req.on('timeout', () => { req.destroy(); reject(new Error('超时')); });
+        req.on('error', reject);
+      });
+      return ip;
+    } catch { /* 尝试下一个服务 */ }
+  }
+  return null;
+}
 
-// 登录接口严格限流 - 防暴力破解
-const loginLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 5,
-  message: { success: false, message: '登录尝试过于频繁，请1分钟后再试' },
-  keyGenerator: (req) => req.ip
-});
-app.use('/api/public/login', loginLimiter);
+/** 构建 CORS 允许的源列表 */
+function buildAllowedOrigins(publicIp) {
+  const origins = [
+    `http://localhost:${PORT}`,
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000',
+  ];
+  // 自动检测到的公网 IP
+  if (publicIp) {
+    origins.push(`http://${publicIp}`);
+    origins.push(`http://${publicIp}:${PORT}`);
+  }
+  // 环境变量额外配置（优先级最高，可覆盖或补充）
+  const envOrigins = (process.env.CORS_ORIGINS || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  for (const o of envOrigins) {
+    if (!origins.includes(o)) origins.push(o);
+  }
+  return origins;
+}
 
-// 路由
-const rootRoutes = require('./routes/root');
-const publicRoutes = require('./routes/public');
-const adminRoutes = require('./routes/admin');
+(async () => {
+  // 自动检测公网 IP
+  const publicIp = await detectPublicIp();
+  if (publicIp) {
+    console.log(`检测到公网IP: ${publicIp}`);
+  } else {
+    console.log('未能自动检测公网IP，使用环境变量配置');
+  }
 
-app.use('/', rootRoutes);
-app.use('/api/public', publicRoutes);
-app.use('/api/admin', adminRoutes);
+  const allowedOrigins = buildAllowedOrigins(publicIp);
+  console.log(`CORS 允许的源: ${allowedOrigins.join(', ')}`);
 
-// 静态文件 - 前端构建产物
-const path = require('path');
-app.use(express.static(path.join(__dirname, '../../client/dist')));
+  // CORS - 精确匹配
+  app.use(cors({
+    origin: (origin, cb) => {
+      if (!origin) {
+        cb(null, true);
+      } else if (allowedOrigins.includes(origin)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true
+  }));
 
-// SPA fallback - 非 API 路径且非静态文件时返回 index.html
-app.get('*', (req, res) => {
-  if (req.path.startsWith('/api/') || req.path === '/health') return;
-  res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
-});
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+  app.use(morgan('[:date[iso]] :method :url :status :response-time ms'));
 
-// 健康检查
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
-});
+  // 全局限流
+  app.use(rateLimit({
+    windowMs: 60 * 1000,
+    max: 200,
+    message: { success: false, message: '请求过于频繁，请稍后再试' }
+  }));
 
-// 全局错误处理
-app.use((err, req, res, next) => {
-  console.error('未捕获错误:', err);
-  res.status(500).json({
-    success: false,
-    message: '服务器内部错误',
-    errcode: '-1009'
+  // 登录接口严格限流
+  app.use('/api/public/login', rateLimit({
+    windowMs: 60 * 1000,
+    max: 5,
+    message: { success: false, message: '登录尝试过于频繁，请1分钟后再试' },
+    keyGenerator: (req) => req.ip
+  }));
+
+  // 验证码接口限流
+  app.use('/api/public/captcha', rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    message: { success: false, message: '请求过于频繁，请稍后再试' },
+    keyGenerator: (req) => req.ip
+  }));
+
+  // 客户端 API 限流
+  app.use('/api/public', rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    message: { success: false, message: '请求过于频繁，请稍后再试' },
+    keyGenerator: (req) => req.ip
+  }));
+
+  // 路由
+  app.use('/', require('./routes/root'));
+  app.use('/api/public', require('./routes/public'));
+  app.use('/api/admin', require('./routes/admin'));
+
+  // 静态文件 - 前端构建产物
+  app.use(express.static(path.join(__dirname, '../../client/dist')));
+
+  // SPA fallback
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/') || req.path === '/health') return;
+    res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
   });
-});
 
-// 启动
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`卡密授权系统后端已启动，端口: ${PORT}`);
-  console.log(`客户端API: http://localhost:${PORT}/`);
-  console.log(`前台API:   http://localhost:${PORT}/api/public/`);
-  console.log(`后台API:   http://localhost:${PORT}/api/admin/`);
-});
+  // 健康检查
+  app.get('/health', (req, res) => {
+    res.json({ status: 'ok', time: new Date().toISOString() });
+  });
+
+  // 全局错误处理
+  app.use((err, req, res, next) => {
+    console.error('未捕获错误:', err);
+    res.status(500).json({
+      success: false,
+      message: '服务器内部错误',
+      errcode: '-1009'
+    });
+  });
+
+  // 启动
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`卡密授权系统后端已启动，端口: ${PORT}`);
+    console.log(`客户端API: http://localhost:${PORT}/`);
+    console.log(`前台API:   http://localhost:${PORT}/api/public/`);
+    console.log(`后台API:   http://localhost:${PORT}/api/admin/`);
+  });
+})();

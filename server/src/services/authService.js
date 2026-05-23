@@ -1,6 +1,5 @@
 /**
  * 管理员认证服务
- * 对应 Java 的 AuthService
  */
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
@@ -20,24 +19,13 @@ async function login(username, password) {
   if (rows.length === 0) throw new Error('用户名或密码错误');
   const admin = rows[0];
 
+  // BCrypt 异步验证
   let passwordMatch = false;
-  // BCrypt 验证
   if (admin.password.startsWith('$2a$') || admin.password.startsWith('$2b$')) {
-    passwordMatch = bcrypt.compareSync(password, admin.password);
-  }
-  // 兼容旧 MD5
-  else if (/^[a-f0-9]{32}$/i.test(admin.password)) {
-    const md5Hash = crypto.createHash('md5').update(password).digest('hex');
-    passwordMatch = md5Hash === admin.password.toLowerCase();
-    if (passwordMatch) {
-      // 自动升级为 BCrypt
-      const newHash = bcrypt.hashSync(password, 10);
-      await pool.execute('UPDATE admins SET password = ? WHERE id = ?', [newHash, admin.id]);
-    }
+    passwordMatch = await bcrypt.compare(password, admin.password);
   }
 
   if (!passwordMatch) throw new Error('用户名或密码错误');
-  if (admin.is_superuser !== 1) throw new Error('权限不足');
 
   // 生成加密安全随机 token
   const token = crypto.randomBytes(32).toString('hex');

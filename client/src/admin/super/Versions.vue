@@ -100,10 +100,10 @@
           </el-select>
         </el-form-item>
         <el-form-item label="版本号" prop="version">
-          <el-input v-model="form.version" placeholder="请输入版本号，如 2.0.0" />
+          <el-input v-model="form.version" placeholder="请输入版本号，如 2.0.0" maxlength="20" />
         </el-form-item>
         <el-form-item label="版本名称" prop="version_name">
-          <el-input v-model="form.version_name" placeholder="请输入版本名称" />
+          <el-input v-model="form.version_name" placeholder="请输入版本名称" maxlength="50" />
         </el-form-item>
         <el-form-item label="状态" prop="status">
           <el-switch

@@ -3,14 +3,35 @@
  */
 const pool = require('../config/db');
 
+// 敏感字段列表，记录日志时剔除
+const SENSITIVE_FIELDS = ['password', 'token', 'secret', 'admin_password', 'old_password', 'new_password'];
+
+/** 清洗请求数据中的敏感字段 */
+function sanitizeRequestData(data) {
+  if (!data) return data;
+  let obj;
+  try {
+    obj = typeof data === 'string' ? JSON.parse(data) : { ...data };
+  } catch {
+    return data;
+  }
+  for (const key of Object.keys(obj)) {
+    if (SENSITIVE_FIELDS.some(f => key.toLowerCase().includes(f))) {
+      obj[key] = '***';
+    }
+  }
+  return JSON.stringify(obj);
+}
+
 /** 记录日志 */
 async function log(data) {
+  const safeData = sanitizeRequestData(data.request_data);
   await pool.execute(
     'INSERT INTO logs (user_id, username, action, module, target_type, target_id, target_name, description, ip_address, user_agent, request_data, response_status, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [data.user_id || null, data.username || null, data.action, data.module || null,
      data.target_type || null, data.target_id || null, data.target_name || null,
      data.description || null, data.ip_address || null, data.user_agent || null,
-     data.request_data || null, data.response_status || 'success', data.error_message || null]
+     safeData, data.response_status || 'success', data.error_message || null]
   );
 }
 

@@ -25,16 +25,16 @@ async function authMiddleware(req, res, next) {
       });
     }
 
-    // 查数据库验证 token
+    // 查数据库验证 token（不再强制要求 is_superuser，角色检查由具体路由处理）
     const [rows] = await pool.execute(
-      'SELECT id, username, email, is_superuser, status, last_login FROM admins WHERE token = ? AND status = ? AND is_superuser = 1',
+      'SELECT id, username, email, is_superuser, status, last_login FROM admins WHERE token = ? AND status = ?',
       [token, 'enabled']
     );
 
     if (rows.length === 0) {
       return res.json({
         success: false,
-        message: 'Token无效或权限不足',
+        message: 'Token无效或已失效',
         errcode: '-1003'
       });
     }

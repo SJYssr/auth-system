@@ -68,6 +68,7 @@
         <el-input
           v-model="searchForm.card_content"
           placeholder="卡密内容"
+          maxlength="50"
           style="width: 150px; margin-right: 10px;"
           clearable
           @clear="handleSearch"
@@ -76,6 +77,7 @@
         <el-input
           v-model="searchForm.card_remark"
           placeholder="备注内容"
+          maxlength="100"
           style="width: 150px; margin-right: 10px;"
           clearable
           @clear="handleSearch"
@@ -240,7 +242,7 @@
           <el-input :model-value="form.last_login_ip" disabled placeholder="上次登陆IP" />
         </el-form-item>
         <el-form-item label="备注" prop="card_remark">
-          <el-input v-model="form.card_remark" type="textarea" :rows="2" placeholder="卡密备注信息（可选）" />
+          <el-input v-model="form.card_remark" type="textarea" :rows="2" maxlength="200" show-word-limit placeholder="卡密备注信息（可选）" />
         </el-form-item>
         <el-form-item label="状态" prop="status" v-if="isEdit">
           <el-select v-model="form.status" placeholder="请选择状态" style="width: 100%;">
@@ -616,6 +618,13 @@ const handleCopyCards = () => {
   })
 }
 
+const sanitizeCsvCell = (v) => {
+  const s = String(v)
+  // 防止 CSV 公式注入：以 = + - @ 开头的单元格前加制表符
+  if (/^[=+\-@]/.test(s)) return '"\t' + s.replace(/"/g, '""') + '"'
+  return '"' + s.replace(/"/g, '""') + '"'
+}
+
 const handleExport = () => {
   if (selectedRows.value.length === 0) {
     ElMessage.warning('请先勾选要导出的卡密')
@@ -629,7 +638,7 @@ const handleExport = () => {
       r.id, r.card || '', r.app_name || '', r.card_type || '',
       r.points || 0, r.card_remark || '', r.is_activated ? '已激活' : '未激活',
       r.status === 'enabled' ? '启用' : '禁用', r.expires_at || '', r.created_at || ''
-    ].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','))
+    ].map(sanitizeCsvCell).join(','))
   })
   const blob = new Blob(['﻿' + csv.join('\n')], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')

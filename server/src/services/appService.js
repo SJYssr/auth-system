@@ -4,13 +4,16 @@
 const crypto = require('crypto');
 const pool = require('../config/db');
 
-/** 生成18位随机softid */
+/** 生成18位随机softid（无模偏差） */
 function generateSoftid() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const maxValid = 256 - (256 % chars.length); // 248
   let id = '';
-  const bytes = crypto.randomBytes(18);
-  for (let i = 0; i < 18; i++) {
-    id += chars.charAt(bytes[i] % chars.length);
+  while (id.length < 18) {
+    const byte = crypto.randomBytes(1)[0];
+    if (byte < maxValid) {
+      id += chars.charAt(byte % chars.length);
+    }
   }
   return id;
 }
