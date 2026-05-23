@@ -45,7 +45,7 @@
           批量删除
         </el-button>
       </div>
-      <el-table :data="apps.data" v-loading="tableLoading" element-loading-text="加载中..." border style="width: 100%"
+      <el-table :data="apps.data" v-loading="tableLoading" element-loading-text="加载中..."
         :cell-style="{ 'border-right': '1px solid #EEEEEE' }"
         @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" />
@@ -72,7 +72,7 @@
             <span>{{ row.activated_cards || 0 }}/{{ row.total_cards || 0 }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="操作" width="320">
           <template #default="{ row }">
             <el-button-group>
               <el-button type="primary" size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>

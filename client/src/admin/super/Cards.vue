@@ -116,7 +116,7 @@
           导出卡密
         </el-button>
       </div>
-      <el-table :data="cards.data" v-loading="tableLoading" element-loading-text="加载中..." border style="width: 100%"
+      <el-table :data="cards.data" v-loading="tableLoading" element-loading-text="加载中..."
         :cell-style="{ 'border-right': '1px solid #EEEEEE' }"
         @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" />
@@ -162,7 +162,7 @@
         </el-table-column>
         <el-table-column prop="expires_at" label="过期时间" width="160" />
         <el-table-column prop="created_at" label="创建时间" width="160" />
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="160">
           <template #default="{ row }">
             <el-button-group>
               <el-button type="primary" size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
