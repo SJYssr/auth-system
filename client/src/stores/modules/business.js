@@ -66,8 +66,11 @@ export const useBusinessStore = defineStore('business', () => {
   // 日志
   const fetchAdminLogs = (params) => handleAsync(async () => {
     const response = await superLogService.getAll(params)
-    adminLogs.value = response?.data || {}
-    return response?.data || {}
+    adminLogs.value = {
+      logs: response?.data || [],
+      pagination: response?.pagination || {}
+    }
+    return response
   })
 
   const deleteAdminLogs = (data) => handleAsync(async () => {
