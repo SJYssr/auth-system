@@ -3,7 +3,6 @@
     <!-- 返回区域 -->
     <div class="back-section">
       <el-button @click="goBack" :icon="ArrowLeft" type="default">返回应用列表</el-button>
-      <span class="app-title" v-if="appName">当前应用: {{ appName }}</span>
     </div>
 
     <!-- 搜索区域 -->
@@ -11,13 +10,12 @@
       <div class="search-filters">
         <el-select
           v-model="searchForm.app_id"
-          placeholder="选择应用"
-          style="width: 160px; margin-right: 10px;"
+          placeholder="请选择应用"
+          style="width: 200px; margin-right: 10px;"
           clearable
           filterable
-          @change="handleSearch"
+          @change="handleAppChange"
         >
-          <el-option label="全部应用" value="" />
           <el-option v-for="app in appOptions" :key="app.id" :label="app.app_name" :value="app.id" />
         </el-select>
         <el-select
@@ -32,7 +30,7 @@
           <el-option label="禁用" value="disabled" />
         </el-select>
 
-        <el-button type="primary" @click="handleSearch">
+        <el-button type="primary" @click="handleSearch" :disabled="!searchForm.app_id">
           <el-icon><Search /></el-icon>
           搜索
         </el-button>
@@ -46,13 +44,16 @@
     <!-- 版本列表 -->
     <div class="table-section">
       <div class="toolbar-section">
-        <el-button type="primary" @click="handleAdd">
+        <el-button type="primary" @click="handleAdd" :disabled="!searchForm.app_id">
           <el-icon><Plus /></el-icon>
           新增版本
         </el-button>
       </div>
       <el-table :data="versions.data" v-loading="tableLoading" element-loading-text="加载中..."
         :cell-style="{ 'border-right': '1px solid #EEEEEE' }">
+        <template #empty>
+          <el-empty :description="searchForm.app_id ? '暂无版本数据' : '请选择应用'" :image-size="100" />
+        </template>
         <el-table-column type="selection" width="55" />
         <el-table-column type="index" label="序号" width="60" />
         <el-table-column prop="app_name" label="应用名称" min-width="120" />
@@ -150,7 +151,7 @@ const searchForm = reactive({
 const drawerVisible = ref(false)
 const isEdit = computed(() => !!form.value.id)
 const saveLoading = ref(false)
-const tableLoading = ref(true)
+const tableLoading = ref(false)
 const formRef = ref(null)
 
 const pagination = ref({
@@ -187,11 +188,25 @@ const goBack = () => {
 
 const buildSearchParams = () => ({
   ...pagination.value,
-  app_id: appId.value,
+  app_id: searchForm.app_id,
   ...searchForm
 })
 
+const handleAppChange = async (val) => {
+  if (!val) {
+    versions.value = {}
+    pagination.value.total_records = 0
+    appName.value = ''
+    return
+  }
+  const selected = appOptions.value.find(a => a.id === val)
+  appName.value = selected ? selected.app_name : ''
+  pagination.value.page = 1
+  await handleSearch()
+}
+
 const handleSearch = async () => {
+  if (!searchForm.app_id) return
   try {
     tableLoading.value = true
     pagination.value.page = 1
@@ -205,10 +220,11 @@ const handleSearch = async () => {
 }
 
 const clearSearch = async () => {
-  searchForm.app_id = ''
   searchForm.status = ''
   searchForm.version_name = ''
-  await handleSearch()
+  if (searchForm.app_id) {
+    await handleSearch()
+  }
 }
 
 const handleCurrentChange = async (val) => {
@@ -241,7 +257,7 @@ const handleSizeChange = async (val) => {
 const handleAdd = () => {
   form.value = {
     id: null,
-    app_id: appId.value,
+    app_id: searchForm.app_id || appId.value,
     version: '',
     version_name: '',
     status: 'enabled'
@@ -304,12 +320,17 @@ const loadAppOptions = async () => {
 }
 
 const initData = async () => {
-  await Promise.all([store.fetchVersions(buildSearchParams()), loadAppOptions()])
-  pagination.value.total_records = Number(versions.value.pagination?.total_records) || 0
-  if (versions.value.data && versions.value.data.length > 0) {
-    appName.value = versions.value.data[0].app_name || ''
+  await loadAppOptions()
+  // 如果从应用详情页跳转过来，自动加载该应用的版本
+  if (appId.value) {
+    searchForm.app_id = appId.value
+    const selected = appOptions.value.find(a => a.id === appId.value)
+    appName.value = selected ? selected.app_name : ''
+    tableLoading.value = true
+    await store.fetchVersions(buildSearchParams())
+    pagination.value.total_records = Number(versions.value.pagination?.total_records) || 0
+    tableLoading.value = false
   }
-  tableLoading.value = false
 }
 
 onMounted(initData)
@@ -318,13 +339,6 @@ onMounted(initData)
 <style scoped>
 .back-section {
   margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.app-title {
-  font-size: 14px;
-  color: #606266;
 }
 .drawer-form {
   padding: 20px;
