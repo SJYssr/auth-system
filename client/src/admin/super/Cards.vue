@@ -116,7 +116,7 @@
           导出卡密
         </el-button>
       </div>
-      <el-table :data="cards.data" v-loading="tableLoading" element-loading-text="加载中..."
+      <el-table :data="cards.data" v-loading="tableLoading" element-loading-text="加载中..." border style="width: 100%"
         :cell-style="{ 'border-right': '1px solid #EEEEEE' }"
         @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" />
