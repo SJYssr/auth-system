@@ -30,11 +30,13 @@ async function create(data) {
   return { id: result.insertId };
 }
 
+/** 更新版本（仅允许白名单字段） */
 async function update(id, data) {
   const fields = []; const values = [];
-  for (const [key, value] of Object.entries(data)) {
-    if (key !== 'id' && key !== 'app_id' && key !== 'created_at') {
-      fields.push(`${key} = ?`); values.push(value);
+  const allowedFields = ['version', 'version_name', 'status', 'force_update'];
+  for (const key of allowedFields) {
+    if (data[key] !== undefined) {
+      fields.push(`${key} = ?`); values.push(data[key]);
     }
   }
   if (fields.length === 0) return;

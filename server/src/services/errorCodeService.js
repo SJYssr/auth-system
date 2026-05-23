@@ -26,11 +26,13 @@ async function create(data) {
   return { id: result.insertId };
 }
 
+/** 更新错误码（仅允许白名单字段） */
 async function update(id, data) {
   const fields = []; const values = [];
-  for (const [key, value] of Object.entries(data)) {
-    if (key !== 'id' && key !== 'created_at') {
-      fields.push(`${key} = ?`); values.push(value);
+  const allowedFields = ['code', 'message', 'description', 'solution', 'status'];
+  for (const key of allowedFields) {
+    if (data[key] !== undefined) {
+      fields.push(`${key} = ?`); values.push(data[key]);
     }
   }
   if (fields.length === 0) return;

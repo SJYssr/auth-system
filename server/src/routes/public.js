@@ -20,6 +20,7 @@ router.get('/init', async (req, res) => {
     const data = await initService.getInitData(token);
     res.json(success(data));
   } catch (err) {
+    console.error('初始化:', err.message);
     res.json(error('获取初始化数据失败'));
   }
 });
@@ -48,7 +49,7 @@ router.post('/login', async (req, res) => {
     }
 
     const result = await authService.login(username, password);
-    
+
     // 记录登录日志
     await logService.log({
       user_id: result.admin.id, username: result.admin.username,
@@ -56,7 +57,7 @@ router.post('/login', async (req, res) => {
       description: '管理员登录', ip_address: req.ip, user_agent: req.headers['user-agent'],
       response_status: 'success'
     });
-    
+
     res.json(success(result));
   } catch (err) {
     // 记录登录失败
@@ -65,7 +66,13 @@ router.post('/login', async (req, res) => {
       description: err.message, ip_address: req.ip,
       response_status: 'fail', error_message: err.message
     });
-    res.json(error(err.message));
+    // authService 抛出的错误是用户可读的（用户名或密码错误 / 权限不足）
+    const userMessages = ['用户名或密码错误', '权限不足'];
+    const message = userMessages.includes(err.message) ? err.message : '登录失败';
+    if (!userMessages.includes(err.message)) {
+      console.error('登录异常:', err.message);
+    }
+    res.json(error(message));
   }
 });
 
@@ -75,6 +82,7 @@ router.get('/apps', async (req, res) => {
     const result = await appService.getList(1, 100);
     res.json(success(result.rows));
   } catch (err) {
+    console.error('前台应用列表:', err.message);
     res.json(error('获取应用列表失败'));
   }
 });
@@ -86,6 +94,7 @@ router.get('/apps/:id', async (req, res) => {
     if (!app) return res.json(error('应用不存在'));
     res.json(success(app));
   } catch (err) {
+    console.error('前台应用详情:', err.message);
     res.json(error('获取应用详情失败'));
   }
 });

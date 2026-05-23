@@ -39,10 +39,8 @@ async function login(username, password) {
   if (!passwordMatch) throw new Error('用户名或密码错误');
   if (admin.is_superuser !== 1) throw new Error('权限不足');
 
-  // 生成 SHA256 token
-  const token = crypto.createHash('sha256')
-    .update(admin.id + '-' + Date.now() + '-' + Math.random())
-    .digest('hex');
+  // 生成加密安全随机 token
+  const token = crypto.randomBytes(32).toString('hex');
 
   const now = new Date();
   await pool.execute(

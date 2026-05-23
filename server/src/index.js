@@ -4,28 +4,58 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 中间件
+// 信任代理以获取真实客户端IP
+app.set('trust proxy', 1);
+
+// 安全响应头
+app.use(helmet({
+  contentSecurityPolicy: false // 由前端 Vite 处理
+}));
+
+// CORS - 生产环境
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(s => s.trim())
+  : ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000',
+     'http://8.141.118.244', 'http://8.141.118.244:3000'];
+
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000'],
+  origin: (origin, cb) => {
+    // 同源请求（无 origin 头）或白名单中的 origin 放行
+    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) {
+      cb(null, true);
+    } else {
+      cb(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(morgan('[:date[iso]] :method :url :status :response-time ms'));
 
-// 频率限制
-const limiter = rateLimit({
+// 全局限流
+const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 200,
   message: { success: false, message: '请求过于频繁，请稍后再试' }
 });
-app.use(limiter);
+app.use(globalLimiter);
+
+// 登录接口严格限流 - 防暴力破解
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: { success: false, message: '登录尝试过于频繁，请1分钟后再试' },
+  keyGenerator: (req) => req.ip
+});
+app.use('/api/public/login', loginLimiter);
 
 // 路由
 const rootRoutes = require('./routes/root');
@@ -39,6 +69,12 @@ app.use('/api/admin', adminRoutes);
 // 静态文件 - 前端构建产物
 const path = require('path');
 app.use(express.static(path.join(__dirname, '../../client/dist')));
+
+// SPA fallback - 非 API 路径且非静态文件时返回 index.html
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/') || req.path === '/health') return;
+  res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
+});
 
 // 健康检查
 app.get('/health', (req, res) => {

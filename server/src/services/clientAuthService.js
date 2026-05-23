@@ -5,14 +5,9 @@
 const pool = require('../config/db');
 const crypto = require('crypto');
 
-/** 生成16位随机Token */
+/** 生成16位加密安全随机Token */
 function generateToken() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let token = '';
-  for (let i = 0; i < 16; i++) {
-    token += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return token;
+  return crypto.randomBytes(16).toString('base64url').slice(0, 16);
 }
 
 /** 计算到期时间 */

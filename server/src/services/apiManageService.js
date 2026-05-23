@@ -28,14 +28,17 @@ async function create(data) {
   return { id: result.insertId };
 }
 
+/** 更新API（仅允许白名单字段） */
 async function update(id, data) {
   const fields = []; const values = [];
-  for (const [key, value] of Object.entries(data)) {
-    if (key !== 'id' && key !== 'created_at') {
-      if (key === 'params_config' && typeof value === 'object') {
-        fields.push(`${key} = ?`); values.push(JSON.stringify(value));
+  const allowedFields = ['api_name', 'api_path', 'api_method', 'param_count',
+    'params_config', 'return_desc', 'description', 'status'];
+  for (const key of allowedFields) {
+    if (data[key] !== undefined) {
+      if (key === 'params_config' && typeof data[key] === 'object') {
+        fields.push(`${key} = ?`); values.push(JSON.stringify(data[key]));
       } else {
-        fields.push(`${key} = ?`); values.push(value);
+        fields.push(`${key} = ?`); values.push(data[key]);
       }
     }
   }

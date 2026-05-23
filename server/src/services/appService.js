@@ -1,14 +1,16 @@
 /**
  * 应用管理服务
  */
+const crypto = require('crypto');
 const pool = require('../config/db');
 
 /** 生成18位随机softid */
 function generateSoftid() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let id = '';
+  const bytes = crypto.randomBytes(18);
   for (let i = 0; i < 18; i++) {
-    id += chars.charAt(Math.floor(Math.random() * chars.length));
+    id += chars.charAt(bytes[i] % chars.length);
   }
   return id;
 }
@@ -99,14 +101,17 @@ async function create(data) {
   return { id: result.insertId, softid };
 }
 
-/** 更新应用 */
+/** 更新应用（仅允许白名单字段） */
 async function update(id, data) {
   const fields = [];
   const values = [];
-  for (const [key, value] of Object.entries(data)) {
-    if (key !== 'id' && key !== 'softid' && key !== 'created_at') {
+  const allowedFields = ['app_name', 'description', 'version', 'version_name', 'developer',
+    'is_free', 'icon_url', 'download_url', 'usage_guide', 'purchase_url', 'announcement',
+    'force_update', 'status'];
+  for (const key of allowedFields) {
+    if (data[key] !== undefined) {
       fields.push(`${key} = ?`);
-      values.push(value);
+      values.push(data[key]);
     }
   }
   if (fields.length === 0) return;

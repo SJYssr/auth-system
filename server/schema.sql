@@ -159,7 +159,7 @@ CREATE TABLE IF NOT EXISTS error_codes (
 
 -- ========== 默认数据 ==========
 
--- 默认管理员 (密码: sjy20040608)
+-- 默认管理员 (首次部署后请立即修改密码)
 INSERT IGNORE INTO admins (id, username, email, password, is_superuser, status)
 VALUES (1, 'SJY', 'sjyssr@petalmail.com', '$2a$10$bZHV5mHWBkXQgdyLCYBOvOgOKlappkY/rN.zlkLWr.SbMvNQixeIu', 1, 'enabled');
 

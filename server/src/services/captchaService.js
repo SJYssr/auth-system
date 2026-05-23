@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 // 内存存储
 const captchaStore = new Map();
-const TTL = 5 * 60 * 1000; // 5分钟过期
+const TTL = 2 * 60 * 1000; // 2分钟过期
 
 // 每分钟清理一次过期验证码
 setInterval(() => {
@@ -24,13 +24,13 @@ setInterval(() => {
  */
 function generate() {
   const captcha = svgCaptcha.create({
-    size: 4,
+    size: 5,
     ignoreChars: '0o1il',
-    noise: 2,
+    noise: 4,
     color: true,
     background: '#f0f0f0',
-    width: 120,
-    height: 40
+    width: 150,
+    height: 50
   });
 
   const key = crypto.randomUUID();

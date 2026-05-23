@@ -2,14 +2,16 @@
  * 卡密管理服务
  * 对应 Java 的 CardService
  */
+const crypto = require('crypto');
 const pool = require('../config/db');
 
 /** 生成14位随机卡密 */
 function generateCardCode() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let code = '';
+  const bytes = crypto.randomBytes(14);
   for (let i = 0; i < 14; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+    code += chars.charAt(bytes[i] % chars.length);
   }
   return code;
 }
@@ -53,27 +55,17 @@ async function getList(filters = {}, page = 1, pageSize = 20) {
     sql + ' ORDER BY c.created_at DESC LIMIT ? OFFSET ?',
     [...values, String(pageSize), String(offset)]
   );
-  const [countResult] = await pool.execute(
-    'SELECT COUNT(*) as total FROM cards c WHERE 1=1' +
-    (filters.app_id ? ' AND c.app_id = ?' : '') +
-    (filters.card ? ' AND c.card LIKE ?' : '') +
-    (filters.status ? ' AND c.status = ?' : '') +
-    (filters.card_type ? ' AND c.card_type = ?' : '') +
-    (filters.is_activated !== undefined ? ' AND c.is_activated = ?' : ''),
-    values.slice(0, filters.app_id ? 1 : 0 + filters.card ? 1 : 0 + filters.status ? 1 : 0 + filters.card_type ? 1 : 0 + filters.is_activated !== undefined ? 1 : 0)
-  );
-  const total = countResult[0].total;
 
-  // 重新计算
-  const tempValues = [];
+  // 计数查询
   let countSql = 'SELECT COUNT(*) as total FROM cards c WHERE 1=1';
-  if (filters.app_id) { countSql += ' AND c.app_id = ?'; tempValues.push(filters.app_id); }
-  if (filters.card) { countSql += ' AND c.card LIKE ?'; tempValues.push(`%${filters.card}%`); }
-  if (filters.status) { countSql += ' AND c.status = ?'; tempValues.push(filters.status); }
-  if (filters.card_type) { countSql += ' AND c.card_type = ?'; tempValues.push(filters.card_type); }
-  if (filters.is_activated !== undefined) { countSql += ' AND c.is_activated = ?'; tempValues.push(filters.is_activated); }
+  const countValues = [];
+  if (filters.app_id) { countSql += ' AND c.app_id = ?'; countValues.push(filters.app_id); }
+  if (filters.card) { countSql += ' AND c.card LIKE ?'; countValues.push(`%${filters.card}%`); }
+  if (filters.status) { countSql += ' AND c.status = ?'; countValues.push(filters.status); }
+  if (filters.card_type) { countSql += ' AND c.card_type = ?'; countValues.push(filters.card_type); }
+  if (filters.is_activated !== undefined) { countSql += ' AND c.is_activated = ?'; countValues.push(filters.is_activated); }
 
-  const [countRes] = await pool.execute(countSql, tempValues);
+  const [countRes] = await pool.execute(countSql, countValues);
 
   return { rows, pagination: { page, pageSize, total: countRes[0].total } };
 }
@@ -87,15 +79,15 @@ async function getById(id) {
   return rows[0] || null;
 }
 
-/** 更新卡密 */
+/** 更新卡密（仅允许白名单字段） */
 async function update(id, data) {
   const fields = [];
   const values = [];
-  const allowedFields = ['card_type', 'price', 'points', 'card_remark', 'status', 'app_id'];
-  for (const [key, value] of Object.entries(data)) {
-    if (allowedFields.includes(key)) {
+  const allowedFields = ['card_type', 'price', 'points', 'card_remark', 'status'];
+  for (const key of allowedFields) {
+    if (data[key] !== undefined) {
       fields.push(`${key} = ?`);
-      values.push(value);
+      values.push(data[key]);
     }
   }
   if (fields.length === 0) return;

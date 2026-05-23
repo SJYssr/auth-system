@@ -4,6 +4,8 @@
  */
 const pool = require('../config/db');
 
+const TOKEN_MAX_AGE = 24 * 60 * 60 * 1000; // 24小时过期
+
 async function authMiddleware(req, res, next) {
   try {
     // 提取 token
@@ -25,7 +27,7 @@ async function authMiddleware(req, res, next) {
 
     // 查数据库验证 token
     const [rows] = await pool.execute(
-      'SELECT id, username, email, is_superuser, status FROM admins WHERE token = ? AND status = ? AND is_superuser = 1',
+      'SELECT id, username, email, is_superuser, status, last_login FROM admins WHERE token = ? AND status = ? AND is_superuser = 1',
       [token, 'enabled']
     );
 
@@ -37,7 +39,22 @@ async function authMiddleware(req, res, next) {
       });
     }
 
-    req.currentUser = rows[0];
+    const admin = rows[0];
+
+    // 检查 token 是否过期 (24h)
+    if (admin.last_login) {
+      const tokenAge = Date.now() - new Date(admin.last_login).getTime();
+      if (tokenAge > TOKEN_MAX_AGE) {
+        await pool.execute('UPDATE admins SET token = NULL WHERE id = ?', [admin.id]);
+        return res.json({
+          success: false,
+          message: 'Token已过期，请重新登录',
+          errcode: '-1002'
+        });
+      }
+    }
+
+    req.currentUser = admin;
     next();
   } catch (err) {
     console.error('认证中间件错误:', err);
