@@ -100,7 +100,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="created_at" label="时间" width="160" />
-        <el-table-column label="操作" width="80" fixed="right">
+        <el-table-column label="操作" width="80">
           <template #default="{ row }">
             <el-button type="primary" size="small" text @click="showLogDetail(row)">
               详情
