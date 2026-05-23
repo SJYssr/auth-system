@@ -82,7 +82,7 @@
         :cell-style="{ 'border-right': '1px solid #EEEEEE' }"
       >
         <el-table-column prop="username" label="用户名" width="120" />
-        <el-table-column prop="action" label="操作" width="100">
+        <el-table-column prop="action" label="操作类型" width="100">
           <template #default="{ row }">
             <el-tag :type="getActionType(row.action)" size="small">
               {{ getActionText(row.action) }}
