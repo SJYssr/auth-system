@@ -81,9 +81,6 @@
         </el-button>
 
         <el-divider />
-        <el-form-item label="参数个数">
-          <el-input-number v-model="form.param_count" :min="0" style="width:100%" />
-        </el-form-item>
 
         <el-form-item label="POST标准格式">
           <el-input :model-value="postStandardFormat" readonly />
