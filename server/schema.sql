@@ -1,16 +1,191 @@
--- MySQL dump 10.13  Distrib 8.0.45, for Linux (x86_64)
---
--- Host: localhost    Database: `auth-system`
--- ------------------------------------------------------
--- Server version	8.0.45
+-- 卡密授权管理系统 - 数据库初始化脚本
+-- 使用方式：mysql -u root -p < server/schema.sql
 
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!50503 SET NAMES utf8mb4 */;
-/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
-/*!40103 SET TIME_ZONE='+00:00' */;
-/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
-/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
-/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
-/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+CREATE DATABASE IF NOT EXISTS `auth-system` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `auth-system`;
+
+-- 管理员表
+CREATE TABLE IF NOT EXISTS admins (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    is_superuser TINYINT(1) DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'enabled',
+    token VARCHAR(255),
+    last_login DATETIME NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_admins_username (username),
+    INDEX idx_admins_token (token),
+    INDEX idx_admins_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 应用表
+CREATE TABLE IF NOT EXISTS apps (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    softid VARCHAR(18) UNIQUE,
+    app_name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    version VARCHAR(20) DEFAULT '1.0.0',
+    version_name VARCHAR(100),
+    developer VARCHAR(100),
+    is_free TINYINT(1) DEFAULT 1,
+    icon_url VARCHAR(255),
+    download_url VARCHAR(255),
+    usage_guide TEXT,
+    purchase_url VARCHAR(255),
+    announcement TEXT,
+    force_update TINYINT(1) DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'enabled',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_apps_name (app_name),
+    INDEX idx_apps_softid (softid),
+    INDEX idx_apps_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 卡密表
+CREATE TABLE IF NOT EXISTS cards (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    app_id INT NOT NULL,
+    card VARCHAR(128) NOT NULL UNIQUE,
+    card_type VARCHAR(50) DEFAULT '天卡',
+    price DECIMAL(10,2) DEFAULT 0.00,
+    points INT DEFAULT 0,
+    card_remark TEXT,
+    status VARCHAR(20) DEFAULT 'enabled',
+    is_activated TINYINT(1) DEFAULT 0,
+    activated_at DATETIME NULL,
+    expires_at DATETIME NULL,
+    mac VARCHAR(255),
+    login_count INT DEFAULT 0,
+    activation_ip VARCHAR(45),
+    last_login_time DATETIME NULL,
+    last_login_ip VARCHAR(45),
+    token VARCHAR(64),
+    version BIGINT DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE,
+    INDEX idx_cards_app_id (app_id),
+    INDEX idx_cards_card (card),
+    INDEX idx_cards_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 版本表
+CREATE TABLE IF NOT EXISTS app_versions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    app_id INT NOT NULL,
+    version VARCHAR(20) NOT NULL,
+    version_name VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'enabled',
+    force_update TINYINT(1) DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE,
+    INDEX idx_app_versions_app_id (app_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 日志表
+CREATE TABLE IF NOT EXISTS logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    username VARCHAR(50),
+    action VARCHAR(50) NOT NULL,
+    module VARCHAR(50),
+    target_type VARCHAR(50),
+    target_id INT,
+    target_name VARCHAR(255),
+    description TEXT,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    request_data TEXT,
+    response_status VARCHAR(20) DEFAULT 'success',
+    error_message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_logs_user (user_id),
+    INDEX idx_logs_action (action),
+    INDEX idx_logs_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 网站配置表
+CREATE TABLE IF NOT EXISTS datas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    site_name VARCHAR(100) DEFAULT '应用卡密管理系统',
+    site_title VARCHAR(200),
+    keywords TEXT,
+    description TEXT,
+    logo_url VARCHAR(255),
+    favicon_url VARCHAR(255),
+    login_bg_url VARCHAR(255),
+    icp_number VARCHAR(50),
+    contact_email VARCHAR(100),
+    contact_phone VARCHAR(20),
+    contact_address TEXT,
+    copyright TEXT,
+    copyright_since VARCHAR(10),
+    status VARCHAR(20) DEFAULT 'enabled',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- API元数据表
+CREATE TABLE IF NOT EXISTS apis (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    api_name VARCHAR(100) NOT NULL,
+    api_path VARCHAR(500) NOT NULL,
+    api_method VARCHAR(10) DEFAULT 'POST',
+    param_count INT DEFAULT 0,
+    params_config TEXT,
+    return_desc TEXT,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 错误码表
+CREATE TABLE IF NOT EXISTS error_codes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(20) NOT NULL,
+    message VARCHAR(255) NOT NULL,
+    description TEXT,
+    solution TEXT,
+    status VARCHAR(20) DEFAULT 'enabled',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX idx_error_codes_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ========== 默认数据 ==========
+
+-- 默认管理员 (密码: sjy20040608)
+INSERT IGNORE INTO admins (id, username, email, password, is_superuser, status)
+VALUES (1, 'SJY', 'sjyssr@petalmail.com', '$2a$10$bZHV5mHWBkXQgdyLCYBOvOgOKlappkY/rN.zlkLWr.SbMvNQixeIu', 1, 'enabled');
+
+-- 默认网站配置
+INSERT IGNORE INTO datas (id, site_name, site_title, keywords, description, logo_url, favicon_url, icp_number, contact_email, contact_phone, contact_address, copyright, copyright_since, status)
+VALUES (1, '应用卡密管理系统', '应用卡密管理与授权平台', '卡密管理,应用管理,版本管理', '基于卡密的现代化应用授权管理系统', 'https://github.com/SJYssr/img/raw/main/cef_cx_copy_tool/1.png', 'https://github.com/SJYssr/img/raw/main/cef_cx_copy_tool/1.png', '1234567', '1185881657@qq.com', '18836196959', '九山路12号锦绣公馆32栋3单元402', 'ZYYO/SJYssr', '2025', 'enabled');
+
+-- 默认错误码
+INSERT IGNORE INTO error_codes (id, code, message, description, solution) VALUES
+(1, '-1001', '参数错误', '请求参数格式不正确', '请检查请求参数'),
+(2, '-1002', '认证失败', 'Token无效或已过期', '请重新登录'),
+(3, '-1003', '权限不足', '无执行此操作的权限', '联系管理员'),
+(4, '-1004', '卡密不存在', '卡密未找到或已删除', '检查卡密号码'),
+(5, '-1005', '卡密已过期', '卡密超过有效期', '续费或更换卡密'),
+(6, '-1006', '卡密已禁用', '卡密被管理员禁用', '联系管理员解禁'),
+(7, '-1007', '应用不存在', '应用未找到或已下架', '检查应用ID'),
+(8, '-1008', '版本号已存在', '该版本号已被使用', '使用不同版本号'),
+(9, '-1009', '服务器内部错误', '服务器发生未知错误', '稍后重试');
+
+-- 默认API文档
+INSERT IGNORE INTO apis (id, api_name, api_path, api_method, param_count) VALUES
+(1, '获取公告', '/announcement', 'Http Post', 1),
+(2, '获取最新版本号', '/version', 'Http Post', 1),
+(3, '用户登陆', '/login', 'Http Post', 4),
+(4, '用户退出', '/logout', 'Http Post', 3),
+(5, '获取下载地址', '/download', 'Http Post', 1),
+(6, '获取使用说明地址', '/usage', 'Http Post', 1),
+(7, '获取购买地址', '/purchase', 'Http Post', 1),
+(8, '获取到期时间', '/expiry', 'Http Post', 2);
