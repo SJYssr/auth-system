@@ -8,6 +8,7 @@ const authService = require('../services/authService');
 const initService = require('../services/initService');
 const captchaService = require('../services/captchaService');
 const appService = require('../services/appService');
+const logService = require('../services/logService');
 const { success, error } = require('../utils/response');
 
 /** 获取初始化数据 */
@@ -37,12 +38,33 @@ router.post('/login', async (req, res) => {
 
     // 验证码校验
     if (!captchaService.verify(captcha_key, captcha_code)) {
+      await logService.log({
+        username: username || '未知',
+        action: 'login', module: 'auth', target_type: 'admin',
+        description: '验证码错误', ip_address: req.ip,
+        response_status: 'fail', error_message: '验证码错误'
+      });
       return res.json(error('验证码错误'));
     }
 
     const result = await authService.login(username, password);
+    
+    // 记录登录日志
+    await logService.log({
+      user_id: result.admin.id, username: result.admin.username,
+      action: 'login', module: 'auth', target_type: 'admin',
+      description: '管理员登录', ip_address: req.ip, user_agent: req.headers['user-agent'],
+      response_status: 'success'
+    });
+    
     res.json(success(result));
   } catch (err) {
+    // 记录登录失败
+    await logService.log({
+      action: 'login', module: 'auth', target_type: 'admin',
+      description: err.message, ip_address: req.ip,
+      response_status: 'fail', error_message: err.message
+    });
     res.json(error(err.message));
   }
 });
