@@ -161,11 +161,11 @@ CREATE TABLE IF NOT EXISTS error_codes (
 
 -- 默认管理员 (首次部署后请立即修改密码)
 INSERT IGNORE INTO admins (id, username, email, password, is_superuser, status)
-VALUES (1, 'SJY', 'sjyssr@petalmail.com', '$2a$10$bZHV5mHWBkXQgdyLCYBOvOgOKlappkY/rN.zlkLWr.SbMvNQixeIu', 1, 'enabled');
+VALUES (1, 'admin', 'admin@example.com', '$2a$10$bZHV5mHWBkXQgdyLCYBOvOgOKlappkY/rN.zlkLWr.SbMvNQixeIu', 1, 'enabled');
 
--- 默认网站配置
+-- 默认网站配置（部署后请在后台修改为实际信息）
 INSERT IGNORE INTO datas (id, site_name, site_title, keywords, description, logo_url, favicon_url, icp_number, contact_email, contact_phone, contact_address, copyright, copyright_since, status)
-VALUES (1, '应用卡密管理系统', '应用卡密管理与授权平台', '卡密管理,应用管理,版本管理', '基于卡密的现代化应用授权管理系统', 'https://github.com/SJYssr/img/raw/main/cef_cx_copy_tool/1.png', 'https://github.com/SJYssr/img/raw/main/cef_cx_copy_tool/1.png', '1234567', '1185881657@qq.com', '18836196959', '九山路12号锦绣公馆32栋3单元402', 'ZYYO/SJYssr', '2025', 'enabled');
+VALUES (1, '应用卡密管理系统', '应用卡密管理与授权平台', '卡密管理,应用管理,版本管理', '基于卡密的现代化应用授权管理系统', '', '', '', 'admin@example.com', '', '', 'Auth System', '2025', 'enabled');
 
 -- 默认错误码
 INSERT IGNORE INTO error_codes (id, code, message, description, solution) VALUES

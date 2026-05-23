@@ -161,6 +161,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useBusinessStore } from '@/stores/modules/business'
+import DOMPurify from 'dompurify'
 
 const businessStore = useBusinessStore()
 const router = useRouter()
@@ -171,18 +172,29 @@ const activeTab = ref('intro')
 const currentApp = ref(null)
 const loading = ref(false)
 
-
+const sanitize = (html) => {
+  if (!html) return ''
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['h1','h2','h3','h4','h5','h6','p','br','strong','em','u','s','a','ul','ol','li',
+      'table','thead','tbody','tr','th','td','blockquote','pre','code','img','span','div','hr'],
+    ALLOWED_ATTR: ['href','src','alt','title','class','target','rel','width','height']
+  })
+}
 
 const introDoc = computed(() => {
   const list = currentApp.value?.docs || []
   if (!Array.isArray(list)) return null
-  return list.find(d => d.doc_type === 'intro') || null
+  const doc = list.find(d => d.doc_type === 'intro')
+  if (doc) doc.content = sanitize(doc.content)
+  return doc || null
 })
 
 const deployDoc = computed(() => {
   const list = currentApp.value?.docs || []
   if (!Array.isArray(list)) return null
-  return list.find(d => d.doc_type === 'deploy') || null
+  const doc = list.find(d => d.doc_type === 'deploy')
+  if (doc) doc.content = sanitize(doc.content)
+  return doc || null
 })
 
 // 加载应用详情

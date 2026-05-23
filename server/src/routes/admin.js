@@ -19,6 +19,21 @@ const { success, error, paginated, parsePagination } = require('../utils/respons
 // 所有路由都需要认证
 router.use(authMiddleware);
 
+/** ===== 管理员登出 ===== */
+router.post('/logout', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (token) {
+      await authService.logout(token);
+    }
+    res.json(success(null, '已登出'));
+  } catch (err) {
+    console.error('登出:', err.message);
+    res.json(error('登出失败'));
+  }
+});
+
 /** ===== 仪表盘 ===== */
 router.get('/dashboard', async (req, res) => {
   try {

@@ -141,7 +141,6 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="积分" width="70" prop="points" />
         <el-table-column prop="card_remark" label="备注" min-width="120" show-overflow-tooltip />
         <el-table-column label="激活" width="70">
           <template #default="{ row }">
@@ -157,15 +156,15 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="到期" width="80">
+        <el-table-column label="是否到期" width="80">
           <template #default="{ row }">
             <el-tag :type="isExpired(row) ? 'danger' : 'success'" size="small">
               {{ isExpired(row) ? '已到期' : '未到期' }}
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="activated_at" label="激活时间" width="160" />
         <el-table-column prop="expires_at" label="过期时间" width="160" />
-        <el-table-column prop="created_at" label="创建时间" width="160" />
         <el-table-column label="操作" width="160">
           <template #default="{ row }">
             <el-button-group>
@@ -230,6 +229,9 @@
         </el-form-item>
         <el-form-item label="激活时间" prop="activated_at" v-if="isEdit">
           <el-input :model-value="formatTime(form.activated_at)" disabled placeholder="激活时间" />
+        </el-form-item>
+        <el-form-item label="创建时间" prop="created_at" v-if="isEdit">
+          <el-input :model-value="formatTime(form.created_at)" disabled placeholder="创建时间" />
         </el-form-item>
         <el-form-item label="到期时间" prop="expires_at" v-if="isEdit">
           <el-date-picker v-model="form.expires_at" type="datetime" placeholder="选择到期时间（可选）"
@@ -494,6 +496,7 @@ const handleEdit = (row) => {
     login_count: row.login_count || 0,
     activation_ip: row.activation_ip || '',
     activated_at: row.activated_at || '',
+    created_at: row.created_at || '',
     expires_at: row.expires_at || '',
     last_login_time: row.last_login_time || '',
     last_login_ip: row.last_login_ip || '',

@@ -29,7 +29,8 @@ app.use(helmet({
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
       baseUri: ["'self'"],
-      formAction: ["'self'"]
+      formAction: ["'self'"],
+      upgradeInsecureRequests: null
     }
   }
 }));
@@ -116,7 +117,17 @@ function buildAllowedOrigins(publicIp) {
 
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-  app.use(morgan('[:date[iso]] :method :url :status :response-time ms'));
+  // 自定义 morgan token 过滤敏感查询参数
+morgan.token('safe-url', (req) => {
+  const u = new URL(req.originalUrl || req.url, 'http://localhost');
+  for (const key of u.searchParams.keys()) {
+    if (['token', 'password', 'secret', 'key'].includes(key.toLowerCase())) {
+      u.searchParams.set(key, '***');
+    }
+  }
+  return u.pathname + u.search;
+});
+app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
 
   // 全局限流
   app.use(rateLimit({

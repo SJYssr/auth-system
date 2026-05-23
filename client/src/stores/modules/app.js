@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { publicInitService, publicLoginService } from '@/utils/service'
+import sharedRequest from '@/utils/request'
 
 export const useAppStore = defineStore('app', () => {
 
@@ -34,7 +35,10 @@ export const useAppStore = defineStore('app', () => {
     isCollapse.value = !isCollapse.value
   }
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await sharedRequest.post('/admin/logout')
+    } catch { /* best-effort */ }
     initializeInfo.value = {}
     localStorage.removeItem('token')
   }

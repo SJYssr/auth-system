@@ -1,6 +1,6 @@
 /**
  * 后台管理认证中间件
- * 从 query.token 或 Authorization header 验证管理员身份
+ * 仅从 Authorization header 验证管理员身份（不再支持 URL query 参数传递 token）
  */
 const pool = require('../config/db');
 
@@ -8,14 +8,11 @@ const TOKEN_MAX_AGE = 24 * 60 * 60 * 1000; // 24小时过期
 
 async function authMiddleware(req, res, next) {
   try {
-    // 提取 token
-    let token = req.query.token;
-    if (!token) {
-      const authHeader = req.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.slice(7);
-      }
-    }
+    // 仅从 Authorization header 提取 token
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : null;
 
     if (!token) {
       return res.json({
@@ -25,7 +22,7 @@ async function authMiddleware(req, res, next) {
       });
     }
 
-    // 查数据库验证 token（不再强制要求 is_superuser，角色检查由具体路由处理）
+    // 查数据库验证 token
     const [rows] = await pool.execute(
       'SELECT id, username, email, is_superuser, status, last_login FROM admins WHERE token = ? AND status = ?',
       [token, 'enabled']

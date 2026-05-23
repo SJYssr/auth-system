@@ -14,14 +14,15 @@ async function getStats() {
     'SELECT card_type, COUNT(*) as count FROM cards GROUP BY card_type'
   );
 
-  // 近期激活的卡密
+  // 近期激活的卡密（仅选择非敏感字段）
   const [recentCards] = await pool.execute(
-    'SELECT c.*, a.app_name FROM cards c LEFT JOIN apps a ON c.app_id = a.id WHERE c.is_activated = 1 ORDER BY c.activated_at DESC LIMIT 10'
+    'SELECT c.id, c.card_type, c.points, c.is_activated, c.status, c.activated_at, c.expires_at, c.created_at, a.app_name ' +
+    'FROM cards c LEFT JOIN apps a ON c.app_id = a.id WHERE c.is_activated = 1 ORDER BY c.activated_at DESC LIMIT 10'
   );
 
-  // 近期日志
+  // 近期日志（仅选择非敏感字段）
   const [recentLogs] = await pool.execute(
-    'SELECT * FROM logs ORDER BY created_at DESC LIMIT 10'
+    'SELECT id, username, action, module, target_type, target_name, description, ip_address, response_status, created_at FROM logs ORDER BY created_at DESC LIMIT 10'
   );
 
   // 应用分布
