@@ -1,5 +1,5 @@
-/.claude
-/auth-system-boot/.idea
-/auth-system-boot/target
-/dist
-/node_modules
+node_modules/
+.env
+*.log
+.DS_Store
+.vscode/
