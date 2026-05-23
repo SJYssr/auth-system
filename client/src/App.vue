@@ -62,6 +62,30 @@ body {
   border: 1px solid rgb(219, 223, 233);
   display: flex;
   justify-content: center;
+  overflow-x: auto;
+}
+
+.pagination-section .el-pagination {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.pagination-section .el-pagination .el-pagination__total {
+  flex-shrink: 0;
+}
+
+.pagination-section .el-pagination .el-pagination__sizes {
+  flex-shrink: 0;
+}
+
+.pagination-section .el-pagination .el-pagination__jump {
+  flex-shrink: 0;
+}
+
+.pagination-section .el-pagination .el-pagination__rightwrapper {
+  flex-shrink: 0;
 }
 
 
