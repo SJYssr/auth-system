@@ -36,6 +36,10 @@ app.use('/', rootRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/admin', adminRoutes);
 
+// 静态文件 - 前端构建产物
+const path = require('path');
+app.use(express.static(path.join(__dirname, '../../client/dist')));
+
 // 健康检查
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });

@@ -14,7 +14,7 @@ const siteDataService = require('../services/siteDataService');
 const logService = require('../services/logService');
 const apiManageService = require('../services/apiManageService');
 const errorCodeService = require('../services/errorCodeService');
-const { success, error, paginated } = require('../utils/response');
+const { success, error, paginated, parsePagination } = require('../utils/response');
 
 // 所有路由都需要认证
 router.use(authMiddleware);
@@ -32,8 +32,7 @@ router.get('/dashboard', async (req, res) => {
 /** ===== 应用管理 ===== */
 router.get('/apps', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 20;
+    const { page, pageSize } = parsePagination(req.query);
     const result = await appService.getList(page, pageSize);
     res.json(paginated(result.rows, result.pagination));
   } catch (err) {
@@ -94,8 +93,7 @@ router.delete('/apps/:id', async (req, res) => {
 /** ===== 卡密管理 ===== */
 router.get('/cards', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 20;
+    const { page, pageSize } = parsePagination(req.query);
     const filters = {};
     if (req.query.app_id) filters.app_id = parseInt(req.query.app_id);
     if (req.query.card) filters.card = req.query.card;
@@ -171,8 +169,7 @@ router.delete('/cards/:id', async (req, res) => {
 /** ===== 版本管理 ===== */
 router.get('/versions', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 20;
+    const { page, pageSize } = parsePagination(req.query);
     const appId = parseInt(req.query.app_id);
     if (!appId) return res.json(error('请指定应用'));
     const result = await versionService.getList(appId, page, pageSize);
@@ -210,6 +207,24 @@ router.delete('/versions/:id', async (req, res) => {
 });
 
 /** ===== 网站配置 ===== */
+// 兼容前端调用的 /site-data 路径
+router.get('/site-data', async (req, res) => {
+  try {
+    const data = await siteDataService.get();
+    res.json(success(data));
+  } catch (err) {
+    res.json(error('获取网站配置失败'));
+  }
+});
+router.put('/site-data', async (req, res) => {
+  try {
+    await siteDataService.update(req.body);
+    res.json(success(null, '更新成功'));
+  } catch (err) {
+    res.json(error('更新网站配置失败'));
+  }
+});
+
 router.get('/datas', async (req, res) => {
   try {
     const data = await siteDataService.get();
@@ -231,8 +246,7 @@ router.put('/datas', async (req, res) => {
 /** ===== 操作日志 ===== */
 router.get('/logs', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 20;
+    const { page, pageSize } = parsePagination(req.query);
     const filters = {};
     if (req.query.action) filters.action = req.query.action;
     if (req.query.module) filters.module = req.query.module;
@@ -246,8 +260,7 @@ router.get('/logs', async (req, res) => {
 /** ===== API管理 ===== */
 router.get('/apis', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 20;
+    const { page, pageSize } = parsePagination(req.query);
     const result = await apiManageService.getList(page, pageSize);
     res.json(paginated(result.rows, result.pagination));
   } catch (err) {
@@ -285,8 +298,7 @@ router.delete('/apis/:id', async (req, res) => {
 /** ===== 错误码管理 ===== */
 router.get('/error-codes', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 20;
+    const { page, pageSize } = parsePagination(req.query);
     const result = await errorCodeService.getList(page, pageSize);
     res.json(paginated(result.rows, result.pagination));
   } catch (err) {

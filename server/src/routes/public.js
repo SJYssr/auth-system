@@ -13,7 +13,10 @@ const { success, error } = require('../utils/response');
 /** 获取初始化数据 */
 router.get('/init', async (req, res) => {
   try {
-    const data = await initService.getInitData();
+    // 从请求头提取 token
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const data = await initService.getInitData(token);
     res.json(success(data));
   } catch (err) {
     res.json(error('获取初始化数据失败'));
