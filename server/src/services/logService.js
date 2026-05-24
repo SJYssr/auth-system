@@ -31,7 +31,7 @@ async function log(data) {
     [data.user_id || null, data.username || null, data.action, data.module || null,
      data.target_type || null, data.target_id || null, data.target_name || null,
      data.description || null, data.ip_address || null, data.user_agent || null,
-     safeData, data.response_status || 'success', data.error_message || null]
+     safeData || null, data.response_status || 'success', data.error_message || null]
   );
 }
 

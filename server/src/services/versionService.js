@@ -6,7 +6,7 @@ const pool = require('../config/db');
 async function getList(appId, page = 1, pageSize = 20) {
   const offset = (page - 1) * pageSize;
   const [rows] = await pool.execute(
-    'SELECT * FROM app_versions WHERE app_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+    'SELECT av.*, a.app_name FROM app_versions av LEFT JOIN apps a ON a.id = av.app_id WHERE av.app_id = ? ORDER BY av.created_at DESC LIMIT ? OFFSET ?',
     [appId, String(pageSize), String(offset)]
   );
   const [countResult] = await pool.execute(
