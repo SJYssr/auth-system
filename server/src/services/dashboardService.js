@@ -7,6 +7,7 @@ async function getStats() {
   const [appCount] = await pool.execute('SELECT COUNT(*) as total FROM apps WHERE status = ?', ['enabled']);
   const [cardCount] = await pool.execute('SELECT COUNT(*) as total FROM cards');
   const [activeCardCount] = await pool.execute('SELECT COUNT(*) as total FROM cards WHERE is_activated = 1');
+  const [onlineCardCount] = await pool.execute('SELECT COUNT(*) as total FROM cards WHERE is_activated = 1 AND token IS NOT NULL AND token_expires_at IS NOT NULL AND token_expires_at > NOW()');
   const [expiredCardCount] = await pool.execute('SELECT COUNT(*) as total FROM cards WHERE expires_at IS NOT NULL AND expires_at < NOW()');
 
   // 卡密类型分布
@@ -51,7 +52,7 @@ async function getStats() {
     overview: {
       apps: { total: appCount[0].total, active: appCount[0].total },
       cards: { total: cardCount[0].total, activated: activeCardCount[0].total, expired: expiredCardCount[0].total },
-      online: { count: activeCardCount[0].total }
+      online: { count: onlineCardCount[0].total }
     },
     recent_cards: recentCards,
     recent_logs: recentLogs,

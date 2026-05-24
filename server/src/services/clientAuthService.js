@@ -55,7 +55,7 @@ async function cardLogin(softid, card, mac, version, ip) {
 
     // 行锁查卡密
     const [cards] = await conn.execute(
-      'SELECT id, app_id, card, status, is_activated, points, card_type, mac, expires_at, login_count, token, version ' +
+      'SELECT id, app_id, card, status, is_activated, points, card_type, mac, expires_at, token_expires_at, login_count, token, version ' +
       'FROM cards WHERE card = ? AND app_id = ? FOR UPDATE',
       [card, app.id]
     );
@@ -72,13 +72,14 @@ async function cardLogin(softid, card, mac, version, ip) {
     }
 
     const now = new Date();
-    const token = generateToken();
+    let token;
 
     if (cardData.is_activated === 0) {
       // 首次激活
+      token = generateToken();
       const expiresAt = expireTime(cardData.card_type, cardData.points, now);
       await conn.execute(
-        'UPDATE cards SET is_activated = 1, mac = ?, activation_ip = ?, token = ?, ' +
+        'UPDATE cards SET is_activated = 1, mac = ?, activation_ip = ?, token = ?, token_expires_at = NOW() + INTERVAL 24 HOUR, ' +
         'activated_at = ?, expires_at = ?, login_count = login_count + 1, ' +
         'last_login_time = ?, last_login_ip = ?, version = version + 1 ' +
         'WHERE id = ?',
@@ -90,13 +91,15 @@ async function cardLogin(softid, card, mac, version, ip) {
         await conn.rollback(); conn.release();
         throw new Error('-1004'); // 机器码不匹配，返回卡密不存在
       }
-      // 校验是否过期
+      // 校验卡密是否过期
       if (cardData.expires_at && new Date(cardData.expires_at) < now) {
         await conn.rollback(); conn.release();
         throw new Error('-1005'); // 卡密已过期
       }
+      // 每次登录都生成新 token（24小时有效期）
+      token = generateToken();
       await conn.execute(
-        'UPDATE cards SET token = ?, login_count = login_count + 1, ' +
+        'UPDATE cards SET token = ?, token_expires_at = NOW() + INTERVAL 24 HOUR, login_count = login_count + 1, ' +
         'last_login_time = ?, last_login_ip = ?, version = version + 1 ' +
         'WHERE id = ?',
         [token, now, ip, cardData.id]
@@ -124,7 +127,7 @@ async function cardLogout(softid, card, token) {
   );
   if (rows.length === 0) throw new Error('-1004');
   if (rows[0].token !== token) throw new Error('-1002');
-  await pool.execute('UPDATE cards SET token = NULL WHERE id = ?', [rows[0].id]);
+  await pool.execute('UPDATE cards SET token = NULL, token_expires_at = NULL WHERE id = ?', [rows[0].id]);
 }
 
 /**
