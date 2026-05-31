@@ -86,17 +86,33 @@ async function cardLogin(softid, card, mac, version, ip) {
         [mac, ip, token, now, expiresAt, now, ip, cardData.id]
       );
     } else {
-      // 再次登录 - 校验机器码
+      // 再次登录
+      const tokenExpired = cardData.token_expires_at && new Date(cardData.token_expires_at) < now;
+
+      if (!tokenExpired) {
+        // Token 未过期：并发登录限制
+        if (cardData.mac && cardData.mac.toLowerCase() === mac.toLowerCase()) {
+          // 同设备：直接返回已有 token
+          await conn.commit(); conn.release();
+          return cardData.token;
+        } else {
+          await conn.rollback(); conn.release();
+          throw new Error('-1011'); // 卡密已在其他设备登录
+        }
+      }
+
+      // Token 已过期：正常流程
+      // 校验机器码
       if (cardData.mac && cardData.mac.toLowerCase() !== mac.toLowerCase()) {
         await conn.rollback(); conn.release();
-        throw new Error('-1004'); // 机器码不匹配，返回卡密不存在
+        throw new Error('-1010'); // 机器码不匹配
       }
       // 校验卡密是否过期
       if (cardData.expires_at && new Date(cardData.expires_at) < now) {
         await conn.rollback(); conn.release();
         throw new Error('-1005'); // 卡密已过期
       }
-      // 每次登录都生成新 token（24小时有效期）
+      // 生成新 token（24小时有效期）
       token = generateToken();
       await conn.execute(
         'UPDATE cards SET token = ?, token_expires_at = NOW() + INTERVAL 24 HOUR, login_count = login_count + 1, ' +
