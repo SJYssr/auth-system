@@ -23,7 +23,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "blob:"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
       connectSrc: ["'self'"],
       fontSrc: ["'self'", "data:"],
       objectSrc: ["'none'"],
@@ -109,7 +109,8 @@ function buildAllowedOrigins(publicIp) {
       } else if (allowedOrigins.includes(origin)) {
         cb(null, true);
       } else {
-        cb(new Error('Not allowed by CORS'));
+        // 未知来源不设置 CORS 响应头，浏览器自行拦截跨域读取，避免阻断静态资源
+        cb(null, false);
       }
     },
     credentials: true
