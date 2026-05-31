@@ -43,7 +43,7 @@ async function getInitData(token) {
   }
 
   return {
-    site: siteData[0] || null,
+    website: siteData[0] || null,
     apps,
     stats,
     login_status: {

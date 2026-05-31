@@ -17,6 +17,9 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 // 安全响应头
+// 注意：关闭 CORP/COOP/COEP 以避免在反向代理（OpenResty）环境下影响
+// 同源 JS 模块脚本和 CSS 的加载。Vite 构建产物带有 crossorigin 属性，
+// 浏览器会按 CORS 请求加载，CORP: same-origin 在代理场景下可能误判。
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -32,7 +35,10 @@ app.use(helmet({
       formAction: ["'self'"],
       upgradeInsecureRequests: null
     }
-  }
+  },
+  crossOriginResourcePolicy: false,
+  crossOriginOpenerPolicy: false,
+  crossOriginEmbedderPolicy: false
 }));
 
 /** 自动获取公网 IP（多服务容错） */
@@ -165,6 +171,19 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
   app.use('/', require('./routes/root'));
   app.use('/api/public', require('./routes/public'));
   app.use('/api/admin', require('./routes/admin'));
+
+  // 移除 Vite 构建产物的 crossorigin 属性，避免同源部署下的 CORS 问题
+  // 静态 HTML 文件已预先处理（dist/index.html），此处拦截 SPA fallback 的 send 调用
+  app.use((req, res, next) => {
+    const origSend = res.send.bind(res);
+    res.send = function (body) {
+      if (typeof body === 'string' && String(res.get('Content-Type') || '').includes('text/html')) {
+        body = body.replace(/ crossorigin(?:="[^"]*")?/g, '');
+      }
+      return origSend(body);
+    };
+    next();
+  });
 
   // 静态文件 - 前端构建产物
   app.use(express.static(path.join(__dirname, '../../client/dist')));
