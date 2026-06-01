@@ -127,10 +127,9 @@ const { isCollapse } = storeToRefs(store)
 const isMobile = ref(false)
 const mobileDrawerVisible = ref(false)
 
-let login_is_superuser = false
-if (store?.initializeInfo?.login_status?.user?.is_superuser) {
-  login_is_superuser = true
-}
+const login_is_superuser = computed(() => {
+  return !!store?.initializeInfo?.login_status?.user?.is_superuser
+})
 
 // 检测屏幕尺寸
 const checkScreenSize = () => {

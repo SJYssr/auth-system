@@ -98,8 +98,8 @@
               <!-- 价格和操作 -->
               <div class="product-footer">
                 <div class="price-section">
-                  <span v-if="product.price == 0 || product.is_free" class="price-free">免费</span>
-                  <span v-else class="price-amount">¥{{ product.price }}</span>
+                  <span v-if="isProductFree(product)" class="price-free">免费</span>
+                  <span v-else class="price-amount">付费</span>
                 </div>
 
                 <el-button type="primary" size="large" @click.stop="handleProductAction(product)"
@@ -157,8 +157,8 @@
         <div class="detail-grid">
           <div class="detail-item">
             <label>价格：</label>
-            <span v-if="selectedProduct.price == 0 || selectedProduct.is_free" class="price-free">免费</span>
-            <span v-else class="price-amount">¥{{ selectedProduct.price }}</span>
+            <span v-if="isProductFree(selectedProduct)" class="price-free">免费</span>
+            <span v-else class="price-amount">付费</span>
           </div>
           <div class="detail-item">
             <label>状态：</label>
@@ -224,32 +224,59 @@ const detailVisible = ref(false)
 const selectedProduct = ref(null)
 
 
-// 获取产品列表
+// 全量产品缓存（用于客户端过滤和分页）
+const allProducts = ref([])
+
+// 获取产品列表（后端无过滤/分页支持，客户端处理）
 const fetchProducts = async () => {
   try {
     productsLoading.value = true
-    const params = {
-      page: pagination.page,
-      per_page: pagination.per_page,
-      ...searchForm
-    }
+    const response = await businessStore.fetchPublicApps({})
 
-    const response = await businessStore.fetchPublicApps(params)
-
-    // 检查API响应结构
+    // 检查API响应结构 — /public/apps 返回 {success: true, data: [array]}
     if (response.success && response.data) {
-      products.value = response.data.data || []
-      pagination.total = (response.data.pagination && response.data.pagination.total) || 0
+      allProducts.value = Array.isArray(response.data) ? response.data : (response.data.data || [])
     } else {
-      products.value = []
-      pagination.total = 0
+      allProducts.value = []
     }
+
+    // 客户端过滤和分页
+    applyFiltersAndPaginate()
   } catch (error) {
     console.error('获取产品列表失败:', error)
     ElMessage.error('获取产品列表失败')
   } finally {
     productsLoading.value = false
   }
+}
+
+// 客户端过滤和分页
+const applyFiltersAndPaginate = () => {
+  let filtered = [...allProducts.value]
+
+  // 只显示启用的产品
+  filtered = filtered.filter(p => p.status === 'enabled')
+
+  // 关键词搜索
+  if (searchForm.keyword) {
+    const kw = searchForm.keyword.toLowerCase()
+    filtered = filtered.filter(p =>
+      (p.app_name && p.app_name.toLowerCase().includes(kw)) ||
+      (p.description && p.description.toLowerCase().includes(kw))
+    )
+  }
+
+  // 价格类型过滤 (apps表用is_free字段)
+  if (searchForm.price_type === 'free') {
+    filtered = filtered.filter(p => p.is_free == 1)
+  } else if (searchForm.price_type === 'paid') {
+    filtered = filtered.filter(p => p.is_free != 1)
+  }
+
+  // 分页
+  pagination.total = filtered.length
+  const start = (pagination.page - 1) * pagination.per_page
+  products.value = filtered.slice(start, start + pagination.per_page)
 }
 
 // 搜索处理
@@ -259,6 +286,11 @@ const handleSearch = () => {
 }
 
 // 分类选择
+const selectCategory = (category) => {
+  searchForm.category = category
+  handleSearch()
+}
+
 // 价格类型选择
 const selectPriceType = (priceType) => {
   searchForm.price_type = priceType
@@ -306,7 +338,7 @@ const handleProductAction = (product) => {
   }
 
   // 已登录，根据产品类型处理
-  if (product.price == 0 || product.is_free) {
+  if (isProductFree(product)) {
     // 免费产品，直接跳转到应用中心
     ElMessage.success('正在为您跳转到应用中心...')
     router.push('/admin/appcenter')
@@ -317,11 +349,17 @@ const handleProductAction = (product) => {
   }
 }
 
+// 判断产品是否免费 (apps表没有price字段，用is_free判断)
+const isProductFree = (product) => {
+  if (!product) return false
+  return product.is_free == 1 || product.is_free === true
+}
+
 // 获取操作按钮文本
 const getActionText = (product) => {
   if (!product) return '查看'
   if (product.status !== 'enabled') return '维护中'
-  if (product.price == 0 || product.is_free) return '免费使用'
+  if (isProductFree(product)) return '免费使用'
   return '立即购买'
 }
 
@@ -340,6 +378,12 @@ const handleIconError = (event) => {
 const formatDate = (dateString) => {
   if (!dateString) return '-'
   return new Date(dateString).toLocaleDateString('zh-CN')
+}
+
+// 获取分类列表（当前后端无分类接口，预留扩展点）
+const fetchCategories = async () => {
+  // 暂时使用空数组，后续可对接分类API
+  categories.value = []
 }
 
 onMounted(() => {

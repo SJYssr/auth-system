@@ -51,10 +51,10 @@
 
               <div class="price-section">
                 <div class="price-display">
-                  <span v-if="currentApp.price == 0" class="price-free">免费使用</span>
-                  <span v-else class="price-paid">¥{{ currentApp.price }}</span>
+                  <span v-if="isAppFree(currentApp)" class="price-free">免费使用</span>
+                  <span v-else class="price-paid">付费应用</span>
                 </div>
-                <div class="price-note" v-if="currentApp.price > 0">
+                <div class="price-note" v-if="!isAppFree(currentApp)">
                   一次购买，永久使用
                 </div>
               </div>
@@ -224,6 +224,12 @@ const loadAppDetail = async () => {
 
 const goBack = () => {
   router.go(-1)
+}
+
+// apps表没有price字段，用is_free判断
+const isAppFree = (app) => {
+  if (!app) return false
+  return app.is_free == 1 || app.is_free === true
 }
 
 const formatDate = (dateString) => {

@@ -49,12 +49,12 @@
             <p class="footer-copyright" v-if="initializeInfo.website?.icp_number">{{ initializeInfo.website.icp_number }}</p>
           </div>
           
-          <div class="footer-contact" v-if="initializeInfo.website?.email || initializeInfo.website?.phone">
-            <a v-if="initializeInfo.website?.email" :href="`mailto:${initializeInfo.website.email}`" class="contact-link">
-              {{ initializeInfo.website.email }}
+          <div class="footer-contact" v-if="initializeInfo.website?.contact_email || initializeInfo.website?.contact_phone">
+            <a v-if="initializeInfo.website?.contact_email" :href="`mailto:${initializeInfo.website.contact_email}`" class="contact-link">
+              {{ initializeInfo.website.contact_email }}
             </a>
-            <a v-if="initializeInfo.website?.phone" :href="`tel:${initializeInfo.website.phone}`" class="contact-link">
-              {{ initializeInfo.website.phone }}
+            <a v-if="initializeInfo.website?.contact_phone" :href="`tel:${initializeInfo.website.contact_phone}`" class="contact-link">
+              {{ initializeInfo.website.contact_phone }}
             </a>
           </div>
         </div>

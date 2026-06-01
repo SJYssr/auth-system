@@ -409,6 +409,8 @@ const handleDeleteLogs = async () => {
       ElMessage.success(response.message || '删除成功')
       showDeleteDialog.value = false
       handleSearch() // 重新加载数据
+    } else if (response?.errcode) {
+      throw new Error(response?.message || '后端暂不支持此操作')
     } else {
       throw new Error(response?.message || '删除失败')
     }

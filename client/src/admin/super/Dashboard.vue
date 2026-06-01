@@ -79,7 +79,7 @@
             <div class="record-content">
               <div class="record-main">
                 <span class="record-app">{{ item.app_name }}</span>
-                <span class="record-user">{{ item.card }}</span>
+                <span class="record-user">{{ item.card_type || '未知类型' }}</span>
               </div>
               <div class="record-meta">
                 <span class="record-time">{{ formatTime(item.activated_at) }}</span>
