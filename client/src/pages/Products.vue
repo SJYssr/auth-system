@@ -225,6 +225,7 @@ const selectedProduct = ref(null)
 
 
 // 全量产品缓存（用于客户端过滤和分页）
+// TODO: 当应用数量超过 100 时，需要改后端 /public/apps 支持服务端分页+搜索参数（keyword, price_type, page, per_page）
 const allProducts = ref([])
 
 // 获取产品列表（后端无过滤/分页支持，客户端处理）

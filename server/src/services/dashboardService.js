@@ -17,7 +17,7 @@ async function getStats() {
 
   // 近期激活的卡密（仅选择非敏感字段）
   const [recentCards] = await pool.execute(
-    'SELECT c.id, c.card_type, c.points, c.is_activated, c.status, c.activated_at, c.expires_at, c.created_at, a.app_name ' +
+    'SELECT c.id, c.card, c.card_type, c.points, c.is_activated, c.status, c.activated_at, c.expires_at, c.created_at, a.app_name ' +
     'FROM cards c LEFT JOIN apps a ON c.app_id = a.id WHERE c.is_activated = 1 ORDER BY c.activated_at DESC LIMIT 10'
   );
 

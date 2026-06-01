@@ -68,11 +68,14 @@ async function getPurchaseUrl(softid) {
   return rows[0].purchase_url || '';
 }
 
-/** 应用列表（分页） */
+/** 应用列表（分页，含卡密统计） */
 async function getList(page = 1, pageSize = 20) {
   const offset = (page - 1) * pageSize;
   const [rows] = await pool.execute(
-    'SELECT * FROM apps ORDER BY created_at DESC LIMIT ? OFFSET ?',
+    'SELECT a.*, ' +
+    'COALESCE((SELECT COUNT(*) FROM cards c WHERE c.app_id = a.id), 0) as total_cards, ' +
+    'COALESCE((SELECT COUNT(*) FROM cards c WHERE c.app_id = a.id AND c.is_activated = 1), 0) as activated_cards ' +
+    'FROM apps a ORDER BY a.created_at DESC LIMIT ? OFFSET ?',
     [String(pageSize), String(offset)]
   );
   const [countResult] = await pool.execute('SELECT COUNT(*) as total FROM apps');

@@ -68,8 +68,8 @@
           </template>
         </el-table-column>
         <el-table-column label="激活/总计" width="100">
-          <template #default>
-            <span class="text-muted">-</span>
+          <template #default="{ row }">
+            <span>{{ row.activated_cards ?? 0 }} / {{ row.total_cards ?? 0 }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="320">
