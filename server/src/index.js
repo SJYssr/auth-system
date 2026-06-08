@@ -196,7 +196,10 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
 
   // 健康检查
   app.get('/health', (req, res) => {
-    res.json({ status: 'ok', time: new Date().toISOString() });
+    const pad = n => String(n).padStart(2, '0');
+    const now = new Date();
+    const localTime = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    res.json({ status: 'ok', time: localTime });
   });
 
   // 全局错误处理

@@ -104,6 +104,12 @@ router.post('/purchase', async (req, res) => {
   }
 });
 
+/** Date → 本地时间字符串 YYYY-MM-DD HH:mm:ss */
+function toLocalStr(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 /** 获取到期时间 */
 router.post('/expiry', async (req, res) => {
   try {
@@ -111,10 +117,8 @@ router.post('/expiry', async (req, res) => {
     if (!Softid || !Card) return res.json({ errcode: '-1001' });
     if (!validateSoftid(Softid)) return res.json({ errcode: '-1001' });
     const expiresAt = await clientAuthService.getExpiry(Softid, Card);
-    const dateStr = expiresAt instanceof Date
-      ? expiresAt.toISOString().replace('T', ' ').slice(0, 19)
-      : new Date(expiresAt).toISOString().replace('T', ' ').slice(0, 19);
-    res.json({ expires_at: dateStr });
+    const d = expiresAt instanceof Date ? expiresAt : new Date(expiresAt);
+    res.json({ expires_at: toLocalStr(d) });
   } catch (err) {
     res.json({ errcode: err.message || '-1009' });
   }
