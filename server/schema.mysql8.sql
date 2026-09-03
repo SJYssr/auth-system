@@ -27,10 +27,14 @@ CREATE TABLE IF NOT EXISTS admins (
     status VARCHAR(20) NOT NULL DEFAULT 'enabled',
     token VARCHAR(255) COMMENT '建议后续改为 SHA-256 哈希存储',
     last_login DATETIME NULL,
+    expires_at DATETIME NULL COMMENT '账号到期时间，NULL表示永不到期',
+    max_apps INT NOT NULL DEFAULT -1 COMMENT '最大软件数量，-1表示不限',
+    max_card_activations INT NOT NULL DEFAULT -1 COMMENT '最大卡密激活数量，-1表示不限',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_admins_token (token),
-    INDEX idx_admins_status (status)
+    INDEX idx_admins_status (status),
+    INDEX idx_admins_expires_at (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 应用表
@@ -220,3 +224,10 @@ INSERT IGNORE INTO apis (id, api_name, api_path, api_method, param_count, params
 -- ALTER TABLE admins DROP INDEX idx_admins_username;
 -- ALTER TABLE apps DROP INDEX idx_apps_name;
 -- ALTER TABLE cards DROP INDEX idx_cards_card;
+-- ============================================================
+-- v2 权限分级增量升级：管理员增加到期时间/最大软件数量/最大卡密激活数量
+-- ============================================================
+-- ALTER TABLE admins ADD COLUMN expires_at DATETIME NULL COMMENT '账号到期时间，NULL表示永不到期';
+-- ALTER TABLE admins ADD COLUMN max_apps INT NOT NULL DEFAULT -1 COMMENT '最大软件数量，-1表示不限';
+-- ALTER TABLE admins ADD COLUMN max_card_activations INT NOT NULL DEFAULT -1 COMMENT '最大卡密激活数量，-1表示不限';
+-- ALTER TABLE admins ADD INDEX idx_admins_expires_at (expires_at);

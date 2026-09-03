@@ -24,7 +24,7 @@ async function authMiddleware(req, res, next) {
 
     // 查数据库验证 token
     const [rows] = await pool.execute(
-      'SELECT id, username, email, is_superuser, status, last_login FROM admins WHERE token = ? AND status = ?',
+      'SELECT id, username, email, is_superuser, status, last_login, expires_at, max_apps, max_card_activations FROM admins WHERE token = ? AND status = ?',
       [token, 'enabled']
     );
 
@@ -37,6 +37,18 @@ async function authMiddleware(req, res, next) {
     }
 
     const admin = rows[0];
+
+    // 检查账号是否已过期（超管不受到期时间限制）
+    if (admin.is_superuser !== 1 && admin.expires_at) {
+      if (new Date(admin.expires_at) < new Date()) {
+        await pool.execute('UPDATE admins SET token = NULL WHERE id = ?', [admin.id]);
+        return res.status(401).json({
+          success: false,
+          message: '管理员账号已到期，请联系超级管理员续期',
+          errcode: '-1002'
+        });
+      }
+    }
 
     // 检查 token 是否过期 (24h)
     if (admin.last_login) {

@@ -39,6 +39,7 @@ const superLogService = {
 const superCardService = {
     getAll: (params = {}) => request.get('/admin/cards', { params }),
     create: (data) => request.post('/admin/cards', data),
+    batchCreate: (data) => request.post('/admin/cards/batch', data),
     update: (id, data) => request.put(`/admin/cards/${id}`, data),
     delete: (id) => request.delete(`/admin/cards/${id}`)
 }

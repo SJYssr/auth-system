@@ -511,12 +511,28 @@ const handleSubmit = async () => {
   await formRef.value.validate()
   try {
     saveLoading.value = true
-    const response = await store.saveCard(form.value)
-    if (!form.value.id && response.data) {
-      resultCards.value = response.data
-      resultVisible.value = true
-    } else {
+    if (form.value.id) {
+      // 编辑：走单卡更新
+      const response = await store.saveCard(form.value)
       ElMessage.success(response.message || '更新成功')
+    } else {
+      // 生成：走批量接口（count 控制数量，card_prefix 为卡头）
+      const response = await superCardService.batchCreate({
+        app_id: form.value.app_id,
+        count: form.value.count || 1,
+        card_prefix: form.value.card_prefix || '',
+        card_type: form.value.card_type,
+        price: form.value.price,
+        points: form.value.points,
+        card_remark: form.value.card_remark || ''
+      })
+      const list = response.data?.cards || []
+      if (list.length > 0) {
+        resultCards.value = list
+        resultVisible.value = true
+      } else {
+        ElMessage.success(response.message || '生成成功')
+      }
     }
     drawerVisible.value = false
     await store.fetchCards(buildSearchParams())
@@ -613,7 +629,7 @@ const handleBatchEnable = async () => {
 }
 
 const handleCopyCards = () => {
-  const text = resultCards.value.map(c => c.card).join('\n')
+  const text = resultCards.value.map(c => typeof c === 'string' ? c : c.card).join('\n')
   navigator.clipboard.writeText(text).then(() => {
     ElMessage.success('已复制到剪切板')
   }).catch(() => {

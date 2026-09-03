@@ -22,17 +22,20 @@ async function changePassword(adminId, oldPassword, newPassword) {
 /** 管理员列表（不含密码/token） */
 async function getList() {
   const [rows] = await pool.execute(
-    'SELECT id, username, email, is_superuser, status, last_login, created_at FROM admins ORDER BY id'
+    'SELECT id, username, email, is_superuser, status, last_login, expires_at, max_apps, max_card_activations, created_at FROM admins ORDER BY id'
   );
   return rows;
 }
 
 /** 创建管理员（仅超管调用） */
-async function create({ username, email, password, is_superuser }) {
+async function create({ username, email, password, is_superuser, expires_at, max_apps, max_card_activations }) {
   const hash = await bcrypt.hash(password, 10);
   const [result] = await pool.execute(
-    'INSERT INTO admins (username, email, password, is_superuser, status) VALUES (?, ?, ?, ?, ?)',
-    [username, email, hash, is_superuser ? 1 : 0, 'enabled']
+    'INSERT INTO admins (username, email, password, is_superuser, status, expires_at, max_apps, max_card_activations) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [username, email, hash, is_superuser ? 1 : 0, 'enabled',
+     expires_at || null,
+     max_apps !== undefined ? parseInt(max_apps) : -1,
+     max_card_activations !== undefined ? parseInt(max_card_activations) : -1]
   );
   return { id: result.insertId };
 }
@@ -67,4 +70,55 @@ async function setStatus(targetId, status, operatorId) {
   await pool.execute('UPDATE admins SET status = ? WHERE id = ?', [status, targetId]);
 }
 
-module.exports = { changePassword, getList, create, remove, setStatus };
+/** 更新管理员配额限制（仅超管调用） */
+async function updateLimits(targetId, { expires_at, max_apps, max_card_activations }) {
+  const fields = [];
+  const values = [];
+  if (expires_at !== undefined) {
+    fields.push('expires_at = ?');
+    values.push(expires_at || null);
+  }
+  if (max_apps !== undefined) {
+    fields.push('max_apps = ?');
+    values.push(parseInt(max_apps));
+  }
+  if (max_card_activations !== undefined) {
+    fields.push('max_card_activations = ?');
+    values.push(parseInt(max_card_activations));
+  }
+  if (fields.length === 0) return;
+  values.push(targetId);
+  await pool.execute(`UPDATE admins SET ${fields.join(', ')} WHERE id = ?`, values);
+}
+
+/** 检查管理员是否已过期 */
+async function isExpired(adminId) {
+  const [rows] = await pool.execute('SELECT expires_at FROM admins WHERE id = ?', [adminId]);
+  if (rows.length === 0) return true;
+  if (!rows[0].expires_at) return false;
+  return new Date(rows[0].expires_at) < new Date();
+}
+
+/** 检查是否超过最大软件数量（超管不受限） */
+async function checkAppLimit(adminId) {
+  const [rows] = await pool.execute('SELECT is_superuser, max_apps FROM admins WHERE id = ?', [adminId]);
+  if (rows.length === 0) throw new Error('管理员不存在');
+  if (rows[0].is_superuser === 1) return;
+  const limit = rows[0].max_apps;
+  if (limit === -1) return; // 不限制
+  const [count] = await pool.execute('SELECT COUNT(*) as total FROM apps WHERE status = ?', ['enabled']);
+  if (count[0].total >= limit) throw new Error(`已达到最大软件数量限制（${limit}个）`);
+}
+
+/** 检查是否超过最大卡密激活数量（超管不受限） */
+async function checkCardActivationLimit(adminId) {
+  const [rows] = await pool.execute('SELECT is_superuser, max_card_activations FROM admins WHERE id = ?', [adminId]);
+  if (rows.length === 0) throw new Error('管理员不存在');
+  if (rows[0].is_superuser === 1) return;
+  const limit = rows[0].max_card_activations;
+  if (limit === -1) return; // 不限制
+  const [count] = await pool.execute('SELECT COUNT(*) as total FROM cards WHERE is_activated = 1');
+  if (count[0].total >= limit) throw new Error(`已达到最大卡密激活数量限制（${limit}个）`);
+}
+
+module.exports = { changePassword, getList, create, remove, setStatus, updateLimits, isExpired, checkAppLimit, checkCardActivationLimit };

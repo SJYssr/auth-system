@@ -65,11 +65,11 @@ router.get('/admins', requireSuperuser, async (req, res) => {
 
 router.post('/admins', requireSuperuser, async (req, res) => {
   try {
-    const { username, email, password, is_superuser } = req.body;
+    const { username, email, password, is_superuser, expires_at, max_apps, max_card_activations } = req.body;
     if (!username || !email || !password) return res.json(error('用户名、邮箱、密码均为必填'));
     if (String(password).length < 8) return res.json(error('密码长度至少8位'));
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.json(error('邮箱格式不正确'));
-    const result = await adminService.create({ username, email, password, is_superuser });
+    const result = await adminService.create({ username, email, password, is_superuser, expires_at, max_apps, max_card_activations });
     await logService.log({
       user_id: req.currentUser.id, username: req.currentUser.username,
       action: 'create', module: 'admins', target_type: 'admin', target_id: result.id,
@@ -112,6 +112,27 @@ router.delete('/admins/:id', requireSuperuser, async (req, res) => {
     console.error('删除管理员:', err.message);
     const known = ['不能删除自己的账号', '不能删除最后一个超级管理员', '管理员不存在'];
     res.json(error(known.includes(err.message) ? err.message : '删除管理员失败'));
+  }
+});
+
+/** ===== 更新管理员配额限制（仅超管） ===== */
+router.put('/admins/:id/limits', requireSuperuser, async (req, res) => {
+  try {
+    const { expires_at, max_apps, max_card_activations } = req.body;
+    const targetId = parseInt(req.params.id);
+    if (targetId === 1 && expires_at) {
+      return res.json(error('不能为默认超级管理员设置到期时间'));
+    }
+    await adminService.updateLimits(targetId, { expires_at, max_apps, max_card_activations });
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'update_limits', module: 'admins', target_type: 'admin', target_id: targetId,
+      description: '更新配额限制', ip_address: req.ip
+    });
+    res.json(success(null, '配额更新成功'));
+  } catch (err) {
+    console.error('更新配额限制:', err.message);
+    res.json(error('更新配额限制失败'));
   }
 });
 
@@ -166,6 +187,8 @@ router.get('/apps/:id', async (req, res) => {
 
 router.post('/apps', async (req, res) => {
   try {
+    // 检查软件数量配额（超管不受限）
+    await adminService.checkAppLimit(req.currentUser.id);
     const result = await appService.create(req.body);
     await logService.log({
       user_id: req.currentUser.id,
@@ -242,17 +265,20 @@ router.get('/cards/:id', async (req, res) => {
 // 批量生成卡密
 router.post('/cards/batch', async (req, res) => {
   try {
-    const { app_id, count, card_type, price, points, card_remark } = req.body;
+    const { app_id, count, card_type, price, points, card_remark, card_prefix } = req.body;
     if (!app_id) return res.json(error('请选择应用'));
+    // 检查卡密激活数量配额（超管不受限）
+    await adminService.checkCardActivationLimit(req.currentUser.id);
     const batchCount = Math.min(Math.max(count || 1, 1), 100);
+    const prefix = String(card_prefix || '').slice(0, 20);
     const cards = await cardService.createCards(app_id, batchCount, card_type || '天卡',
-      price || 0, points || 1, card_remark || '');
+      price || 0, points || 1, card_remark || '', prefix);
     await logService.log({
       user_id: req.currentUser.id, username: req.currentUser.username,
       action: 'batch_create', module: 'cards', target_type: 'card',
       description: `批量生成 ${cards.length} 张卡密`, ip_address: req.ip
     });
-    res.json(success({ count: cards.length, cards }, '生成成功'));
+    res.json(success({ count: cards.length, cards: cards.map(c => ({ card: c })) }, '生成成功'));
   } catch (err) {
     console.error('批量生成卡密:', err.message);
     res.json(error('生成卡密失败'));
@@ -261,11 +287,14 @@ router.post('/cards/batch', async (req, res) => {
 
 router.post('/cards', async (req, res) => {
   try {
-    // 单张生成
-    const { app_id, card_type, price, points } = req.body;
+    // 单张生成（返回结构与批量一致：{ count, cards:[{card}] }）
+    const { app_id, card_type, price, points, card_prefix } = req.body;
     if (!app_id) return res.json(error('请选择应用'));
-    const cards = await cardService.createCards(app_id, 1, card_type || '天卡', price || 0, points || 1);
-    res.json(success({ card: cards[0] }, '创建成功'));
+    // 检查卡密激活数量配额（超管不受限）
+    await adminService.checkCardActivationLimit(req.currentUser.id);
+    const prefix = String(card_prefix || '').slice(0, 20);
+    const cards = await cardService.createCards(app_id, 1, card_type || '天卡', price || 0, points || 1, '', prefix);
+    res.json(success({ count: 1, cards: [{ card: cards[0] }] }, '创建成功'));
   } catch (err) {
     console.error('创建卡密:', err.message);
     res.json(error('创建卡密失败'));

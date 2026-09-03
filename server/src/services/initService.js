@@ -13,7 +13,7 @@ async function getInitData(token) {
   let user = null;
   if (token) {
     const [admins] = await pool.execute(
-      'SELECT id, username, email, is_superuser FROM admins WHERE token = ? AND status = ?',
+      'SELECT id, username, email, is_superuser, expires_at, max_apps, max_card_activations FROM admins WHERE token = ? AND status = ?',
       [token, 'enabled']
     );
     if (admins.length > 0) {

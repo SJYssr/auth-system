@@ -27,6 +27,13 @@ async function login(username, password) {
 
   if (!passwordMatch) throw new Error('用户名或密码错误');
 
+  // 检查账号是否已过期（超管不受到期时间限制）
+  if (admin.is_superuser !== 1 && admin.expires_at) {
+    if (new Date(admin.expires_at) < new Date()) {
+      throw new Error('管理员账号已到期，请联系超级管理员续期');
+    }
+  }
+
   // 生成加密安全随机 token
   const token = crypto.randomBytes(32).toString('hex');
 
@@ -42,7 +49,10 @@ async function login(username, password) {
       id: admin.id,
       username: admin.username,
       email: admin.email,
-      is_superuser: admin.is_superuser
+      is_superuser: admin.is_superuser,
+      expires_at: admin.expires_at,
+      max_apps: admin.max_apps,
+      max_card_activations: admin.max_card_activations
     }
   };
 }

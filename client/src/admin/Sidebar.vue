@@ -209,6 +209,7 @@ const superMenus = [
     ]
   },
   { path: '/admin/admin-logs', icon: 'DocumentCopy', title: '系统日志' },
+  { path: '/admin/admins', icon: 'UserFilled', title: '管理员管理' },
   { path: '/admin/datas', icon: 'Setting', title: '网站设置' }
 ]
 

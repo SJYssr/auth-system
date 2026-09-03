@@ -14,11 +14,15 @@ CREATE TABLE IF NOT EXISTS admins (
     status VARCHAR(20) DEFAULT 'enabled',
     token VARCHAR(255),
     last_login DATETIME NULL,
+    expires_at DATETIME NULL COMMENT '账号到期时间，NULL表示永不到期',
+    max_apps INT DEFAULT -1 COMMENT '最大软件数量，-1表示不限',
+    max_card_activations INT DEFAULT -1 COMMENT '最大卡密激活数量，-1表示不限',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_admins_username (username),
     INDEX idx_admins_token (token),
-    INDEX idx_admins_status (status)
+    INDEX idx_admins_status (status),
+    INDEX idx_admins_expires_at (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 应用表

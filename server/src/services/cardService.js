@@ -4,8 +4,8 @@
 const crypto = require('crypto');
 const pool = require('../config/db');
 
-/** 生成14位随机卡密（无模偏差） */
-function generateCardCode() {
+/** 生成卡密：可选前缀 + 14位随机段（无模偏差） */
+function generateCardCode(prefix = '') {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   const maxValid = 256 - (256 % chars.length); // 248
   let code = '';
@@ -15,18 +15,18 @@ function generateCardCode() {
       code += chars.charAt(byte % chars.length);
     }
   }
-  return code;
+  return prefix + code;
 }
 
 /** 批量生成卡密 */
-async function createCards(appId, count = 1, cardType = '天卡', price = 0, points = 1, remark = '') {
+async function createCards(appId, count = 1, cardType = '天卡', price = 0, points = 1, remark = '', prefix = '') {
   const cards = [];
   let attempts = 0;
   const maxRetries = count * 3;
 
   while (cards.length < count && attempts < maxRetries) {
     attempts++;
-    const cardCode = generateCardCode();
+    const cardCode = generateCardCode(prefix);
     try {
       await pool.execute(
         'INSERT INTO cards (app_id, card, card_type, price, points, card_remark) VALUES (?, ?, ?, ?, ?, ?)',

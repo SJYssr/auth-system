@@ -87,6 +87,13 @@ const routes = [
         meta: { keepAlive: true, title: '操作日志', superuserOnly: true }
       },
       {
+        // 管理员账户管理：仅超管（页面+后端双重 requireSuperuser）
+        path: 'admins',
+        name: 'Admins',
+        component: () => import('@/admin/super/Admins.vue'),
+        meta: { keepAlive: true, title: '管理员管理', superuserOnly: true }
+      },
+      {
         // API文档/错误码：所有管理员可查看，编辑按钮仅超管可见（后端 requireSuperuser 强制）
         path: 'apis',
         name: 'ApiList',
