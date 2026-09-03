@@ -22,10 +22,29 @@ ALTER TABLE cards ADD INDEX IF NOT EXISTS idx_cards_owner_id (owner_id);
 INSERT IGNORE INTO error_codes (id, code, message, description, solution)
 VALUES (12, '-1012', '管理员激活配额已满', '生成该卡密的管理员已达最大激活卡密数量限制', '联系超级管理员提升配额');
 
+-- v2.2 额度套餐表：支持限时增加软件/激活配额
+CREATE TABLE IF NOT EXISTS admin_plans (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    admin_id INT NOT NULL COMMENT '目标管理员ID',
+    type VARCHAR(32) NOT NULL COMMENT '配额类型: max_apps | max_card_activations',
+    delta INT NOT NULL COMMENT '增减量（正=增加，负=扣减）',
+    effective_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '生效时间',
+    expires_at DATETIME NULL COMMENT '过期时间，NULL=永久有效',
+    source VARCHAR(64) DEFAULT 'admin_grant' COMMENT '来源: admin_grant | weekly_card | monthly_card | system_gift',
+    remark VARCHAR(255),
+    created_by INT COMMENT '操作人ID',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_plans_admin_type (admin_id, type, effective_at, expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 将历史数据（owner_id 为 NULL）归属到默认超级管理员（id=1），保证配额统计完整
 -- 注意：若你的默认超管 id 不是 1，请先查询 SELECT id, username FROM admins WHERE is_superuser = 1 后修改
 UPDATE apps SET owner_id = 1 WHERE owner_id IS NULL;
 UPDATE cards SET owner_id = 1 WHERE owner_id IS NULL;
+
+-- 为已存在的普通管理员设置默认配额（如未设置过）
+UPDATE admins SET max_apps = 2 WHERE is_superuser = 0 AND max_apps = -1;
+UPDATE admins SET max_card_activations = 5 WHERE is_superuser = 0 AND max_card_activations = -1;
 
 -- 验证
 SELECT COLUMN_NAME, COLUMN_TYPE, COLUMN_COMMENT

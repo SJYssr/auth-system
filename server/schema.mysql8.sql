@@ -180,6 +180,21 @@ CREATE TABLE IF NOT EXISTS error_codes (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 额度套餐表（临时配额包，支持限时增加软件/激活配额）
+CREATE TABLE IF NOT EXISTS admin_plans (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    admin_id INT NOT NULL,
+    type VARCHAR(32) NOT NULL,
+    delta INT NOT NULL,
+    effective_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NULL,
+    source VARCHAR(64) NOT NULL DEFAULT 'admin_grant',
+    remark VARCHAR(255),
+    created_by INT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_plans_admin_type (admin_id, type, effective_at, expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ========== 默认数据 ==========
 
 -- 默认管理员（与旧 schema 相同的 BCrypt 哈希；首次部署后立即修改密码）

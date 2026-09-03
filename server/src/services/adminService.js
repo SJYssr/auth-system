@@ -1,8 +1,12 @@
 /**
- * 管理员账户服务（改密 / 超管管理管理员）
+ * 管理员账户服务（改密 / 超管管理管理员 / 额度套餐体系）
  */
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
+
+/** 新建普通管理员的默认配额 */
+const DEFAULT_MAX_APPS = 2;
+const DEFAULT_MAX_CARD_ACTIVATIONS = 5;
 
 /** 修改自己的密码：校验旧密码 + BCrypt 写入新密码 */
 async function changePassword(adminId, oldPassword, newPassword) {
@@ -15,31 +19,62 @@ async function changePassword(adminId, oldPassword, newPassword) {
   }
   if (!match) throw new Error('旧密码不正确');
   const hash = await bcrypt.hash(newPassword, 10);
-  // 改密后强制重新登录
   await pool.execute('UPDATE admins SET password = ?, token = NULL WHERE id = ?', [hash, adminId]);
 }
 
-/** 管理员列表（不含密码/token，附带已用配额统计） */
+/**
+ * 计算有效额度 = 基础上限 + 有效期内临时额度总和
+ * @param {number} adminId
+ * @param {string} type - 'max_apps' | 'max_card_activations'
+ * @returns {Promise<number>} -1 表示不限
+ */
+async function getEffectiveLimit(adminId, type) {
+  const [rows] = await pool.execute(
+    `SELECT a.is_superuser, a.${type} AS base,
+     COALESCE((SELECT SUM(delta) FROM admin_plans p
+       WHERE p.admin_id = a.id AND p.type = ?
+         AND p.effective_at <= NOW()
+         AND (p.expires_at IS NULL OR p.expires_at > NOW())), 0) AS extra
+     FROM admins a WHERE a.id = ?`,
+    [type, adminId]
+  );
+  if (rows.length === 0) throw new Error('管理员不存在');
+  if (rows[0].is_superuser === 1) return -1;
+  if (rows[0].base === -1) return -1;
+  return rows[0].base + rows[0].extra;
+}
+
+/** 管理员列表（不含密码/token，附带已用配额 + 有效额度 + 套餐数） */
 async function getList() {
   const [rows] = await pool.execute(
-    'SELECT a.id, a.username, a.email, a.is_superuser, a.status, a.last_login, a.expires_at, ' +
-    'a.max_apps, a.max_card_activations, a.created_at, ' +
-    'COALESCE((SELECT COUNT(*) FROM apps ap WHERE ap.owner_id = a.id), 0) as apps_used, ' +
-    'COALESCE((SELECT COUNT(*) FROM cards c WHERE c.owner_id = a.id AND c.is_activated = 1), 0) as activated_used ' +
-    'FROM admins a ORDER BY a.id'
+    `SELECT a.id, a.username, a.email, a.is_superuser, a.status, a.last_login, a.expires_at,
+      a.max_apps, a.max_card_activations, a.created_at,
+      COALESCE((SELECT COUNT(*) FROM apps ap WHERE ap.owner_id = a.id), 0) AS apps_used,
+      COALESCE((SELECT COUNT(*) FROM cards c WHERE c.owner_id = a.id AND c.is_activated = 1), 0) AS activated_used,
+      COALESCE((SELECT SUM(delta) FROM admin_plans p WHERE p.admin_id = a.id AND p.type = 'max_apps'
+        AND p.effective_at <= NOW() AND (p.expires_at IS NULL OR p.expires_at > NOW())), 0) AS apps_plan_delta,
+      COALESCE((SELECT SUM(delta) FROM admin_plans p WHERE p.admin_id = a.id AND p.type = 'max_card_activations'
+        AND p.effective_at <= NOW() AND (p.expires_at IS NULL OR p.expires_at > NOW())), 0) AS activations_plan_delta,
+      (SELECT COUNT(*) FROM admin_plans p WHERE p.admin_id = a.id
+        AND p.effective_at <= NOW() AND (p.expires_at IS NULL OR p.expires_at > NOW())) AS active_plans_count
+     FROM admins a ORDER BY a.id`
   );
+  rows.forEach(r => {
+    r.effective_max_apps = r.max_apps === -1 ? -1 : r.max_apps + r.apps_plan_delta;
+    r.effective_max_card_activations = r.max_card_activations === -1 ? -1 : r.max_card_activations + r.activations_plan_delta;
+  });
   return rows;
 }
 
-/** 创建管理员（仅超管调用） */
+/** 创建管理员（仅超管调用；普通管理员默认 2 应用 / 5 激活） */
 async function create({ username, email, password, is_superuser, expires_at, max_apps, max_card_activations }) {
   const hash = await bcrypt.hash(password, 10);
   const [result] = await pool.execute(
     'INSERT INTO admins (username, email, password, is_superuser, status, expires_at, max_apps, max_card_activations) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [username, email, hash, is_superuser ? 1 : 0, 'enabled',
      expires_at || null,
-     max_apps !== undefined ? parseInt(max_apps) : -1,
-     max_card_activations !== undefined ? parseInt(max_card_activations) : -1]
+     is_superuser ? -1 : (max_apps !== undefined && max_apps !== null ? parseInt(max_apps) : DEFAULT_MAX_APPS),
+     is_superuser ? -1 : (max_card_activations !== undefined && max_card_activations !== null ? parseInt(max_card_activations) : DEFAULT_MAX_CARD_ACTIVATIONS)]
   );
   return { id: result.insertId };
 }
@@ -58,7 +93,7 @@ async function remove(targetId, operatorId) {
   await pool.execute('DELETE FROM admins WHERE id = ?', [targetId]);
 }
 
-/** 启用/禁用管理员（仅超管调用）：不可改自己；禁用最后一个超管时拒绝 */
+/** 启用/禁用管理员（仅超管调用） */
 async function setStatus(targetId, status, operatorId) {
   if (!['enabled', 'disabled'].includes(status)) throw new Error('状态不合法');
   if (targetId === operatorId && status === 'disabled') throw new Error('不能禁用自己的账号');
@@ -74,7 +109,7 @@ async function setStatus(targetId, status, operatorId) {
   await pool.execute('UPDATE admins SET status = ? WHERE id = ?', [status, targetId]);
 }
 
-/** 更新管理员配额限制（仅超管调用） */
+/** 更新管理员基础配额限制（仅超管调用） */
 async function updateLimits(targetId, { expires_at, max_apps, max_card_activations }) {
   const fields = [];
   const values = [];
@@ -95,6 +130,78 @@ async function updateLimits(targetId, { expires_at, max_apps, max_card_activatio
   await pool.execute(`UPDATE admins SET ${fields.join(', ')} WHERE id = ?`, values);
 }
 
+/**
+ * 发放临时额度套餐（仅超管调用）
+ * @param {object} params
+ * @param {number} params.adminId - 目标管理员ID
+ * @param {string} params.type - 'max_apps' | 'max_card_activations'
+ * @param {number} params.delta - 增减量（正数=增加）
+ * @param {number|null} params.durationDays - 有效天数，null=永久
+ * @param {string} params.source - 来源标识
+ * @param {string} params.remark - 备注
+ * @param {number} params.createdBy - 操作人ID
+ */
+async function grantPlan({ adminId, type, delta, durationDays, source, remark, createdBy }) {
+  if (!['max_apps', 'max_card_activations'].includes(type)) {
+    throw new Error('配额类型不合法');
+  }
+  delta = parseInt(delta);
+  if (isNaN(delta) || delta === 0) throw new Error('增减量必须为非零整数');
+
+  let expiresAt = null;
+  if (durationDays && parseInt(durationDays) > 0) {
+    const d = new Date();
+    d.setDate(d.getDate() + parseInt(durationDays));
+    expiresAt = d;
+  }
+
+  const [result] = await pool.execute(
+    `INSERT INTO admin_plans (admin_id, type, delta, effective_at, expires_at, source, remark, created_by)
+     VALUES (?, ?, ?, NOW(), ?, ?, ?, ?)`,
+    [adminId, type, delta, expiresAt, source || 'admin_grant', remark || null, createdBy]
+  );
+  return { id: result.insertId, expires_at: expiresAt };
+}
+
+/**
+ * 获取管理员的额度套餐列表（含已过期的，用于历史查看）
+ */
+async function getPlans(adminId) {
+  const [rows] = await pool.execute(
+    `SELECT p.*, a.username AS created_by_name
+     FROM admin_plans p
+     LEFT JOIN admins a ON p.created_by = a.id
+     WHERE p.admin_id = ?
+     ORDER BY p.created_at DESC`,
+    [adminId]
+  );
+  return rows;
+}
+
+/**
+ * 续期管理员账号（叠加延长到期时间）
+ * @param {number} adminId - 目标管理员ID
+ * @param {number} durationDays - 延长天数
+ * @param {number} createdBy - 操作人ID
+ * @param {string} remark - 备注
+ */
+async function renewSubscription(adminId, durationDays, createdBy, remark) {
+  const days = parseInt(durationDays);
+  if (isNaN(days) || days <= 0) throw new Error('续期天数必须为正整数');
+
+  const [rows] = await pool.execute('SELECT id, is_superuser, expires_at FROM admins WHERE id = ?', [adminId]);
+  if (rows.length === 0) throw new Error('管理员不存在');
+  if (rows[0].is_superuser === 1) throw new Error('超级管理员无需续期');
+
+  const now = new Date();
+  const currentExpires = rows[0].expires_at ? new Date(rows[0].expires_at) : null;
+  const base = (currentExpires && currentExpires > now) ? currentExpires : now;
+  const newExpires = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+
+  await pool.execute('UPDATE admins SET expires_at = ? WHERE id = ?', [newExpires, adminId]);
+  return { expires_at: newExpires };
+}
+
 /** 检查管理员是否已过期 */
 async function isExpired(adminId) {
   const [rows] = await pool.execute('SELECT expires_at FROM admins WHERE id = ?', [adminId]);
@@ -103,26 +210,25 @@ async function isExpired(adminId) {
   return new Date(rows[0].expires_at) < new Date();
 }
 
-/** 检查是否超过最大软件数量（超管不受限；按当前管理员名下应用数统计） */
+/** 检查是否超过最大软件数量（超管不受限；使用有效额度 = 基础 + 临时套餐） */
 async function checkAppLimit(adminId) {
-  const [rows] = await pool.execute('SELECT is_superuser, max_apps FROM admins WHERE id = ?', [adminId]);
-  if (rows.length === 0) throw new Error('管理员不存在');
-  if (rows[0].is_superuser === 1) return;
-  const limit = rows[0].max_apps;
-  if (limit === -1) return; // 不限制
+  const limit = await getEffectiveLimit(adminId, 'max_apps');
+  if (limit === -1) return;
   const [count] = await pool.execute('SELECT COUNT(*) as total FROM apps WHERE owner_id = ?', [adminId]);
   if (count[0].total >= limit) throw new Error(`已达到最大软件数量限制（${limit}个）`);
 }
 
-/** 检查是否超过最大卡密激活数量（超管不受限；按当前管理员名下已激活卡密数统计） */
+/** 检查是否超过最大卡密激活数量（超管不受限；使用有效额度） */
 async function checkCardActivationLimit(adminId) {
-  const [rows] = await pool.execute('SELECT is_superuser, max_card_activations FROM admins WHERE id = ?', [adminId]);
-  if (rows.length === 0) throw new Error('管理员不存在');
-  if (rows[0].is_superuser === 1) return;
-  const limit = rows[0].max_card_activations;
-  if (limit === -1) return; // 不限制
+  const limit = await getEffectiveLimit(adminId, 'max_card_activations');
+  if (limit === -1) return;
   const [count] = await pool.execute('SELECT COUNT(*) as total FROM cards WHERE owner_id = ? AND is_activated = 1', [adminId]);
   if (count[0].total >= limit) throw new Error(`已达到最大卡密激活数量限制（${limit}个）`);
 }
 
-module.exports = { changePassword, getList, create, remove, setStatus, updateLimits, isExpired, checkAppLimit, checkCardActivationLimit };
+module.exports = {
+  changePassword, getList, create, remove, setStatus, updateLimits,
+  isExpired, checkAppLimit, checkCardActivationLimit,
+  getEffectiveLimit, grantPlan, getPlans, renewSubscription,
+  DEFAULT_MAX_APPS, DEFAULT_MAX_CARD_ACTIVATIONS
+};

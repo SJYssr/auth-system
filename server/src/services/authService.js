@@ -43,6 +43,28 @@ async function login(username, password) {
     [token, now, admin.id]
   );
 
+  // 计算有效额度（基础 + 临时套餐）
+  let effectiveMaxApps = admin.max_apps;
+  let effectiveMaxCardActivations = admin.max_card_activations;
+  if (admin.is_superuser !== 1 && admin.max_apps !== -1) {
+    const [planRows] = await pool.execute(
+      `SELECT COALESCE(SUM(delta), 0) AS extra FROM admin_plans
+       WHERE admin_id = ? AND type = 'max_apps'
+         AND effective_at <= NOW() AND (expires_at IS NULL OR expires_at > NOW())`,
+      [admin.id]
+    );
+    effectiveMaxApps = admin.max_apps + planRows[0].extra;
+  }
+  if (admin.is_superuser !== 1 && admin.max_card_activations !== -1) {
+    const [planRows] = await pool.execute(
+      `SELECT COALESCE(SUM(delta), 0) AS extra FROM admin_plans
+       WHERE admin_id = ? AND type = 'max_card_activations'
+         AND effective_at <= NOW() AND (expires_at IS NULL OR expires_at > NOW())`,
+      [admin.id]
+    );
+    effectiveMaxCardActivations = admin.max_card_activations + planRows[0].extra;
+  }
+
   return {
     token,
     admin: {
@@ -52,7 +74,9 @@ async function login(username, password) {
       is_superuser: admin.is_superuser,
       expires_at: admin.expires_at,
       max_apps: admin.max_apps,
-      max_card_activations: admin.max_card_activations
+      max_card_activations: admin.max_card_activations,
+      effective_max_apps: effectiveMaxApps,
+      effective_max_card_activations: effectiveMaxCardActivations
     }
   };
 }

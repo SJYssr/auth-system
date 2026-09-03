@@ -71,15 +71,17 @@ async function cardLogin(softid, card, mac, version, ip) {
     let token;
 
     if (cardData.is_activated === 0) {
-      // 首次激活：校验生成者管理员的激活配额（超管/历史数据不受限）
+      // 首次激活：校验生成者管理员的激活配额（含临时套餐，超管/历史数据不受限）
       if (cardData.owner_id) {
         const [owner] = await conn.execute(
-          'SELECT is_superuser, max_card_activations FROM admins WHERE id = ?',
+          `SELECT a.is_superuser, a.max_card_activations,
+           COALESCE((SELECT SUM(delta) FROM admin_plans p WHERE p.admin_id = a.id AND p.type = 'max_card_activations'
+             AND p.effective_at <= NOW() AND (p.expires_at IS NULL OR p.expires_at > NOW())), 0) AS plan_delta
+           FROM admins a WHERE a.id = ?`,
           [cardData.owner_id]
         );
-        const limit = owner.length > 0 ? owner[0].max_card_activations : -1;
-        const isSuper = owner.length > 0 && owner[0].is_superuser === 1;
-        if (!isSuper && limit !== null && limit !== undefined && limit !== -1) {
+        if (owner.length > 0 && owner[0].is_superuser !== 1 && owner[0].max_card_activations !== -1) {
+          const limit = owner[0].max_card_activations + owner[0].plan_delta;
           const [cnt] = await conn.execute(
             'SELECT COUNT(*) as total FROM cards WHERE owner_id = ? AND is_activated = 1',
             [cardData.owner_id]

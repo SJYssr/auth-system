@@ -136,6 +136,60 @@ router.put('/admins/:id/limits', requireSuperuser, async (req, res) => {
   }
 });
 
+/** ===== 发放临时额度套餐（仅超管） ===== */
+router.post('/admins/:id/plans', requireSuperuser, async (req, res) => {
+  try {
+    const targetId = parseInt(req.params.id);
+    const { type, delta, duration_days, source, remark } = req.body;
+    if (!type || delta === undefined) return res.json(error('请指定配额类型和增减量'));
+    const result = await adminService.grantPlan({
+      adminId: targetId, type, delta, durationDays: duration_days,
+      source, remark, createdBy: req.currentUser.id
+    });
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'grant_plan', module: 'admins', target_type: 'admin', target_id: targetId,
+      description: `发放额度套餐: ${type} +${delta}${duration_days ? ` (${duration_days}天)` : ' 永久'}`, ip_address: req.ip
+    });
+    res.json(success(result, '额度套餐发放成功'));
+  } catch (err) {
+    console.error('发放额度套餐:', err.message);
+    const known = ['配额类型不合法', '增减量必须为非零整数', '管理员不存在'];
+    res.json(error(known.includes(err.message) ? err.message : '发放额度套餐失败'));
+  }
+});
+
+/** ===== 查询管理员额度套餐记录（仅超管） ===== */
+router.get('/admins/:id/plans', requireSuperuser, async (req, res) => {
+  try {
+    const rows = await adminService.getPlans(parseInt(req.params.id));
+    res.json(success(rows));
+  } catch (err) {
+    console.error('额度套餐列表:', err.message);
+    res.json(error('获取额度套餐列表失败'));
+  }
+});
+
+/** ===== 续期管理员账号（仅超管，叠加延长） ===== */
+router.post('/admins/:id/renew', requireSuperuser, async (req, res) => {
+  try {
+    const targetId = parseInt(req.params.id);
+    const { duration_days, remark } = req.body;
+    if (!duration_days) return res.json(error('请指定续期天数'));
+    const result = await adminService.renewSubscription(targetId, duration_days, req.currentUser.id, remark);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'renew_subscription', module: 'admins', target_type: 'admin', target_id: targetId,
+      description: `续期 ${duration_days} 天`, ip_address: req.ip
+    });
+    res.json(success(result, '续期成功'));
+  } catch (err) {
+    console.error('续期管理员:', err.message);
+    const known = ['管理员不存在', '超级管理员无需续期', '续期天数必须为正整数'];
+    res.json(error(known.includes(err.message) ? err.message : '续期失败'));
+  }
+});
+
 /** ===== 管理员登出 ===== */
 router.post('/logout', async (req, res) => {
   try {

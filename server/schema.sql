@@ -166,6 +166,21 @@ CREATE TABLE IF NOT EXISTS error_codes (
     UNIQUE INDEX idx_error_codes_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 额度套餐表（临时配额包，支持限时增加软件/激活配额）
+CREATE TABLE IF NOT EXISTS admin_plans (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    admin_id INT NOT NULL COMMENT '目标管理员ID',
+    type VARCHAR(32) NOT NULL COMMENT '配额类型: max_apps | max_card_activations',
+    delta INT NOT NULL COMMENT '增减量（正=增加，负=扣减）',
+    effective_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '生效时间',
+    expires_at DATETIME NULL COMMENT '过期时间，NULL=永久有效',
+    source VARCHAR(64) DEFAULT 'admin_grant' COMMENT '来源: admin_grant | weekly_card | monthly_card | system_gift',
+    remark VARCHAR(255),
+    created_by INT COMMENT '操作人ID',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_plans_admin_type (admin_id, type, effective_at, expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ========== 默认数据 ==========
 
 -- 默认管理员 (首次部署后请立即修改密码)

@@ -13,12 +13,19 @@ async function getInitData(token) {
   let user = null;
   if (token) {
     const [admins] = await pool.execute(
-      'SELECT id, username, email, is_superuser, expires_at, max_apps, max_card_activations FROM admins WHERE token = ? AND status = ?',
+      `SELECT a.id, a.username, a.email, a.is_superuser, a.expires_at, a.max_apps, a.max_card_activations,
+        COALESCE((SELECT SUM(delta) FROM admin_plans p WHERE p.admin_id = a.id AND p.type = 'max_apps'
+          AND p.effective_at <= NOW() AND (p.expires_at IS NULL OR p.expires_at > NOW())), 0) AS apps_plan_delta,
+        COALESCE((SELECT SUM(delta) FROM admin_plans p WHERE p.admin_id = a.id AND p.type = 'max_card_activations'
+          AND p.effective_at <= NOW() AND (p.expires_at IS NULL OR p.expires_at > NOW())), 0) AS activations_plan_delta
+       FROM admins a WHERE a.token = ? AND a.status = ?`,
       [token, 'enabled']
     );
     if (admins.length > 0) {
       isLoggedIn = true;
       user = admins[0];
+      user.effective_max_apps = user.max_apps === -1 ? -1 : user.max_apps + user.apps_plan_delta;
+      user.effective_max_card_activations = user.max_card_activations === -1 ? -1 : user.max_card_activations + user.activations_plan_delta;
     }
   }
 
