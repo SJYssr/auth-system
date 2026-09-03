@@ -9,3 +9,5 @@ server/package-lock.json
 /.claude
 /dist
 client/dist/
+/architecture/.scratch
+/architecture
