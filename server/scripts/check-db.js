@@ -1,5 +1,5 @@
 /**
- * 只读核对脚本：连接远程数据库，输出实际表结构与索引，用于和 schema.mysql8.sql 对比
+ * 只读核对脚本：连接远程数据库，输出实际表结构与索引，用于和 schema.sql 对比
  * 用法: node scripts/check-db.js
  */
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });

@@ -60,9 +60,7 @@ auth-system/
 │   │   ├── services/      # 业务逻辑层
 │   │   └── utils/         # 统一响应工具
 │   ├── scripts/           # 运维辅助脚本
-│   ├── schema.sql         # 数据库初始化脚本 (通用版)
-│   ├── schema.mysql8.sql  # 数据库初始化脚本 (MySQL 8.0 优化版)
-│   └── migration_v2_admin_limits.sql  # v2 权限分级增量升级脚本
+│   ├── schema.sql         # 数据库初始化脚本 (MySQL 8.0+)
 └── e2e-test/              # Playwright E2E 测试
     ├── admin-seed.js      # 测试数据初始化
     ├── test-admin.js      # 管理端 API 测试
@@ -81,15 +79,10 @@ auth-system/
 ### 1. 初始化数据库
 
 ```bash
-# 全新部署（推荐 MySQL 8.0 优化版）
-mysql -h <DB_HOST> -u <DB_USER> -p < server/schema.mysql8.sql
-
-# 或使用通用版
 mysql -h <DB_HOST> -u <DB_USER> -p < server/schema.sql
-
-# 已有旧版库增量升级
-mysql -h <DB_HOST> -u <DB_USER> -p <DB_NAME> < server/migration_v2_admin_limits.sql
 ```
+
+已有旧版库需增量升级时，请参照 `schema.sql` 文件末尾的注释段落手动执行。
 
 ### 2. 配置后端环境变量
 
