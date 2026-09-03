@@ -19,10 +19,14 @@ async function changePassword(adminId, oldPassword, newPassword) {
   await pool.execute('UPDATE admins SET password = ?, token = NULL WHERE id = ?', [hash, adminId]);
 }
 
-/** 管理员列表（不含密码/token） */
+/** 管理员列表（不含密码/token，附带已用配额统计） */
 async function getList() {
   const [rows] = await pool.execute(
-    'SELECT id, username, email, is_superuser, status, last_login, expires_at, max_apps, max_card_activations, created_at FROM admins ORDER BY id'
+    'SELECT a.id, a.username, a.email, a.is_superuser, a.status, a.last_login, a.expires_at, ' +
+    'a.max_apps, a.max_card_activations, a.created_at, ' +
+    'COALESCE((SELECT COUNT(*) FROM apps ap WHERE ap.owner_id = a.id), 0) as apps_used, ' +
+    'COALESCE((SELECT COUNT(*) FROM cards c WHERE c.owner_id = a.id AND c.is_activated = 1), 0) as activated_used ' +
+    'FROM admins a ORDER BY a.id'
   );
   return rows;
 }
@@ -99,25 +103,25 @@ async function isExpired(adminId) {
   return new Date(rows[0].expires_at) < new Date();
 }
 
-/** 检查是否超过最大软件数量（超管不受限） */
+/** 检查是否超过最大软件数量（超管不受限；按当前管理员名下应用数统计） */
 async function checkAppLimit(adminId) {
   const [rows] = await pool.execute('SELECT is_superuser, max_apps FROM admins WHERE id = ?', [adminId]);
   if (rows.length === 0) throw new Error('管理员不存在');
   if (rows[0].is_superuser === 1) return;
   const limit = rows[0].max_apps;
   if (limit === -1) return; // 不限制
-  const [count] = await pool.execute('SELECT COUNT(*) as total FROM apps WHERE status = ?', ['enabled']);
+  const [count] = await pool.execute('SELECT COUNT(*) as total FROM apps WHERE owner_id = ?', [adminId]);
   if (count[0].total >= limit) throw new Error(`已达到最大软件数量限制（${limit}个）`);
 }
 
-/** 检查是否超过最大卡密激活数量（超管不受限） */
+/** 检查是否超过最大卡密激活数量（超管不受限；按当前管理员名下已激活卡密数统计） */
 async function checkCardActivationLimit(adminId) {
   const [rows] = await pool.execute('SELECT is_superuser, max_card_activations FROM admins WHERE id = ?', [adminId]);
   if (rows.length === 0) throw new Error('管理员不存在');
   if (rows[0].is_superuser === 1) return;
   const limit = rows[0].max_card_activations;
   if (limit === -1) return; // 不限制
-  const [count] = await pool.execute('SELECT COUNT(*) as total FROM cards WHERE is_activated = 1');
+  const [count] = await pool.execute('SELECT COUNT(*) as total FROM cards WHERE owner_id = ? AND is_activated = 1', [adminId]);
   if (count[0].total >= limit) throw new Error(`已达到最大卡密激活数量限制（${limit}个）`);
 }
 

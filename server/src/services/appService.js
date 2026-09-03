@@ -92,17 +92,17 @@ async function getById(id) {
 }
 
 /** 创建应用 */
-async function create(data) {
+async function create(data, ownerId = null) {
   const softid = generateSoftid();
   const [result] = await pool.execute(
     'INSERT INTO apps (softid, app_name, description, version, version_name, developer, ' +
-    'is_free, icon_url, download_url, usage_guide, purchase_url, announcement, force_update, status) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'is_free, icon_url, download_url, usage_guide, purchase_url, announcement, force_update, status, owner_id) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [softid, data.app_name, data.description || null, data.version || '1.0.0',
      data.version_name || null, data.developer || null, data.is_free !== undefined ? data.is_free : 1,
      data.icon_url || null, data.download_url || null, data.usage_guide || null,
      data.purchase_url || null, data.announcement || null,
-     data.force_update !== undefined ? data.force_update : 0, data.status || 'enabled']
+     data.force_update !== undefined ? data.force_update : 0, data.status || 'enabled', ownerId]
   );
   return { id: result.insertId, softid };
 }

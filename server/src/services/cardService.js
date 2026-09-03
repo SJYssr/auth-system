@@ -19,7 +19,7 @@ function generateCardCode(prefix = '') {
 }
 
 /** 批量生成卡密 */
-async function createCards(appId, count = 1, cardType = '天卡', price = 0, points = 1, remark = '', prefix = '') {
+async function createCards(appId, count = 1, cardType = '天卡', price = 0, points = 1, remark = '', prefix = '', ownerId = null) {
   const cards = [];
   let attempts = 0;
   const maxRetries = count * 3;
@@ -29,8 +29,8 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
     const cardCode = generateCardCode(prefix);
     try {
       await pool.execute(
-        'INSERT INTO cards (app_id, card, card_type, price, points, card_remark) VALUES (?, ?, ?, ?, ?, ?)',
-        [appId, cardCode, cardType, price, points, remark || null]
+        'INSERT INTO cards (app_id, card, card_type, price, points, card_remark, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [appId, cardCode, cardType, price, points, remark || null, ownerId]
       );
       cards.push(cardCode);
     } catch (err) {

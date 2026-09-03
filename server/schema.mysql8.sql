@@ -54,10 +54,12 @@ CREATE TABLE IF NOT EXISTS apps (
     announcement TEXT,
     force_update TINYINT NOT NULL DEFAULT 0,
     status VARCHAR(20) NOT NULL DEFAULT 'enabled',
+    owner_id INT NULL COMMENT '创建者管理员ID，NULL表示历史数据/系统创建',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_apps_softid (softid),
-    INDEX idx_apps_status (status)
+    INDEX idx_apps_status (status),
+    INDEX idx_apps_owner_id (owner_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 卡密表
@@ -81,6 +83,7 @@ CREATE TABLE IF NOT EXISTS cards (
     token VARCHAR(64),
     token_expires_at DATETIME DEFAULT NULL,
     version BIGINT DEFAULT 0,
+    owner_id INT NULL COMMENT '生成者管理员ID，NULL表示历史数据/系统创建',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT chk_cards_points CHECK (points >= 0),
@@ -89,7 +92,8 @@ CREATE TABLE IF NOT EXISTS cards (
     INDEX idx_cards_status (status),
     INDEX idx_cards_token (token),
     INDEX idx_cards_expires_at (expires_at),
-    INDEX idx_cards_token_expires (token_expires_at)
+    INDEX idx_cards_token_expires (token_expires_at),
+    INDEX idx_cards_owner_id (owner_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 版本表（库级保证同一应用版本号唯一；当前代码尚未接入 /version 查询，属功能缺口）
@@ -196,7 +200,8 @@ INSERT IGNORE INTO error_codes (id, code, message, description, solution) VALUES
 (8, '-1008', '版本号已存在', '该版本号已被使用', '使用不同版本号'),
 (9, '-1009', '服务器内部错误', '服务器发生未知错误', '稍后重试'),
 (10, '-1010', '机器码不匹配', '卡密绑定的机器码与当前设备不匹配', '使用购买时绑定的设备登录'),
-(11, '-1011', '卡密已在其他设备登录', '该卡密已在其他设备上登录', '先在其他设备退出登录');
+(11, '-1011', '卡密已在其他设备登录', '该卡密已在其他设备上登录', '先在其他设备退出登录'),
+(12, '-1012', '管理员激活配额已满', '生成该卡密的管理员已达最大激活卡密数量限制', '联系超级管理员提升配额');
 
 INSERT IGNORE INTO apis (id, api_name, api_path, api_method, param_count, params_config, return_desc, description) VALUES
 (1, '获取公告', '/announcement', 'Http Post', 1, '[{"name":"Softid","desc":"软件标识"}]', '成功返回公告内容，失败返回错误码，根据错误代码查看错误原因即可', ''),

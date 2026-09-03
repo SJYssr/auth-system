@@ -189,7 +189,7 @@ router.post('/apps', async (req, res) => {
   try {
     // 检查软件数量配额（超管不受限）
     await adminService.checkAppLimit(req.currentUser.id);
-    const result = await appService.create(req.body);
+    const result = await appService.create(req.body, req.currentUser.id);
     await logService.log({
       user_id: req.currentUser.id,
       username: req.currentUser.username,
@@ -272,7 +272,7 @@ router.post('/cards/batch', async (req, res) => {
     const batchCount = Math.min(Math.max(count || 1, 1), 100);
     const prefix = String(card_prefix || '').slice(0, 20);
     const cards = await cardService.createCards(app_id, batchCount, card_type || '天卡',
-      price || 0, points || 1, card_remark || '', prefix);
+      price || 0, points || 1, card_remark || '', prefix, req.currentUser.id);
     await logService.log({
       user_id: req.currentUser.id, username: req.currentUser.username,
       action: 'batch_create', module: 'cards', target_type: 'card',
@@ -293,7 +293,7 @@ router.post('/cards', async (req, res) => {
     // 检查卡密激活数量配额（超管不受限）
     await adminService.checkCardActivationLimit(req.currentUser.id);
     const prefix = String(card_prefix || '').slice(0, 20);
-    const cards = await cardService.createCards(app_id, 1, card_type || '天卡', price || 0, points || 1, '', prefix);
+    const cards = await cardService.createCards(app_id, 1, card_type || '天卡', price || 0, points || 1, '', prefix, req.currentUser.id);
     res.json(success({ count: 1, cards: [{ card: cards[0] }] }, '创建成功'));
   } catch (err) {
     console.error('创建卡密:', err.message);

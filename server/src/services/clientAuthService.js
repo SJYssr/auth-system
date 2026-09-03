@@ -57,7 +57,7 @@ async function cardLogin(softid, card, mac, version, ip) {
 
     // 行锁查卡密
     const [cards] = await conn.execute(
-      'SELECT id, app_id, card, status, is_activated, points, card_type, mac, expires_at, token_expires_at, login_count, token, version ' +
+      'SELECT id, app_id, card, status, is_activated, points, card_type, mac, expires_at, token_expires_at, login_count, token, version, owner_id ' +
       'FROM cards WHERE card = ? AND app_id = ? FOR UPDATE',
       [card, app.id]
     );
@@ -71,6 +71,24 @@ async function cardLogin(softid, card, mac, version, ip) {
     let token;
 
     if (cardData.is_activated === 0) {
+      // 首次激活：校验生成者管理员的激活配额（超管/历史数据不受限）
+      if (cardData.owner_id) {
+        const [owner] = await conn.execute(
+          'SELECT is_superuser, max_card_activations FROM admins WHERE id = ?',
+          [cardData.owner_id]
+        );
+        const limit = owner.length > 0 ? owner[0].max_card_activations : -1;
+        const isSuper = owner.length > 0 && owner[0].is_superuser === 1;
+        if (!isSuper && limit !== null && limit !== undefined && limit !== -1) {
+          const [cnt] = await conn.execute(
+            'SELECT COUNT(*) as total FROM cards WHERE owner_id = ? AND is_activated = 1',
+            [cardData.owner_id]
+          );
+          if (cnt[0].total >= limit) {
+            throw new Error('-1012'); // 管理员激活配额已满
+          }
+        }
+      }
       // 首次激活
       token = generateToken();
       const expiresAt = expireTime(cardData.card_type, cardData.points, now);

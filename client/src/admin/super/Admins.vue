@@ -32,16 +32,22 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="软件上限" width="100">
+        <el-table-column label="软件用量" width="130">
           <template #default="{ row }">
-            <span v-if="row.is_superuser === 1 || row.max_apps === -1" style="color:#909399">不限</span>
-            <span v-else>{{ row.max_apps }}</span>
+            <span v-if="row.is_superuser === 1" style="color:#909399">不限</span>
+            <span v-else-if="row.max_apps === -1" style="color:#909399">{{ row.apps_used ?? 0 }} / 不限</span>
+            <el-tag v-else :type="(row.apps_used ?? 0) >= row.max_apps ? 'danger' : 'success'" size="small">
+              {{ row.apps_used ?? 0 }} / {{ row.max_apps }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="激活上限" width="100">
+        <el-table-column label="激活用量" width="130">
           <template #default="{ row }">
-            <span v-if="row.is_superuser === 1 || row.max_card_activations === -1" style="color:#909399">不限</span>
-            <span v-else>{{ row.max_card_activations }}</span>
+            <span v-if="row.is_superuser === 1" style="color:#909399">不限</span>
+            <span v-else-if="row.max_card_activations === -1" style="color:#909399">{{ row.activated_used ?? 0 }} / 不限</span>
+            <el-tag v-else :type="(row.activated_used ?? 0) >= row.max_card_activations ? 'danger' : 'success'" size="small">
+              {{ row.activated_used ?? 0 }} / {{ row.max_card_activations }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="last_login" label="最后登录" width="170" />
