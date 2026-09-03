@@ -13,6 +13,14 @@ async function getList(page = 1, pageSize = 20) {
   return { rows, pagination: { page, pageSize, total: countResult[0].total } };
 }
 
+/** 公开只读列表：仅启用的错误码，供任意用户查看 */
+async function getPublicList() {
+  const [rows] = await pool.execute(
+    "SELECT code, message, description, solution FROM error_codes WHERE status = 'enabled' ORDER BY code ASC"
+  );
+  return rows;
+}
+
 async function getById(id) {
   const [rows] = await pool.execute('SELECT * FROM error_codes WHERE id = ?', [id]);
   return rows[0] || null;
@@ -44,4 +52,4 @@ async function remove(id) {
   await pool.execute('DELETE FROM error_codes WHERE id = ?', [id]);
 }
 
-module.exports = { getList, getById, create, update, remove };
+module.exports = { getList, getPublicList, getById, create, update, remove };

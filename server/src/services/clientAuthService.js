@@ -49,6 +49,8 @@ async function cardLogin(softid, card, mac, version, ip) {
   }
 
   // 3. 用事务+行锁处理卡密验证
+  // 注意：错误路径只 throw，由统一的 catch 回滚、finally 释放连接，
+  // 避免旧实现中「提前 release 后外层 catch 再次 rollback/release 已归还连接」的连接池污染问题
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -59,17 +61,11 @@ async function cardLogin(softid, card, mac, version, ip) {
       'FROM cards WHERE card = ? AND app_id = ? FOR UPDATE',
       [card, app.id]
     );
-    if (cards.length === 0) {
-      await conn.rollback(); conn.release();
-      throw new Error('-1004'); // 卡密不存在
-    }
+    if (cards.length === 0) throw new Error('-1004'); // 卡密不存在
     const cardData = cards[0];
 
     // 检查卡密状态
-    if (cardData.status !== 'enabled') {
-      await conn.rollback(); conn.release();
-      throw new Error('-1006'); // 卡密已禁用
-    }
+    if (cardData.status !== 'enabled') throw new Error('-1006'); // 卡密已禁用
 
     const now = new Date();
     let token;
@@ -87,16 +83,18 @@ async function cardLogin(softid, card, mac, version, ip) {
       );
     } else {
       // 再次登录
-      const tokenExpired = cardData.token_expires_at && new Date(cardData.token_expires_at) < now;
+      // token 或过期时间任一缺失都视为「当前无有效会话」（登出后二者被置 NULL，
+      // 旧逻辑会把空值当成未过期，导致同设备拿到 null token、异设备永远 -1011）
+      const tokenExpired = !cardData.token || !cardData.token_expires_at
+        || new Date(cardData.token_expires_at) < now;
 
       if (!tokenExpired) {
         // Token 未过期：并发登录限制
         if (cardData.mac && cardData.mac.toLowerCase() === mac.toLowerCase()) {
           // 同设备：直接返回已有 token
-          await conn.commit(); conn.release();
+          await conn.commit();
           return cardData.token;
         } else {
-          await conn.rollback(); conn.release();
           throw new Error('-1011'); // 卡密已在其他设备登录
         }
       }
@@ -104,12 +102,10 @@ async function cardLogin(softid, card, mac, version, ip) {
       // Token 已过期：正常流程
       // 校验机器码
       if (cardData.mac && cardData.mac.toLowerCase() !== mac.toLowerCase()) {
-        await conn.rollback(); conn.release();
         throw new Error('-1010'); // 机器码不匹配
       }
       // 校验卡密是否过期
       if (cardData.expires_at && new Date(cardData.expires_at) < now) {
-        await conn.rollback(); conn.release();
         throw new Error('-1005'); // 卡密已过期
       }
       // 生成新 token（24小时有效期）
@@ -123,12 +119,13 @@ async function cardLogin(softid, card, mac, version, ip) {
     }
 
     await conn.commit();
-    conn.release();
     return token;
 
   } catch (err) {
-    if (conn) { await conn.rollback(); conn.release(); }
+    await conn.rollback().catch(() => { /* 回滚失败不掩盖原始错误 */ });
     throw err;
+  } finally {
+    conn.release();
   }
 }
 
@@ -147,15 +144,16 @@ async function cardLogout(softid, card, token) {
 }
 
 /**
- * 获取卡密到期时间
+ * 获取卡密到期时间（需登录时返回的 Token，防止无凭据枚举卡密状态）
  */
-async function getExpiry(softid, card) {
+async function getExpiry(softid, card, token) {
   const [rows] = await pool.execute(
-    'SELECT c.expires_at FROM cards c JOIN apps a ON c.app_id = a.id ' +
+    'SELECT c.expires_at, c.token FROM cards c JOIN apps a ON c.app_id = a.id ' +
     'WHERE a.softid = ? AND c.card = ? AND c.is_activated = 1',
     [softid, card]
   );
   if (rows.length === 0) throw new Error('-1004');
+  if (!token || rows[0].token !== token) throw new Error('-1002'); // 未登录/Token无效
   const expiresAt = rows[0].expires_at;
   if (!expiresAt) throw new Error('-1004');
   return expiresAt;

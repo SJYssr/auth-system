@@ -45,9 +45,9 @@ router.post('/login', async (req, res) => {
     const { Softid, Card, Mac, Version } = req.body;
     if (!Softid || !Card || !Mac) return res.json({ errcode: '-1001' });
     if (!validateSoftid(Softid)) return res.json({ errcode: '-1001' });
-    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
-            || req.headers['x-real-ip']
-            || req.socket.remoteAddress;
+    // 统一用 express 的 req.ip（trust proxy 已配置，自动处理 XFF），
+    // 避免直接信任可伪造的 x-forwarded-for 头首项
+    const ip = (req.ip || '').replace(/^::ffff:/, '');
     const token = await clientAuthService.cardLogin(Softid, Card, Mac, Version, ip);
     res.json({ token });
   } catch (err) {
@@ -110,13 +110,13 @@ function toLocalStr(d) {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-/** 获取到期时间 */
+/** 获取到期时间（需携带登录返回的 Token） */
 router.post('/expiry', async (req, res) => {
   try {
-    const { Softid, Card } = req.body;
-    if (!Softid || !Card) return res.json({ errcode: '-1001' });
+    const { Softid, Card, Token } = req.body;
+    if (!Softid || !Card || !Token) return res.json({ errcode: '-1001' });
     if (!validateSoftid(Softid)) return res.json({ errcode: '-1001' });
-    const expiresAt = await clientAuthService.getExpiry(Softid, Card);
+    const expiresAt = await clientAuthService.getExpiry(Softid, Card, Token);
     const d = expiresAt instanceof Date ? expiresAt : new Date(expiresAt);
     res.json({ expires_at: toLocalStr(d) });
   } catch (err) {

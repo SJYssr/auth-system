@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth');
 const authService = require('../services/authService');
+const adminService = require('../services/adminService');
 const dashboardService = require('../services/dashboardService');
 const appService = require('../services/appService');
 const cardService = require('../services/cardService');
@@ -18,6 +19,101 @@ const { success, error, paginated, parsePagination } = require('../utils/respons
 
 // 所有路由都需要认证
 router.use(authMiddleware);
+
+/** 敏感操作要求超级管理员（authMiddleware 已挂载 req.isSuperuser） */
+function requireSuperuser(req, res, next) {
+  if (!req.isSuperuser) {
+    return res.status(403).json({
+      success: false,
+      message: '仅超级管理员可执行此操作',
+      errcode: '-1003'
+    });
+  }
+  next();
+}
+
+/** ===== 修改自己的密码 ===== */
+router.put('/password', async (req, res) => {
+  try {
+    const { old_password, new_password } = req.body;
+    if (!old_password || !new_password) return res.json(error('请输入旧密码和新密码'));
+    if (String(new_password).length < 8) return res.json(error('新密码长度至少8位'));
+    await adminService.changePassword(req.currentUser.id, old_password, new_password);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'change_password', module: 'admins', target_type: 'admin', target_id: req.currentUser.id,
+      description: '修改密码', ip_address: req.ip
+    });
+    res.json(success(null, '密码已修改，请使用新密码重新登录'));
+  } catch (err) {
+    console.error('修改密码:', err.message);
+    const known = ['旧密码不正确', '账号不存在'];
+    res.json(error(known.includes(err.message) ? err.message : '修改密码失败'));
+  }
+});
+
+/** ===== 管理员账户管理（仅超管） ===== */
+router.get('/admins', requireSuperuser, async (req, res) => {
+  try {
+    const rows = await adminService.getList();
+    res.json(success(rows));
+  } catch (err) {
+    console.error('管理员列表:', err.message);
+    res.json(error('获取管理员列表失败'));
+  }
+});
+
+router.post('/admins', requireSuperuser, async (req, res) => {
+  try {
+    const { username, email, password, is_superuser } = req.body;
+    if (!username || !email || !password) return res.json(error('用户名、邮箱、密码均为必填'));
+    if (String(password).length < 8) return res.json(error('密码长度至少8位'));
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.json(error('邮箱格式不正确'));
+    const result = await adminService.create({ username, email, password, is_superuser });
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'create', module: 'admins', target_type: 'admin', target_id: result.id,
+      target_name: username, ip_address: req.ip
+    });
+    res.json(success(result, '创建成功'));
+  } catch (err) {
+    console.error('创建管理员:', err.message);
+    if (err.code === 'ER_DUP_ENTRY') return res.json(error('用户名或邮箱已存在'));
+    res.json(error('创建管理员失败'));
+  }
+});
+
+router.put('/admins/:id/status', requireSuperuser, async (req, res) => {
+  try {
+    const { status } = req.body;
+    await adminService.setStatus(parseInt(req.params.id), status, req.currentUser.id);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'update', module: 'admins', target_type: 'admin', target_id: parseInt(req.params.id),
+      description: `状态改为 ${status}`, ip_address: req.ip
+    });
+    res.json(success(null, '更新成功'));
+  } catch (err) {
+    console.error('更新管理员状态:', err.message);
+    res.json(error(['状态不合法', '不能禁用自己的账号', '不能禁用最后一个超级管理员'].includes(err.message) ? err.message : '更新失败'));
+  }
+});
+
+router.delete('/admins/:id', requireSuperuser, async (req, res) => {
+  try {
+    await adminService.remove(parseInt(req.params.id), req.currentUser.id);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'delete', module: 'admins', target_type: 'admin', target_id: parseInt(req.params.id),
+      ip_address: req.ip
+    });
+    res.json(success(null, '删除成功'));
+  } catch (err) {
+    console.error('删除管理员:', err.message);
+    const known = ['不能删除自己的账号', '不能删除最后一个超级管理员', '管理员不存在'];
+    res.json(error(known.includes(err.message) ? err.message : '删除管理员失败'));
+  }
+});
 
 /** ===== 管理员登出 ===== */
 router.post('/logout', async (req, res) => {
@@ -104,7 +200,7 @@ router.put('/apps/:id', async (req, res) => {
   }
 });
 
-router.delete('/apps/:id', async (req, res) => {
+router.delete('/apps/:id', requireSuperuser, async (req, res) => {
   try {
     await appService.remove(req.params.id);
     res.json(success(null, '删除成功'));
@@ -186,7 +282,7 @@ router.put('/cards/:id', async (req, res) => {
   }
 });
 
-router.delete('/cards/:id', async (req, res) => {
+router.delete('/cards/:id', requireSuperuser, async (req, res) => {
   try {
     await cardService.remove(req.params.id);
     res.json(success(null, '删除成功'));
@@ -212,10 +308,14 @@ router.get('/versions', async (req, res) => {
 
 router.post('/versions', async (req, res) => {
   try {
+    if (!req.body.app_id || !req.body.version) return res.json(error('请指定应用和版本号'));
     const result = await versionService.create(req.body);
     res.json(success(result, '创建成功'));
   } catch (err) {
     console.error('创建版本:', err.message);
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.json(error('该应用的版本号已存在', '-1008'));
+    }
     res.json(error('创建版本失败'));
   }
 });
@@ -230,7 +330,7 @@ router.put('/versions/:id', async (req, res) => {
   }
 });
 
-router.delete('/versions/:id', async (req, res) => {
+router.delete('/versions/:id', requireSuperuser, async (req, res) => {
   try {
     await versionService.remove(req.params.id);
     res.json(success(null, '删除成功'));
@@ -251,7 +351,7 @@ router.get('/site-data', async (req, res) => {
     res.json(error('获取网站配置失败'));
   }
 });
-router.put('/site-data', async (req, res) => {
+router.put('/site-data', requireSuperuser, async (req, res) => {
   try {
     await siteDataService.update(req.body);
     res.json(success(null, '更新成功'));
@@ -271,7 +371,7 @@ router.get('/datas', async (req, res) => {
   }
 });
 
-router.put('/datas', async (req, res) => {
+router.put('/datas', requireSuperuser, async (req, res) => {
   try {
     await siteDataService.update(req.body);
     res.json(success(null, '更新成功'));
@@ -281,8 +381,8 @@ router.put('/datas', async (req, res) => {
   }
 });
 
-/** ===== 操作日志 ===== */
-router.get('/logs', async (req, res) => {
+/** ===== 操作日志（仅超管） ===== */
+router.get('/logs', requireSuperuser, async (req, res) => {
   try {
     const { page, pageSize } = parsePagination(req.query);
     const filters = {};
@@ -296,7 +396,7 @@ router.get('/logs', async (req, res) => {
   }
 });
 
-/** ===== API管理 ===== */
+/** ===== API管理（所有管理员可查，仅超管可编辑） ===== */
 router.get('/apis', async (req, res) => {
   try {
     const { page, pageSize } = parsePagination(req.query);
@@ -308,7 +408,7 @@ router.get('/apis', async (req, res) => {
   }
 });
 
-router.post('/apis', async (req, res) => {
+router.post('/apis', requireSuperuser, async (req, res) => {
   try {
     const result = await apiManageService.create(req.body);
     res.json(success(result, '创建成功'));
@@ -318,7 +418,7 @@ router.post('/apis', async (req, res) => {
   }
 });
 
-router.put('/apis/:id', async (req, res) => {
+router.put('/apis/:id', requireSuperuser, async (req, res) => {
   try {
     await apiManageService.update(req.params.id, req.body);
     res.json(success(null, '更新成功'));
@@ -328,7 +428,7 @@ router.put('/apis/:id', async (req, res) => {
   }
 });
 
-router.delete('/apis/:id', async (req, res) => {
+router.delete('/apis/:id', requireSuperuser, async (req, res) => {
   try {
     await apiManageService.remove(req.params.id);
     res.json(success(null, '删除成功'));
@@ -338,7 +438,7 @@ router.delete('/apis/:id', async (req, res) => {
   }
 });
 
-/** ===== 错误码管理 ===== */
+/** ===== 错误码管理（所有管理员可查，仅超管可编辑） ===== */
 router.get('/error-codes', async (req, res) => {
   try {
     const { page, pageSize } = parsePagination(req.query);
@@ -350,7 +450,7 @@ router.get('/error-codes', async (req, res) => {
   }
 });
 
-router.post('/error-codes', async (req, res) => {
+router.post('/error-codes', requireSuperuser, async (req, res) => {
   try {
     const result = await errorCodeService.create(req.body);
     res.json(success(result, '创建成功'));
@@ -360,7 +460,7 @@ router.post('/error-codes', async (req, res) => {
   }
 });
 
-router.put('/error-codes/:id', async (req, res) => {
+router.put('/error-codes/:id', requireSuperuser, async (req, res) => {
   try {
     await errorCodeService.update(req.params.id, req.body);
     res.json(success(null, '更新成功'));
@@ -370,7 +470,7 @@ router.put('/error-codes/:id', async (req, res) => {
   }
 });
 
-router.delete('/error-codes/:id', async (req, res) => {
+router.delete('/error-codes/:id', requireSuperuser, async (req, res) => {
   try {
     await errorCodeService.remove(req.params.id);
     res.json(success(null, '删除成功'));

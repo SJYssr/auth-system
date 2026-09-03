@@ -8,6 +8,8 @@ const authService = require('../services/authService');
 const initService = require('../services/initService');
 const captchaService = require('../services/captchaService');
 const appService = require('../services/appService');
+const apiManageService = require('../services/apiManageService');
+const errorCodeService = require('../services/errorCodeService');
 const logService = require('../services/logService');
 const { success, error } = require('../utils/response');
 
@@ -73,6 +75,28 @@ router.post('/login', async (req, res) => {
       console.error('登录异常:', err.message);
     }
     res.json(error(message));
+  }
+});
+
+/** API 文档（所有用户可见，编辑仅超管在后台操作） */
+router.get('/apis', async (req, res) => {
+  try {
+    const rows = await apiManageService.getPublicList();
+    res.json(success(rows));
+  } catch (err) {
+    console.error('公开API文档:', err.message);
+    res.json(error('获取API文档失败'));
+  }
+});
+
+/** 错误码对照表（所有用户可见，编辑仅超管在后台操作） */
+router.get('/error-codes', async (req, res) => {
+  try {
+    const rows = await errorCodeService.getPublicList();
+    res.json(success(rows));
+  } catch (err) {
+    console.error('公开错误码表:', err.message);
+    res.json(error('获取错误码表失败'));
   }
 });
 

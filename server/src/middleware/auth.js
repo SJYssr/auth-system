@@ -15,7 +15,7 @@ async function authMiddleware(req, res, next) {
       : null;
 
     if (!token) {
-      return res.json({
+      return res.status(401).json({
         success: false,
         message: '未提供认证Token',
         errcode: '-1002'
@@ -29,10 +29,10 @@ async function authMiddleware(req, res, next) {
     );
 
     if (rows.length === 0) {
-      return res.json({
+      return res.status(401).json({
         success: false,
         message: 'Token无效或已失效',
-        errcode: '-1003'
+        errcode: '-1002'
       });
     }
 
@@ -43,7 +43,7 @@ async function authMiddleware(req, res, next) {
       const tokenAge = Date.now() - new Date(admin.last_login).getTime();
       if (tokenAge > TOKEN_MAX_AGE) {
         await pool.execute('UPDATE admins SET token = NULL WHERE id = ?', [admin.id]);
-        return res.json({
+        return res.status(401).json({
           success: false,
           message: 'Token已过期，请重新登录',
           errcode: '-1002'
@@ -52,6 +52,7 @@ async function authMiddleware(req, res, next) {
     }
 
     req.currentUser = admin;
+    req.isSuperuser = admin.is_superuser === 1;
     next();
   } catch (err) {
     console.error('认证中间件错误:', err);

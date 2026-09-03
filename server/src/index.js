@@ -167,6 +167,32 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     keyGenerator: (req) => req.ip
   }));
 
+  // 健康检查（必须注册在 SPA fallback 的 app.get('*') 之前，否则会被其拦截导致请求挂起）
+  app.get('/health', (req, res) => {
+    const pad = n => String(n).padStart(2, '0');
+    const now = new Date();
+    const localTime = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    res.json({ status: 'ok', time: localTime });
+  });
+
+  // 客户端卡密 API 限流（挂载在根路径，不被 /api/public 限流覆盖）
+  app.post(
+    ['/announcement', '/version', '/login', '/logout', '/download', '/usage', '/purchase', '/expiry'],
+    rateLimit({
+      windowMs: 60 * 1000,
+      max: 60,
+      keyGenerator: (req) => req.ip,
+      handler: (req, res) => res.status(429).json({ errcode: '-1009' })
+    })
+  );
+  // 卡密登录接口严格限流，防暴力枚举卡密
+  app.post('/login', rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    keyGenerator: (req) => req.ip,
+    handler: (req, res) => res.status(429).json({ errcode: '-1009' })
+  }));
+
   // 路由
   app.use('/', require('./routes/root'));
   app.use('/api/public', require('./routes/public'));
@@ -190,16 +216,11 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
 
   // SPA fallback
   app.get('*', (req, res) => {
-    if (req.path.startsWith('/api/') || req.path === '/health') return;
+    // 未知 API 路径必须显式响应 404，旧写法 return 会导致请求永久挂起
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ success: false, message: '接口不存在', errcode: '-1001' });
+    }
     res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
-  });
-
-  // 健康检查
-  app.get('/health', (req, res) => {
-    const pad = n => String(n).padStart(2, '0');
-    const now = new Date();
-    const localTime = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    res.json({ status: 'ok', time: localTime });
   });
 
   // 全局错误处理
