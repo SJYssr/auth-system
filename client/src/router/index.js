@@ -66,13 +66,13 @@ const routes = [
         path: 'cards',
         name: 'Cards',
         component: () => import('@/admin/super/Cards.vue'),
-        meta: { keepAlive: true, title: '卡密管理', superuserOnly: true }
+        meta: { title: '卡密管理', superuserOnly: true }
       },
       {
         path: 'versions',
         name: 'Versions',
         component: () => import('@/admin/super/Versions.vue'),
-        meta: { keepAlive: true, title: '版本管理', superuserOnly: true }
+        meta: { title: '版本管理', superuserOnly: true }
       },
       {
         path: 'datas',

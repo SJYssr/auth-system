@@ -668,10 +668,14 @@ const handleExport = () => {
 }
 
 const initData = async () => {
+  // 生命周期重置：每次进入页面清空上次的卡密数据与分页，避免切换路由后残留旧状态
+  cards.value = {}
+  pagination.value = { page: 1, per_page: 20, total_records: 0, total_pages: 0 }
+  appName.value = ''
+  searchForm.app_id = appId.value || ''
   await loadAppOptions()
   // 如果从应用详情页跳转过来，自动加载该应用的卡密
   if (appId.value) {
-    searchForm.app_id = appId.value
     const selected = appOptions.value.find(a => a.id === appId.value)
     appName.value = selected ? selected.app_name : ''
     tableLoading.value = true
