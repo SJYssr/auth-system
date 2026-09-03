@@ -27,9 +27,23 @@ sharedRequest.interceptors.response.use(
         return res
     },
     error => {
-        if (error.response && error.response.status === 401) {
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+            // token 失效/权限异常：清除本地登录态。登录页在 hash 根路径 '#/'，
+            // 原跳转 /login 在非 hash 路径上不存在（404）。
             localStorage.removeItem('token')
-            window.location.href = '/login'
+            if (error.response.status === 401 && window.location.hash !== '#/') {
+                window.location.hash = '#/'
+                window.location.reload()
+            }
+        }
+        // 非 2xx 时后端仍返回 { success:false, message } JSON，
+        // 归一化为带友好文案的 Error，避免各页面显示 "Request failed with status code xxx"
+        const data = error.response && error.response.data
+        if (data && typeof data === 'object' && data.message) {
+            const norm = new Error(data.message)
+            norm.errcode = data.errcode
+            norm.status = error.response.status
+            return Promise.reject(norm)
         }
         return Promise.reject(error)
     }

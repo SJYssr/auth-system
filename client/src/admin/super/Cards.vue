@@ -532,7 +532,7 @@ const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除该卡密吗？', '警告', { type: 'warning' })
     tableLoading.value = true
-    const response = store.deleteCard(row.id)
+    const response = await store.deleteCard(row.id)
     ElMessage.success(response.message || '删除成功')
     await store.fetchCards(buildSearchParams())
     pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0

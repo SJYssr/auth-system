@@ -60,33 +60,34 @@ const routes = [
         path: 'apps',
         name: 'Apps',
         component: Apps,
-        meta: { keepAlive: true, title: '应用管理' }
+        meta: { keepAlive: true, title: '应用管理', superuserOnly: true }
       },
       {
         path: 'cards',
         name: 'Cards',
         component: () => import('@/admin/super/Cards.vue'),
-        meta: { keepAlive: true, title: '卡密管理' }
+        meta: { keepAlive: true, title: '卡密管理', superuserOnly: true }
       },
       {
         path: 'versions',
         name: 'Versions',
         component: () => import('@/admin/super/Versions.vue'),
-        meta: { keepAlive: true, title: '版本管理' }
+        meta: { keepAlive: true, title: '版本管理', superuserOnly: true }
       },
       {
         path: 'datas',
         name: 'Datas',
         component: Datas,
-        meta: { keepAlive: true, title: '网站设置' }
+        meta: { keepAlive: true, title: '网站设置', superuserOnly: true }
       },
       {
         path: 'admin-logs',
         name: 'AdminLogs',
         component: AdminLogs,
-        meta: { keepAlive: true, title: '操作日志' }
+        meta: { keepAlive: true, title: '操作日志', superuserOnly: true }
       },
       {
+        // API文档/错误码：所有管理员可查看，编辑按钮仅超管可见（后端 requireSuperuser 强制）
         path: 'apis',
         name: 'ApiList',
         component: () => import('@/admin/super/ApiList.vue'),
@@ -107,25 +108,28 @@ const router = createRouter({
   routes
 })
 
-let initLoading = false
+// 并发导航时共享同一个初始化 Promise，避免旧实现用布尔量跳过 initialize
+// 导致后续判断拿到未定义登录态的竞态
+let initPromise = null
 
 router.beforeEach(async (to, from, next) => {
   NProgress.start()
   const appStore = useAppStore()
   const { initializeInfo } = storeToRefs(appStore)
 
-  if (Object.keys(initializeInfo.value).length === 0 && !initLoading) {
-    initLoading = true
-    try {
-      await appStore.initialize()
-    } catch (error) {
-      ElMessage.error(error.message || '初始化失败')
-    } finally {
-      initLoading = false
+  if (Object.keys(initializeInfo.value).length === 0) {
+    if (!initPromise) {
+      initPromise = appStore.initialize()
+        .catch((error) => {
+          ElMessage.error(error.message || '初始化失败')
+        })
+        .finally(() => { initPromise = null })
     }
+    await initPromise
   }
 
   const isLoggedIn = initializeInfo.value.login_status?.is_logged_in
+  const isSuperuser = !!initializeInfo.value.login_status?.user?.is_superuser
 
   // 已登录用户访问登录页 → 直接进后台
   if (isLoggedIn && to.path === '/') {
@@ -136,6 +140,12 @@ router.beforeEach(async (to, from, next) => {
   if (to.matched.some(r => r.meta.requiresAuth) && !isLoggedIn) {
     ElMessage.warning('请先登录')
     return next('/')
+  }
+
+  // 超管专属页面：非超管访问时回仪表盘（后端同样有 requireSuperuser 兜底）
+  if (to.matched.some(r => r.meta.superuserOnly) && !isSuperuser) {
+    ElMessage.warning('无权限访问该页面')
+    return next('/admin/dashboard')
   }
 
   if (to.path === '/admin' || to.path === '/admin/') {

@@ -10,7 +10,8 @@
 
     <div class="table-section">
       <div class="toolbar-section">
-        <el-button type="primary" @click="handleAdd"><el-icon><Plus /></el-icon>新增错误码</el-button>
+        <el-button v-if="isSuperuser" type="primary" @click="handleAdd"><el-icon><Plus /></el-icon>新增错误码</el-button>
+        <span v-else class="readonly-hint">错误码对照表对所有用户开放查看，仅超级管理员可编辑</span>
       </div>
       <el-table :data="list" v-loading="loading">
         <el-table-column type="index" label="序号" width="60" />
@@ -19,7 +20,7 @@
         <el-table-column prop="description" label="说明" min-width="200" show-overflow-tooltip />
         <el-table-column prop="solution" label="解决方案" min-width="200" show-overflow-tooltip />
 
-        <el-table-column label="操作" width="160">
+        <el-table-column v-if="isSuperuser" label="操作" width="160">
           <template #default="{row}">
             <el-button-group>
               <el-button type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
@@ -63,6 +64,11 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Refresh } from '@element-plus/icons-vue'
 import { superErrorCodeService } from '@/utils/service'
+import { useAppStore } from '@/stores/modules/app'
+
+// 查看对所有管理员开放；新增/编辑/删除仅超管（后端 requireSuperuser 同步强制）
+const appStore = useAppStore()
+const isSuperuser = computed(() => !!appStore.initializeInfo?.login_status?.user?.is_superuser)
 
 const list = ref([])
 const loading = ref(true)
@@ -127,5 +133,6 @@ onMounted(() => { fetchData() })
 
 <style scoped>
 .toolbar-section { margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #ebeef5; }
+.readonly-hint { color:#909399;font-size:13px; }
 .drawer-form { padding:20px; }
 </style>

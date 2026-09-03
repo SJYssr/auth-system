@@ -332,22 +332,14 @@ const handleProductAction = (product) => {
   const isLoggedIn = appStore.initializeInfo?.login_status?.is_logged_in
 
   if (!isLoggedIn) {
-    // 未登录，跳转到登录页面
+    // 未登录，跳转到登录页面（登录页是 hash 根路径 '/'，此前跳 /login 为死链）
     ElMessage.info('请先登录后再进行购买')
-    router.push('/login')
+    router.push('/')
     return
   }
 
-  // 已登录，根据产品类型处理
-  if (isProductFree(product)) {
-    // 免费产品，直接跳转到应用中心
-    ElMessage.success('正在为您跳转到应用中心...')
-    router.push('/admin/appcenter')
-  } else {
-    // 付费产品，跳转到应用中心进行购买
-    ElMessage.success('正在为您跳转到应用中心进行购买...')
-    router.push('/admin/appcenter')
-  }
+  // 进入应用详情页购买/下载（此前跳转的 /admin/appcenter 路由不存在，是死链）
+  router.push(`/app/${product.id}`)
 }
 
 // 判断产品是否免费 (apps表没有price字段，用is_free判断)

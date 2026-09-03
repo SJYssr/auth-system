@@ -8,9 +8,8 @@
         </el-icon>
         <template #title>综合管理平台</template>
       </el-menu-item>
-      <!-- 根据用户权限显示不同的菜单 -->
-      <template v-if="login_is_superuser">
-        <template v-for="menu in superMenus" :key="menu.path">
+      <!-- 所有管理员可见仪表盘与API文档；超管额外看到其余管理菜单 -->
+        <template v-for="menu in visibleMenus" :key="menu.path">
           <!-- 如果是子菜单 -->
           <el-sub-menu v-if="menu.children" :index="menu.path">
             <template #title>
@@ -34,7 +33,6 @@
             <template #title>{{ menu.title }}</template>
           </el-menu-item>
         </template>
-      </template>
     </el-menu>
   </el-aside>
 
@@ -70,9 +68,8 @@
         class="mobile-menu"
         @select="handleMobileMenuSelect"
       >
-        <!-- 根据用户权限显示不同的菜单 -->
-        <template v-if="login_is_superuser">
-          <template v-for="menu in superMenus" :key="menu.path">
+        <!-- 所有管理员可见仪表盘与API文档；超管额外看到其余管理菜单 -->
+          <template v-for="menu in visibleMenus" :key="menu.path">
             <!-- 如果是子菜单 -->
             <el-sub-menu v-if="menu.children" :index="menu.path">
               <template #title>
@@ -96,7 +93,6 @@
               <template #title>{{ menu.title }}</template>
             </el-menu-item>
           </template>
-        </template>
       </el-menu>
     </div>
   </el-drawer>
@@ -177,6 +173,20 @@ defineExpose({
   isMobile
 })
 
+// 非超管也可见的菜单：仪表盘 + API文档/错误码（只读，编辑入口在页面内按角色隐藏）
+const normalMenus = [
+  { path: '/admin/dashboard', icon: 'Monitor', title: '仪表盘' },
+  {
+    path: '/admin/api-management',
+    icon: 'Management',
+    title: 'API管理',
+    children: [
+      { path: '/admin/apis', icon: 'Grid', title: 'API列表' },
+      { path: '/admin/error-codes', icon: 'DocumentCopy', title: '错误码对照表' }
+    ]
+  }
+]
+
 const superMenus = [
   { path: '/admin/dashboard', icon: 'Monitor', title: '仪表盘' },
   {
@@ -201,6 +211,8 @@ const superMenus = [
   { path: '/admin/admin-logs', icon: 'DocumentCopy', title: '系统日志' },
   { path: '/admin/datas', icon: 'Setting', title: '网站设置' }
 ]
+
+const visibleMenus = computed(() => (login_is_superuser.value ? superMenus : normalMenus))
 </script>
 
 <style scoped>

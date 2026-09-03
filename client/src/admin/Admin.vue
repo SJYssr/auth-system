@@ -32,7 +32,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTabsStore } from '@/stores/modules/tabs'
 import Sidebar from '@/admin/Sidebar.vue'
@@ -41,7 +41,8 @@ import Header from '@/admin/Header.vue'
 const sidebarRef = ref(null)
 const router = useRouter()
 const tabsStore = useTabsStore()
-const visitedViews = tabsStore.visitedViews
+// 保持对 store 数组的响应式引用（直接解构会失去响应式，且下面以 .value 访问会崩溃）
+const visitedViews = computed(() => tabsStore.visitedViews)
 
 // 处理打开移动端菜单
 const handleOpenMobileMenu = () => {
