@@ -3,15 +3,20 @@
  */
 const pool = require('../config/db');
 
-async function getList(appId, page = 1, pageSize = 20) {
+async function getList(appId, page = 1, pageSize = 20, status = '') {
+  const conds = ['av.app_id = ?'];
+  const values = [appId];
+  if (status) { conds.push('av.status = ?'); values.push(status); }
+  const whereSql = ` WHERE ${conds.join(' AND ')}`;
   const offset = (page - 1) * pageSize;
   const [rows] = await pool.execute(
-    'SELECT av.*, a.app_name FROM app_versions av LEFT JOIN apps a ON a.id = av.app_id WHERE av.app_id = ? ORDER BY av.created_at DESC LIMIT ? OFFSET ?',
-    [appId, String(pageSize), String(offset)]
+    'SELECT av.*, a.app_name FROM app_versions av LEFT JOIN apps a ON a.id = av.app_id' +
+    `${whereSql} ORDER BY av.created_at DESC LIMIT ? OFFSET ?`,
+    [...values, String(pageSize), String(offset)]
   );
   const [countResult] = await pool.execute(
-    'SELECT COUNT(*) as total FROM app_versions WHERE app_id = ?',
-    [appId]
+    `SELECT COUNT(*) as total FROM app_versions av${whereSql}`,
+    values
   );
   return { rows, pagination: { page, pageSize, total: countResult[0].total } };
 }

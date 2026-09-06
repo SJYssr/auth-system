@@ -68,17 +68,23 @@ async function getPurchaseUrl(softid) {
   return rows[0].purchase_url || '';
 }
 
-/** 应用列表（分页，含卡密统计） */
-async function getList(page = 1, pageSize = 20) {
+/** 应用列表（分页，含卡密统计），支持 app_name 模糊 / status 过滤 */
+async function getList(page = 1, pageSize = 20, filters = {}) {
+  const conds = [];
+  const values = [];
+  if (filters.app_name) { conds.push('a.app_name LIKE ?'); values.push(`%${filters.app_name}%`); }
+  if (filters.status) { conds.push('a.status = ?'); values.push(filters.status); }
+  if (filters.owner_id) { conds.push('a.owner_id = ?'); values.push(filters.owner_id); }
+  const whereSql = conds.length ? ` WHERE ${conds.join(' AND ')}` : '';
   const offset = (page - 1) * pageSize;
   const [rows] = await pool.execute(
     'SELECT a.*, ' +
     'COALESCE((SELECT COUNT(*) FROM cards c WHERE c.app_id = a.id), 0) as total_cards, ' +
     'COALESCE((SELECT COUNT(*) FROM cards c WHERE c.app_id = a.id AND c.is_activated = 1), 0) as activated_cards ' +
-    'FROM apps a ORDER BY a.created_at DESC LIMIT ? OFFSET ?',
-    [String(pageSize), String(offset)]
+    `FROM apps a${whereSql} ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
+    [...values, String(pageSize), String(offset)]
   );
-  const [countResult] = await pool.execute('SELECT COUNT(*) as total FROM apps');
+  const [countResult] = await pool.execute(`SELECT COUNT(*) as total FROM apps a${whereSql}`, values);
   return {
     rows,
     pagination: { page, pageSize, total: countResult[0].total }

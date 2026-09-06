@@ -173,9 +173,19 @@ defineExpose({
   isMobile
 })
 
-// 非超管也可见的菜单：仪表盘 + API文档/错误码（只读，编辑入口在页面内按角色隐藏）
+// 非超管可见菜单：仪表盘 + 应用管理（本人数据，后端按 owner 隔离）+ API 文档（只读）
 const normalMenus = [
   { path: '/admin/dashboard', icon: 'Monitor', title: '仪表盘' },
+  {
+    path: '/admin/app-management',
+    icon: 'Management',
+    title: '应用管理',
+    children: [
+      { path: '/admin/apps', icon: 'Grid', title: '应用列表' },
+      { path: '/admin/cards', icon: 'Tickets', title: '卡密管理' },
+      { path: '/admin/versions', icon: 'Upload', title: '版本管理' }
+    ]
+  },
   {
     path: '/admin/api-management',
     icon: 'Management',

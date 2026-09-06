@@ -3,13 +3,20 @@
  */
 const pool = require('../config/db');
 
-async function getList(page = 1, pageSize = 20) {
+async function getList(page = 1, pageSize = 20, keyword = '') {
+  const conds = [];
+  const values = [];
+  if (keyword) {
+    conds.push('(api_name LIKE ? OR api_path LIKE ?)');
+    values.push(`%${keyword}%`, `%${keyword}%`);
+  }
+  const whereSql = conds.length ? ` WHERE ${conds.join(' AND ')}` : '';
   const offset = (page - 1) * pageSize;
   const [rows] = await pool.execute(
-    'SELECT * FROM apis ORDER BY created_at DESC LIMIT ? OFFSET ?',
-    [String(pageSize), String(offset)]
+    `SELECT * FROM apis${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+    [...values, String(pageSize), String(offset)]
   );
-  const [countResult] = await pool.execute('SELECT COUNT(*) as total FROM apis');
+  const [countResult] = await pool.execute(`SELECT COUNT(*) as total FROM apis${whereSql}`, values);
   return { rows, pagination: { page, pageSize, total: countResult[0].total } };
 }
 

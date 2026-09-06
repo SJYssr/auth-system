@@ -32,7 +32,8 @@
           @change="handleSearch"
         >
           <el-option label="全部" value="" />
-          <el-option label="系统登录" value="system" />
+          <el-option label="系统登录" value="auth" />
+          <el-option label="管理员管理" value="admins" />
           <el-option label="应用管理" value="apps" />
           <el-option label="卡密管理" value="cards" />
           <el-option label="版本管理" value="versions" />
@@ -47,7 +48,7 @@
         >
           <el-option label="全部" value="" />
           <el-option label="成功" value="success" />
-          <el-option label="失败" value="error" />
+          <el-option label="失败" value="fail" />
         </el-select>
         <el-date-picker
           v-model="dateRange"

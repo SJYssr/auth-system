@@ -36,20 +36,27 @@ function record(name, ok, detail = '') {
 
     // 侧栏菜单
     const sidebarText = await page.locator('.sidebar, .el-menu').first().innerText().catch(() => '');
-    const hasAppsMenu = /应用列表|卡密管理|版本管理/.test(sidebarText);
+    const hasAppsMenu = /应用列表/.test(sidebarText) && /卡密管理/.test(sidebarText) && /版本管理/.test(sidebarText);
     const hasLogsMenu = /系统日志/.test(sidebarText);
     const hasDatasMenu = /网站设置/.test(sidebarText);
+    const hasAdminMenu = /管理员管理/.test(sidebarText);
     const hasApiMenu = /API列表|API管理/.test(sidebarText) && /错误码/.test(sidebarText);
-    record('侧栏隐藏超管菜单（应用/日志/网站设置）', !hasAppsMenu && !hasLogsMenu && !hasDatasMenu,
-      `应用菜单=${hasAppsMenu} 日志=${hasLogsMenu} 网站设置=${hasDatasMenu}`);
+    record('侧栏开放应用管理（应用/卡密/版本）', hasAppsMenu, `应用菜单=${hasAppsMenu}`);
+    record('侧栏仍隐藏系统级菜单（日志/网站设置/管理员管理）', !hasLogsMenu && !hasDatasMenu && !hasAdminMenu,
+      `日志=${hasLogsMenu} 网站设置=${hasDatasMenu} 管理员管理=${hasAdminMenu}`);
     record('侧栏保留仪表盘+API管理', /仪表盘/.test(sidebarText) && hasApiMenu);
     await page.screenshot({ path: 'shots/20-normal-sidebar.png' });
 
-    // 直接访问超管页面 → 被守卫拦回仪表盘
-    for (const p of ['apps', 'cards', 'versions', 'datas', 'admin-logs']) {
+    // 应用/卡密/版本对普通管理员开放（本人数据）；datas/admin-logs 仍被守卫拦回仪表盘
+    for (const p of ['apps', 'cards', 'versions']) {
       await page.goto(`${BASE}/#/admin/${p}`, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(1000);
-      record(`路由守卫拦截 /admin/${p}`, page.url().includes('dashboard'), page.url());
+      record(`普通管理员可访问 /admin/${p}`, !page.url().includes('dashboard'), page.url());
+    }
+    for (const p of ['datas', 'admin-logs']) {
+      await page.goto(`${BASE}/#/admin/${p}`, { waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(1000);
+      record(`路由守卫拦截超管专属 /admin/${p}`, page.url().includes('dashboard'), page.url());
     }
 
     // API 列表只读（无新增/编辑按钮）

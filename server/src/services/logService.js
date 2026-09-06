@@ -35,24 +35,27 @@ async function log(data) {
   );
 }
 
-/** 查询日志（分页） */
+/** 查询日志（分页）
+ *  支持过滤：user_id / action / module / username(模糊) / response_status / start_date / end_date */
 async function getList(filters = {}, page = 1, pageSize = 20) {
-  let sql = 'SELECT * FROM logs WHERE 1=1';
+  const conds = [];
   const values = [];
-  if (filters.user_id) { sql += ' AND user_id = ?'; values.push(filters.user_id); }
-  if (filters.action) { sql += ' AND action = ?'; values.push(filters.action); }
-  if (filters.module) { sql += ' AND module = ?'; values.push(filters.module); }
+  if (filters.user_id) { conds.push('user_id = ?'); values.push(filters.user_id); }
+  if (filters.action) { conds.push('action = ?'); values.push(filters.action); }
+  if (filters.module) { conds.push('module = ?'); values.push(filters.module); }
+  if (filters.username) { conds.push('username LIKE ?'); values.push(`%${filters.username}%`); }
+  if (filters.response_status) { conds.push('response_status = ?'); values.push(filters.response_status); }
+  if (filters.start_date) { conds.push('created_at >= ?'); values.push(`${filters.start_date} 00:00:00`); }
+  if (filters.end_date) { conds.push('created_at < DATE_ADD(?, INTERVAL 1 DAY)'); values.push(filters.end_date); }
 
+  const whereSql = conds.length ? ` WHERE ${conds.join(' AND ')}` : '';
   const offset = (page - 1) * pageSize;
   const [rows] = await pool.execute(
-    sql + ' ORDER BY created_at DESC LIMIT ? OFFSET ?',
+    `SELECT * FROM logs${whereSql} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
     [...values, String(pageSize), String(offset)]
   );
   const [countResult] = await pool.execute(
-    'SELECT COUNT(*) as total FROM logs WHERE 1=1' +
-    (filters.user_id ? ' AND user_id = ?' : '') +
-    (filters.action ? ' AND action = ?' : '') +
-    (filters.module ? ' AND module = ?' : ''),
+    `SELECT COUNT(*) as total FROM logs${whereSql}`,
     values
   );
   return { rows, pagination: { page, pageSize, total: countResult[0].total } };

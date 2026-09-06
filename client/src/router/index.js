@@ -60,19 +60,19 @@ const routes = [
         path: 'apps',
         name: 'Apps',
         component: Apps,
-        meta: { keepAlive: true, title: '应用管理', superuserOnly: true }
+        meta: { keepAlive: true, title: '应用管理' }
       },
       {
         path: 'cards',
         name: 'Cards',
         component: () => import('@/admin/super/Cards.vue'),
-        meta: { title: '卡密管理', superuserOnly: true }
+        meta: { title: '卡密管理' }
       },
       {
         path: 'versions',
         name: 'Versions',
         component: () => import('@/admin/super/Versions.vue'),
-        meta: { title: '版本管理', superuserOnly: true }
+        meta: { title: '版本管理' }
       },
       {
         path: 'datas',

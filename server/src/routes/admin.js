@@ -32,6 +32,28 @@ function requireSuperuser(req, res, next) {
   next();
 }
 
+/** 非超管只能操作自己拥有的资源（owner_id 相等），超管不受限 */
+function ensureOwner(res, currentUser, ownerId, label = '资源') {
+  if (currentUser.is_superuser !== 1 && Number(ownerId) !== Number(currentUser.id)) {
+    res.status(403).json({ success: false, message: `无权操作该${label}`, errcode: '-1003' });
+    return false;
+  }
+  return true;
+}
+
+/** 校验应用归属（非超管只能使用/管理自己创建的应用）并返回应用；不存在或无权时已发送响应并返回 null */
+async function getOwnApp(req, res, appId) {
+  const app = await appService.getById(appId);
+  if (!app) { res.json(error('应用不存在')); return null; }
+  if (!ensureOwner(res, req.currentUser, app.owner_id, '应用')) return null;
+  return app;
+}
+
+/** 业务错误（如配额不足）以普通 Error 抛出，SQL 错误带 code —— 用于把可读信息透出给前端 */
+function isBusinessError(err) {
+  return !!(err && !err.code && err.message);
+}
+
 /** ===== 修改自己的密码 ===== */
 router.put('/password', async (req, res) => {
   try {
@@ -208,7 +230,8 @@ router.post('/logout', async (req, res) => {
 /** ===== 仪表盘 ===== */
 router.get('/dashboard', async (req, res) => {
   try {
-    const stats = await dashboardService.getStats();
+    // 非超管只统计自己归属的数据，超管看全平台
+    const stats = await dashboardService.getStats(req.currentUser.id, req.isSuperuser);
     res.json(success(stats));
   } catch (err) {
     console.error('仪表盘:', err.message);
@@ -220,7 +243,12 @@ router.get('/dashboard', async (req, res) => {
 router.get('/apps', async (req, res) => {
   try {
     const { page, pageSize } = parsePagination(req.query);
-    const result = await appService.getList(page, pageSize);
+    const filters = {};
+    if (req.query.app_name) filters.app_name = req.query.app_name;
+    if (req.query.status) filters.status = req.query.status;
+    // 非超管只看到自己创建的应用
+    if (!req.isSuperuser) filters.owner_id = req.currentUser.id;
+    const result = await appService.getList(page, pageSize, filters);
     res.json(paginated(result.rows, result.pagination));
   } catch (err) {
     console.error('应用列表:', err.message);
@@ -232,6 +260,7 @@ router.get('/apps/:id', async (req, res) => {
   try {
     const app = await appService.getById(req.params.id);
     if (!app) return res.json(error('应用不存在'));
+    if (!ensureOwner(res, req.currentUser, app.owner_id, '应用')) return;
     res.json(success(app));
   } catch (err) {
     console.error('获取应用:', err.message);
@@ -257,12 +286,17 @@ router.post('/apps', async (req, res) => {
     if (err.code === 'ER_DUP_ENTRY') {
       return res.json(error('应用名已存在'));
     }
+    // 配额不足等业务错误信息透出给前端
+    if (isBusinessError(err)) return res.json(error(err.message));
     res.json(error('创建应用失败'));
   }
 });
 
 router.put('/apps/:id', async (req, res) => {
   try {
+    const app = await appService.getById(req.params.id);
+    if (!app) return res.json(error('应用不存在'));
+    if (!ensureOwner(res, req.currentUser, app.owner_id, '应用')) return;
     await appService.update(req.params.id, req.body);
     await logService.log({
       user_id: req.currentUser.id, username: req.currentUser.username,
@@ -277,8 +311,11 @@ router.put('/apps/:id', async (req, res) => {
   }
 });
 
-router.delete('/apps/:id', requireSuperuser, async (req, res) => {
+router.delete('/apps/:id', async (req, res) => {
   try {
+    const app = await appService.getById(req.params.id);
+    if (!app) return res.json(error('应用不存在'));
+    if (!ensureOwner(res, req.currentUser, app.owner_id, '应用')) return;
     await appService.remove(req.params.id);
     res.json(success(null, '删除成功'));
   } catch (err) {
@@ -293,10 +330,16 @@ router.get('/cards', async (req, res) => {
     const { page, pageSize } = parsePagination(req.query);
     const filters = {};
     if (req.query.app_id) filters.app_id = parseInt(req.query.app_id);
-    if (req.query.card) filters.card = req.query.card;
+    // 卡号搜索兼容旧参数 card 与前端实际使用的 card_content
+    if (req.query.card || req.query.card_content) filters.card = req.query.card || req.query.card_content;
     if (req.query.status) filters.status = req.query.status;
     if (req.query.card_type) filters.card_type = req.query.card_type;
     if (req.query.is_activated !== undefined) filters.is_activated = parseInt(req.query.is_activated);
+    if (req.query.card_remark) filters.card_remark = req.query.card_remark;
+    if (req.query.is_expired === '1') filters.is_expired = 1;
+    else if (req.query.is_expired === '0') filters.is_expired = 0;
+    // 非超管只看到自己生成/归属的卡密
+    if (!req.isSuperuser) filters.owner_id = req.currentUser.id;
     const result = await cardService.getList(filters, page, pageSize);
     res.json(paginated(result.rows, result.pagination));
   } catch (err) {
@@ -309,6 +352,7 @@ router.get('/cards/:id', async (req, res) => {
   try {
     const card = await cardService.getById(req.params.id);
     if (!card) return res.json(error('卡密不存在'));
+    if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
     res.json(success(card));
   } catch (err) {
     console.error('获取卡密:', err.message);
@@ -321,6 +365,9 @@ router.post('/cards/batch', async (req, res) => {
   try {
     const { app_id, count, card_type, price, points, card_remark, card_prefix } = req.body;
     if (!app_id) return res.json(error('请选择应用'));
+    // 非超管只能在自己创建的应用内发卡
+    const app = await getOwnApp(req, res, app_id);
+    if (!app) return;
     // 检查卡密激活数量配额（超管不受限）
     await adminService.checkCardActivationLimit(req.currentUser.id);
     const batchCount = Math.min(Math.max(count || 1, 1), 100);
@@ -335,6 +382,7 @@ router.post('/cards/batch', async (req, res) => {
     res.json(success({ count: cards.length, cards: cards.map(c => ({ card: c })) }, '生成成功'));
   } catch (err) {
     console.error('批量生成卡密:', err.message);
+    if (isBusinessError(err)) return res.json(error(err.message));
     res.json(error('生成卡密失败'));
   }
 });
@@ -344,6 +392,8 @@ router.post('/cards', async (req, res) => {
     // 单张生成（返回结构与批量一致：{ count, cards:[{card}] }）
     const { app_id, card_type, price, points, card_prefix } = req.body;
     if (!app_id) return res.json(error('请选择应用'));
+    const app = await getOwnApp(req, res, app_id);
+    if (!app) return;
     // 检查卡密激活数量配额（超管不受限）
     await adminService.checkCardActivationLimit(req.currentUser.id);
     const prefix = String(card_prefix || '').slice(0, 20);
@@ -351,12 +401,16 @@ router.post('/cards', async (req, res) => {
     res.json(success({ count: 1, cards: [{ card: cards[0] }] }, '创建成功'));
   } catch (err) {
     console.error('创建卡密:', err.message);
+    if (isBusinessError(err)) return res.json(error(err.message));
     res.json(error('创建卡密失败'));
   }
 });
 
 router.put('/cards/:id', async (req, res) => {
   try {
+    const card = await cardService.getById(req.params.id);
+    if (!card) return res.json(error('卡密不存在'));
+    if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
     await cardService.update(req.params.id, req.body);
     res.json(success(null, '更新成功'));
   } catch (err) {
@@ -365,8 +419,11 @@ router.put('/cards/:id', async (req, res) => {
   }
 });
 
-router.delete('/cards/:id', requireSuperuser, async (req, res) => {
+router.delete('/cards/:id', async (req, res) => {
   try {
+    const card = await cardService.getById(req.params.id);
+    if (!card) return res.json(error('卡密不存在'));
+    if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
     await cardService.remove(req.params.id);
     res.json(success(null, '删除成功'));
   } catch (err) {
@@ -381,7 +438,9 @@ router.get('/versions', async (req, res) => {
     const { page, pageSize } = parsePagination(req.query);
     const appId = parseInt(req.query.app_id);
     if (!appId) return res.json(error('请指定应用'));
-    const result = await versionService.getList(appId, page, pageSize);
+    const app = await getOwnApp(req, res, appId);
+    if (!app) return;
+    const result = await versionService.getList(appId, page, pageSize, req.query.status || '');
     res.json(paginated(result.rows, result.pagination));
   } catch (err) {
     console.error('版本列表:', err.message);
@@ -392,7 +451,15 @@ router.get('/versions', async (req, res) => {
 router.post('/versions', async (req, res) => {
   try {
     if (!req.body.app_id || !req.body.version) return res.json(error('请指定应用和版本号'));
+    const app = await getOwnApp(req, res, req.body.app_id);
+    if (!app) return;
     const result = await versionService.create(req.body);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'create', module: 'versions', target_type: 'app_version', target_id: result.id,
+      target_name: `版本 ${req.body.version}`, description: `为应用「${app.app_name}」新增版本 ${req.body.version}`,
+      ip_address: req.ip
+    });
     res.json(success(result, '创建成功'));
   } catch (err) {
     console.error('创建版本:', err.message);
@@ -405,7 +472,17 @@ router.post('/versions', async (req, res) => {
 
 router.put('/versions/:id', async (req, res) => {
   try {
+    const row = await versionService.getById(req.params.id);
+    if (!row) return res.json(error('版本不存在'));
+    const app = await getOwnApp(req, res, row.app_id);
+    if (!app) return;
     await versionService.update(req.params.id, req.body);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'update', module: 'versions', target_type: 'app_version', target_id: parseInt(req.params.id),
+      target_name: `版本 ${row.version}`, description: `更新应用「${app.app_name}」版本 ${row.version}`,
+      ip_address: req.ip
+    });
     res.json(success(null, '更新成功'));
   } catch (err) {
     console.error('更新版本:', err.message);
@@ -413,9 +490,19 @@ router.put('/versions/:id', async (req, res) => {
   }
 });
 
-router.delete('/versions/:id', requireSuperuser, async (req, res) => {
+router.delete('/versions/:id', async (req, res) => {
   try {
+    const row = await versionService.getById(req.params.id);
+    if (!row) return res.json(error('版本不存在'));
+    const app = await getOwnApp(req, res, row.app_id);
+    if (!app) return;
     await versionService.remove(req.params.id);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'delete', module: 'versions', target_type: 'app_version', target_id: parseInt(req.params.id),
+      target_name: `版本 ${row.version}`, description: `删除应用「${app.app_name}」版本 ${row.version}`,
+      ip_address: req.ip
+    });
     res.json(success(null, '删除成功'));
   } catch (err) {
     console.error('删除版本:', err.message);
@@ -469,8 +556,16 @@ router.get('/logs', requireSuperuser, async (req, res) => {
   try {
     const { page, pageSize } = parsePagination(req.query);
     const filters = {};
-    if (req.query.action) filters.action = req.query.action;
+    if (req.query.actionType) filters.action = req.query.actionType; // 前端字段
+    if (!filters.action && req.query.action) filters.action = req.query.action; // 兼容旧参数
     if (req.query.module) filters.module = req.query.module;
+    if (req.query.username) filters.username = req.query.username;
+    if (req.query.status) {
+      // 前端下拉失败值为 error，库中存 fail
+      filters.response_status = req.query.status === 'error' ? 'fail' : req.query.status;
+    }
+    if (req.query.start_date) filters.start_date = req.query.start_date;
+    if (req.query.end_date) filters.end_date = req.query.end_date;
     const result = await logService.getList(filters, page, pageSize);
     res.json(paginated(result.rows, result.pagination));
   } catch (err) {
@@ -483,7 +578,7 @@ router.get('/logs', requireSuperuser, async (req, res) => {
 router.get('/apis', async (req, res) => {
   try {
     const { page, pageSize } = parsePagination(req.query);
-    const result = await apiManageService.getList(page, pageSize);
+    const result = await apiManageService.getList(page, pageSize, req.query.keyword || '');
     res.json(paginated(result.rows, result.pagination));
   } catch (err) {
     console.error('API列表:', err.message);
@@ -525,7 +620,7 @@ router.delete('/apis/:id', requireSuperuser, async (req, res) => {
 router.get('/error-codes', async (req, res) => {
   try {
     const { page, pageSize } = parsePagination(req.query);
-    const result = await errorCodeService.getList(page, pageSize);
+    const result = await errorCodeService.getList(page, pageSize, req.query.keyword || '');
     res.json(paginated(result.rows, result.pagination));
   } catch (err) {
     console.error('错误码列表:', err.message);

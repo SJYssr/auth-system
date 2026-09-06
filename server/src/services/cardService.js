@@ -41,32 +41,30 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
   return cards;
 }
 
-/** 卡密列表（分页） */
+/** 卡密列表（分页），支持 app_id / card / card_remark / status / card_type / is_activated / is_expired 过滤 */
 async function getList(filters = {}, page = 1, pageSize = 20) {
-  let sql = 'SELECT c.*, a.app_name FROM cards c LEFT JOIN apps a ON c.app_id = a.id WHERE 1=1';
+  const conds = [];
   const values = [];
 
-  if (filters.app_id) { sql += ' AND c.app_id = ?'; values.push(filters.app_id); }
-  if (filters.card) { sql += ' AND c.card LIKE ?'; values.push(`%${filters.card}%`); }
-  if (filters.status) { sql += ' AND c.status = ?'; values.push(filters.status); }
-  if (filters.card_type) { sql += ' AND c.card_type = ?'; values.push(filters.card_type); }
-  if (filters.is_activated !== undefined) { sql += ' AND c.is_activated = ?'; values.push(filters.is_activated); }
+  if (filters.app_id) { conds.push('c.app_id = ?'); values.push(filters.app_id); }
+  if (filters.card) { conds.push('c.card LIKE ?'); values.push(`%${filters.card}%`); }
+  if (filters.card_remark) { conds.push('c.card_remark LIKE ?'); values.push(`%${filters.card_remark}%`); }
+  if (filters.status) { conds.push('c.status = ?'); values.push(filters.status); }
+  if (filters.card_type) { conds.push('c.card_type = ?'); values.push(filters.card_type); }
+  if (filters.is_activated !== undefined && filters.is_activated !== '') { conds.push('c.is_activated = ?'); values.push(filters.is_activated); }
+  if (filters.owner_id) { conds.push('c.owner_id = ?'); values.push(filters.owner_id); }
+  // 到期筛选（未激活/未设置到期时间的卡视为未到期）
+  if (filters.is_expired === 1) conds.push('c.expires_at IS NOT NULL AND c.expires_at < NOW()');
+  if (filters.is_expired === 0) conds.push('(c.expires_at IS NULL OR c.expires_at >= NOW())');
 
+  const whereSql = conds.length ? ` WHERE ${conds.join(' AND ')}` : '';
   const offset = (page - 1) * pageSize;
   const [rows] = await pool.execute(
-    sql + ' ORDER BY c.created_at DESC LIMIT ? OFFSET ?',
+    `SELECT c.*, a.app_name FROM cards c LEFT JOIN apps a ON c.app_id = a.id${whereSql}` +
+    ' ORDER BY c.created_at DESC LIMIT ? OFFSET ?',
     [...values, String(pageSize), String(offset)]
   );
-
-  let countSql = 'SELECT COUNT(*) as total FROM cards c WHERE 1=1';
-  const countValues = [];
-  if (filters.app_id) { countSql += ' AND c.app_id = ?'; countValues.push(filters.app_id); }
-  if (filters.card) { countSql += ' AND c.card LIKE ?'; countValues.push(`%${filters.card}%`); }
-  if (filters.status) { countSql += ' AND c.status = ?'; countValues.push(filters.status); }
-  if (filters.card_type) { countSql += ' AND c.card_type = ?'; countValues.push(filters.card_type); }
-  if (filters.is_activated !== undefined) { countSql += ' AND c.is_activated = ?'; countValues.push(filters.is_activated); }
-
-  const [countRes] = await pool.execute(countSql, countValues);
+  const [countRes] = await pool.execute(`SELECT COUNT(*) as total FROM cards c${whereSql}`, values);
 
   return { rows, pagination: { page, pageSize, total: countRes[0].total } };
 }
@@ -80,23 +78,36 @@ async function getById(id) {
   return rows[0] || null;
 }
 
-/** 更新卡密（仅允许白名单字段） */
+/** 更新卡密（仅允许白名单字段）。
+ *  机器码(mac) / 到期时间(expires_at) 允许修改：
+ *  - expires_at 传空字符串按 null 处理（表示不限/清除到期时间）
+ *  - 对已激活卡修改 mac（换绑）时同时清空 token，使旧设备的会话立即失效 */
 async function update(id, data) {
-  const fields = [];
-  const values = [];
-  const allowedFields = ['card_type', 'price', 'points', 'card_remark', 'status'];
-  for (const key of allowedFields) {
-    if (data[key] !== undefined) {
-      fields.push(`${key} = ?`);
-      values.push(data[key]);
+  const allowedFields = ['card_type', 'price', 'points', 'card_remark', 'status', 'mac', 'expires_at'];
+  const keys = allowedFields.filter(k => data[k] !== undefined);
+  if (keys.length === 0) return;
+
+  // 换绑机器码时清空会话，避免旧机器继续用有效 token 登入
+  let clearSession = false;
+  if (keys.includes('mac')) {
+    const [rows] = await pool.execute('SELECT mac, is_activated FROM cards WHERE id = ?', [id]);
+    if (rows.length && rows[0].is_activated === 1 && String(rows[0].mac || '') !== String(data.mac || '')) {
+      clearSession = true;
     }
   }
-  if (fields.length === 0) return;
+
+  const fields = [];
+  const values = [];
+  for (const key of keys) {
+    fields.push(`${key} = ?`);
+    values.push(key === 'expires_at' && data[key] === '' ? null : data[key]);
+  }
+  if (clearSession) {
+    fields.push('token = NULL');
+    fields.push('token_expires_at = NULL');
+  }
   values.push(id);
-  await pool.execute(
-    `UPDATE cards SET ${fields.join(', ')} WHERE id = ?`,
-    values
-  );
+  await pool.execute(`UPDATE cards SET ${fields.join(', ')} WHERE id = ?`, values);
 }
 
 /** 删除卡密 */

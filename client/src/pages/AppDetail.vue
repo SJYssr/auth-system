@@ -61,6 +61,30 @@
             </div>
 
             <div class="app-actions-panel">
+              <a
+                v-if="downloadUrl && (isAppFree(currentApp) || !purchaseUrl)"
+                class="action-primary"
+                :href="downloadUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+              >免费使用 / 下载</a>
+              <a
+                v-if="purchaseUrl && !isAppFree(currentApp)"
+                class="action-primary"
+                :href="purchaseUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+              >立即购买</a>
+              <a
+                v-if="usageUrl"
+                class="action-secondary"
+                :href="usageUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+              >查看使用说明</a>
+              <div v-if="!hasActions" class="no-action">
+                暂无在线购买/下载入口，请联系开发者获取授权卡密
+              </div>
             </div>
           </div>
         </section>
@@ -223,7 +247,12 @@ const loadAppDetail = async () => {
 
 
 const goBack = () => {
-  router.go(-1)
+  // 从产品中心进入时 history 可回退；深链直接打开时回退无历史，落到产品中心
+  if (window.history.state?.back) {
+    router.back()
+  } else {
+    router.push('/products')
+  }
 }
 
 // apps表没有price字段，用is_free判断
@@ -231,6 +260,12 @@ const isAppFree = (app) => {
   if (!app) return false
   return app.is_free == 1 || app.is_free === true
 }
+
+// 可用的操作入口
+const downloadUrl = computed(() => currentApp.value?.download_url || '')
+const purchaseUrl = computed(() => currentApp.value?.purchase_url || '')
+const usageUrl = computed(() => currentApp.value?.usage_guide || '')
+const hasActions = computed(() => !!downloadUrl.value || !!purchaseUrl.value || !!usageUrl.value)
 
 const formatDate = (dateString) => {
   if (!dateString) return ''
@@ -504,6 +539,25 @@ onMounted(async () => {
   gap: 20px;
   align-items: stretch;
   min-width: 280px;
+}
+
+.action-primary,
+.action-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.no-action {
+  padding: 20px 32px;
+  border: 3px dashed #cbd5e1;
+  color: #6b7280;
+  font-size: 14px;
+  text-align: center;
+  font-weight: 600;
 }
 
 .action-primary {
