@@ -181,7 +181,8 @@ router.afterEach(() => {
   const tabsStore = useTabsStore()
   if (router.currentRoute.value.meta.title) {
     document.title = router.currentRoute.value.meta.title
-    tabsStore.addVisitedView(router.currentRoute.value)
+    // 同时登记访问标签与 keep-alive 缓存（meta.keepAlive 的页面切换回前台不重建）
+    tabsStore.addView(router.currentRoute.value)
   }
 })
 

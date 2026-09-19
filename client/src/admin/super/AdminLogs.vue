@@ -223,7 +223,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onActivated } from 'vue'
+import { ref, onActivated } from 'vue'
 import { storeToRefs } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Delete, Refresh } from '@element-plus/icons-vue'
@@ -473,7 +473,7 @@ const initData = async () => {
   }
 }
 
-onMounted(initData)
+// keep-alive 下 onActivated 在首次挂载时同样触发，仅需注册一个（否则双请求）
 onActivated(initData)
 </script>
 

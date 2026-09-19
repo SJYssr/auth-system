@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **在线会话管理面板与远程踢下线（kill switch）**：`GET /api/admin/sessions` 在线会话分页列表（卡密/机器码/应用过滤，owner 隔离）；`DELETE /api/admin/sessions/:id` 踢下线即时生效并留痕审计日志；后台新增「在线会话」页。
+- **Webhook 事件系统**：订阅 `card.activated`/`card.disabled`/`card.enabled`/`card.deleted` 事件，HMAC-SHA256 签名投递（`X-Webhook-Signature`），支持 ping 测试；后台新增「Webhook 推送」页；webhooks 表（schema 增量段落 v2.4）。
+- **开发者生态**：OpenAPI 3.0 客户端 API 契约（`docs/openapi.json`，服务端托管于 `/openapi.json`）；**Python/C#/Java 零依赖客户端 SDK**（`sdk/`，含心跳线程、错误码映射、接入指南、机器码生成建议、Webhook 验签示例）。
+- **发布自动化**（`release.yml`）：推送 `v*` tag 自动构建并推送 Docker 镜像到 GHCR、创建 GitHub Release。
+- **开源治理文件**：SECURITY.md（漏洞私下披露流程）、CODE_OF_CONDUCT.md。
+
 ### 修复
 
 - **前端已知问题集中修复**：应用管理页加载失败时表格 loading 永远卡死（无 try/finally + 未处理 Promise 拒绝）；仪表盘「收入趋势」图实际是按应用名汇总的柱状图，图题/函数名与数据语义全部错位（更名为「各应用收入分布」并修正指标卡栅格 4→3 列）；站点设置中的「登录页背景图」配置前端从未消费（现在登录页正确应用）；操作日志清理调用残留的「后端未实现」404 兼容层掩盖真实错误（该接口早已上线）；「清理无效参数」按钮名不符实（改为「重置筛选」）；移除死导入与指向不存在字段的表单校验规则。

@@ -23,7 +23,10 @@
 
       <router-view v-slot="{ Component }">
         <transition name="slide-fade" mode="out-in">
-          <component :is="Component" :key="$route.fullPath" />
+          <!-- keepAlive 接线：meta.keepAlive 的页面按路由名缓存（缓存清单来自 tabs store） -->
+          <keep-alive :include="cachedViews">
+            <component :is="Component" :key="$route.name" />
+          </keep-alive>
         </transition>
       </router-view>
 
@@ -43,6 +46,7 @@ const router = useRouter()
 const tabsStore = useTabsStore()
 // 保持对 store 数组的响应式引用（直接解构会失去响应式，且下面以 .value 访问会崩溃）
 const visitedViews = computed(() => tabsStore.visitedViews)
+const cachedViews = computed(() => tabsStore.cachedViews)
 
 // 处理打开移动端菜单
 const handleOpenMobileMenu = () => {

@@ -189,10 +189,14 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     keyGenerator: (req) => req.ip
   }));
 
+  // OpenAPI 3.0 规范（客户端卡密 API 的集成契约，供 SDK 与文档工具消费）
+  app.get('/openapi.json', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../docs/openapi.json'));
+  });
+
   // 健康检查（必须注册在 SPA fallback 的 app.get('*') 之前，否则会被其拦截导致请求挂起）。
   // 附带数据库连通性探测：Docker healthcheck 依赖本接口，DB 挂掉时返回 503 而非假健康
-  app.get('/health', async (req, res) => {
-    const pad = n => String(n).padStart(2, '0');
+  app.get('/health', async (req, res) => {    const pad = n => String(n).padStart(2, '0');
     const now = new Date();
     const localTime = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
     let db = 'ok';
