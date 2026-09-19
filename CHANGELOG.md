@@ -6,6 +6,10 @@
 
 ### 修复
 
+- **默认管理员密码不可知**：初始 schema 的 admin 账号密码明文无从查证，新部署无法登录。种子数据改为文档化默认密码 `admin / Admin@123456`（README 已注明，首次登录后应立即修改），schema 注释附自定义初始密码的生成方式。
+
+### 修复
+
 - **中文数据整站乱码**：官方 mysql:8 镜像等环境下客户端默认 `character_set_client=latin1`，导入 UTF-8 的 schema.sql 时中文被双重编码入库。schema.sql 现内置 `SET NAMES utf8mb4` 强制会话字符集，任何导入路径均正确；seed 文件同步修复；`docs/deployment.md` 新增「数据乱码的预防与修复」专节（含 HEX 鉴别方法与逐列修复 SQL）。
 
 ### 新增

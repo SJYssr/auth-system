@@ -206,9 +206,11 @@ CREATE TABLE IF NOT EXISTS admin_plans (
 
 -- ========== 默认数据 ==========
 
--- 默认管理员（与旧 schema 相同的 BCrypt 哈希；首次部署后立即修改密码）
+-- 默认超级管理员：admin / Admin@123456（首次登录后立即在「修改密码」中更改！）
+-- 如需自定义初始密码，先用项目内 bcryptjs 生成哈希替换：
+--   node -e "console.log(require('bcryptjs').hashSync('你的密码', 10))"
 INSERT IGNORE INTO admins (id, username, email, password, is_superuser, status)
-VALUES (1, 'admin', 'admin@example.com', '$2a$10$bZHV5mHWBkXQgdyLCYBOvOgOKlappkY/rN.zlkLWr.SbMvNQixeIu', 1, 'enabled');
+VALUES (1, 'admin', 'admin@example.com', '$2a$10$Mp4MInXiooCUnPuiLY4A/ebkkKHKWaW2WdWIPEcLXx6qbHlNo5vDK', 1, 'enabled');
 
 INSERT IGNORE INTO datas (id, site_name, site_title, keywords, description, logo_url, favicon_url, icp_number, contact_email, contact_phone, contact_address, copyright, copyright_since, status)
 VALUES (1, '应用卡密管理系统', '应用卡密管理与授权平台', '卡密管理,应用管理,版本管理', '基于卡密的现代化应用授权管理系统', '', '', '', 'admin@example.com', '', '', 'Auth System', '2025', 'enabled');

@@ -39,7 +39,13 @@ docker compose up -d --build
 curl --fail http://localhost:3000/health   # {"status":"ok"} 即就绪
 ```
 
-打开 `http://localhost:3000`，使用默认超管 `admin` 登录（**首次部署后立即修改密码**）。详细的代理配置、备份恢复、升级与排障见 [docs/deployment.md](docs/deployment.md)。
+打开 `http://localhost:3000`，使用默认超管登录：
+
+| 账号 | 密码 |
+|---|---|
+| `admin` | `Admin@123456` |
+
+**首次登录后立即在后台修改密码**。详细的代理配置、备份恢复、升级与排障见 [docs/deployment.md](docs/deployment.md)。
 
 ### 方式二：源码部署
 
