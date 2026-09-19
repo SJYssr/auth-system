@@ -184,6 +184,7 @@ const normalMenus = [
       { path: '/admin/apps', icon: 'Grid', title: '应用列表' },
       { path: '/admin/cards', icon: 'Tickets', title: '卡密管理' },
       { path: '/admin/sessions', icon: 'Connection', title: '在线会话' },
+      { path: '/admin/webhooks', icon: 'Bell', title: 'Webhook 推送' },
       { path: '/admin/versions', icon: 'Upload', title: '版本管理' }
     ]
   },
@@ -208,6 +209,7 @@ const superMenus = [
       { path: '/admin/apps', icon: 'Grid', title: '应用列表' },
       { path: '/admin/cards', icon: 'Tickets', title: '卡密管理' },
       { path: '/admin/sessions', icon: 'Connection', title: '在线会话' },
+      { path: '/admin/webhooks', icon: 'Bell', title: 'Webhook 推送' },
       { path: '/admin/versions', icon: 'Upload', title: '版本管理' }
     ]
   },

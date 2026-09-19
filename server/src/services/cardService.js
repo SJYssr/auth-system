@@ -4,6 +4,7 @@
 const crypto = require('crypto');
 const pool = require('../config/db');
 const { escapeLike } = require('../utils/response');
+const webhookService = require('./webhookService');
 
 /** 生成卡密：可选前缀 + 14位随机段（无模偏差） */
 function generateCardCode(prefix = '') {
@@ -122,6 +123,17 @@ async function update(id, data) {
     }
   }
 
+  // 状态变化时推送 webhook（禁用/启用），先取旧状态与应用归属
+  let statusEvent = null;
+  let statusChangedCard = null;
+  if (keys.includes('status')) {
+    const [rows] = await pool.execute('SELECT card, app_id, status FROM cards WHERE id = ?', [id]);
+    if (rows.length && rows[0].status !== data.status) {
+      statusChangedCard = rows[0];
+      statusEvent = data.status === 'disabled' ? 'card.disabled' : 'card.enabled';
+    }
+  }
+
   const fields = [];
   const values = [];
   for (const key of keys) {
@@ -134,6 +146,10 @@ async function update(id, data) {
   }
   values.push(id);
   await pool.execute(`UPDATE cards SET ${fields.join(', ')} WHERE id = ?`, values);
+
+  if (statusEvent && statusChangedCard) {
+    webhookService.emit(statusEvent, { app_id: statusChangedCard.app_id, card: statusChangedCard.card, status: data.status });
+  }
 }
 
 /** 在线会话列表（分页）：token 未过期即视为在线，支持卡密/机器码关键词与应用过滤。
@@ -175,9 +191,13 @@ async function kickSession(id, operator = { is_superuser: false, id: null }) {
   return { ok: true, card: card.card };
 }
 
-/** 删除卡密 */
+/** 删除卡密（删除后推送 card.deleted） */
 async function remove(id) {
+  const [rows] = await pool.execute('SELECT card, app_id FROM cards WHERE id = ?', [id]);
   await pool.execute('DELETE FROM cards WHERE id = ?', [id]);
+  if (rows.length > 0) {
+    webhookService.emit('card.deleted', { app_id: rows[0].app_id, card: rows[0].card });
+  }
 }
 
 module.exports = { createCards, getList, getById, update, remove, generateCardCode, listSessions, kickSession };

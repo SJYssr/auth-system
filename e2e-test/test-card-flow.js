@@ -5,6 +5,7 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const http = require('http');
 
 const envLocal = path.join(__dirname, '.env');
 const envFallback = path.join(__dirname, '../server/.env');
@@ -149,6 +150,39 @@ async function cleanup() {
     record('踢下线成功', r.data?.success === true, JSON.stringify(r.data).slice(0, 60));
     r = await j('POST', '/heartbeat', { Softid: softid, Card: c1, Token: token2 });
     record('被踢会话心跳→-1002', r.data?.errcode === '-1002', `errcode=${r.data?.errcode}`);
+
+    // ===== Webhook 事件推送：本进程起接收器，验证 card.disabled 事件与 HMAC 签名 =====
+    const hookResult = await (async () => {
+      let payload = null;
+      let secret = null;
+      const server = http.createServer((req, res) => {
+        let body = '';
+        req.on('data', c => body += c);
+        req.on('end', () => {
+          payload = { event: req.headers['x-webhook-event'], signature: req.headers['x-webhook-signature'], body };
+          res.writeHead(200); res.end('ok');
+        });
+      });
+      await new Promise(r => server.listen(0, '127.0.0.1', r));
+      const hookUrl = `http://127.0.0.1:${server.address().port}/hook`;
+      r = await j('POST', '/api/admin/webhooks', { app_id: appId, url: hookUrl, events: ['card.disabled', 'card.activated'] }, superAuth);
+      secret = r.data?.data?.secret;
+      record('webhook创建成功(返回签名密钥)', !!secret, JSON.stringify(r.data).slice(0, 60));
+      // 触发 card.disabled：禁用刚创建的测试卡
+      r = await j('PUT', `/api/admin/cards/${expCardId}`, { status: 'disabled' }, superAuth);
+      record('禁用卡密触发事件', r.data?.success === true);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      server.close();
+      return { payload, secret };
+    })();
+    record('webhook收到card.disabled推送', hookResult.payload?.event === 'card.disabled',
+      hookResult.payload && JSON.stringify(hookResult.payload).slice(0, 100));
+    if (hookResult.payload?.body && hookResult.payload?.signature) {
+      const expectSig = 'sha256=' + crypto.createHmac('sha256', hookResult.secret).update(hookResult.payload.body).digest('hex');
+      record('webhook HMAC签名验证通过', hookResult.payload.signature === expectSig);
+    } else {
+      record('webhook HMAC签名验证通过', false, '未收到投递');
+    }
 
     // ===== 公告/版本 =====
     r = await j('POST', '/version', { Softid: softid });

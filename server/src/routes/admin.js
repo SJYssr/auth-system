@@ -16,6 +16,7 @@ const siteDataService = require('../services/siteDataService');
 const logService = require('../services/logService');
 const apiManageService = require('../services/apiManageService');
 const errorCodeService = require('../services/errorCodeService');
+const webhookService = require('../services/webhookService');
 const { success, error, paginated, parsePagination } = require('../utils/response');
 
 // 所有路由都需要认证
@@ -547,6 +548,88 @@ router.delete('/sessions/:id', async (req, res) => {
   } catch (err) {
     console.error('踢下线:', err.message);
     res.json(error('踢下线失败'));
+  }
+});
+
+/** ===== Webhook 事件推送（owner 隔离：非超管只管理自己应用的 webhook） ===== */
+router.get('/webhooks', async (req, res) => {
+  try {
+    const { page, pageSize } = parsePagination(req.query);
+    const filters = {};
+    if (req.query.app_id) filters.app_id = parseInt(req.query.app_id);
+    if (!req.isSuperuser) filters.owner_id = req.currentUser.id;
+    const result = await webhookService.getList(filters, page, pageSize);
+    res.json(paginated(result.rows, result.pagination));
+  } catch (err) {
+    console.error('webhook列表:', err.message);
+    res.json(error('获取webhook列表失败'));
+  }
+});
+
+router.post('/webhooks', async (req, res) => {
+  try {
+    const { app_id, url, secret, events, status } = req.body;
+    // 非超管只能为自己的应用创建 webhook
+    const app = await getOwnApp(req, res, app_id);
+    if (!app) return;
+    const result = await webhookService.create({ app_id, url, secret, events, status }, req.currentUser.id);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'create', module: 'webhooks', target_type: 'webhook', target_id: result.id,
+      description: `为应用「${app.app_name}」创建 webhook（${url}）`, ip_address: req.ip
+    });
+    res.json(success(result, '创建成功（请妥善保存签名密钥）'));
+  } catch (err) {
+    console.error('创建webhook:', err.message);
+    const known = ['应用与 URL 均为必填', 'URL 必须以 http(s):// 开头'];
+    res.json(error(known.includes(err.message) ? err.message : '创建webhook失败'));
+  }
+});
+
+router.put('/webhooks/:id', async (req, res) => {
+  try {
+    const operator = { is_superuser: req.isSuperuser, id: req.currentUser.id };
+    await webhookService.update(parseInt(req.params.id), req.body, operator);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'update', module: 'webhooks', target_type: 'webhook', target_id: parseInt(req.params.id),
+      description: `更新 webhook（字段: ${Object.keys(req.body || {}).join(', ') || '-'}）`, ip_address: req.ip
+    });
+    res.json(success(null, '更新成功'));
+  } catch (err) {
+    console.error('更新webhook:', err.message);
+    const known = ['webhook不存在', '无权操作该webhook', 'URL 必须以 http(s):// 开头', '状态不合法'];
+    res.json(error(known.includes(err.message) ? err.message : '更新webhook失败'));
+  }
+});
+
+router.delete('/webhooks/:id', async (req, res) => {
+  try {
+    const operator = { is_superuser: req.isSuperuser, id: req.currentUser.id };
+    const ok = await webhookService.remove(parseInt(req.params.id), operator);
+    if (!ok) return res.json(error('webhook不存在'));
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'delete', module: 'webhooks', target_type: 'webhook', target_id: parseInt(req.params.id),
+      ip_address: req.ip
+    });
+    res.json(success(null, '删除成功'));
+  } catch (err) {
+    console.error('删除webhook:', err.message);
+    res.json(error(err.message === '无权操作该webhook' ? err.message : '删除webhook失败'));
+  }
+});
+
+/** 发送测试事件（ping）验证 URL 可达性与验签 */
+router.post('/webhooks/:id/test', async (req, res) => {
+  try {
+    const operator = { is_superuser: req.isSuperuser, id: req.currentUser.id };
+    await webhookService.sendTest(parseInt(req.params.id), operator);
+    res.json(success(null, '测试事件投递成功'));
+  } catch (err) {
+    console.error('webhook测试:', err.message);
+    const known = ['webhook不存在', '无权操作该webhook', '测试事件投递失败（检查 URL 可达性）'];
+    res.json(error(known.includes(err.message) ? err.message : '测试事件发送失败'));
   }
 });
 

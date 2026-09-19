@@ -5,6 +5,7 @@
 const pool = require('../config/db');
 const crypto = require('crypto');
 const { effectiveLimit } = require('../utils/quota');
+const webhookService = require('./webhookService');
 
 /** 生成16位加密安全随机Token */
 function generateToken() {
@@ -64,6 +65,7 @@ async function cardLogin(softid, card, mac, version, ip) {
   // 注意：错误路径只 throw，由统一的 catch 回滚、finally 释放连接，
   // 避免旧实现中「提前 release 后外层 catch 再次 rollback/release 已归还连接」的连接池污染问题
   const conn = await pool.getConnection();
+  let activatedPayload = null; // 首激成功后异步推送 webhook（不阻塞登录响应）
   try {
     await conn.beginTransaction();
 
@@ -115,6 +117,7 @@ async function cardLogin(softid, card, mac, version, ip) {
         'WHERE id = ?',
         [mac, ip, hashCardToken(token), now, expiresAt, now, ip, cardData.id]
       );
+      activatedPayload = { app_id: app.id, card: cardData.card, mac, ip, expires_at: expiresAt };
     } else {
       // 再次登录
       // token 或过期时间任一缺失都视为「当前无有效会话」（登出后二者被置 NULL，
@@ -164,6 +167,9 @@ async function cardLogin(softid, card, mac, version, ip) {
     }
 
     await conn.commit();
+    if (activatedPayload) {
+      webhookService.emit('card.activated', activatedPayload);
+    }
     return token;
 
   } catch (err) {

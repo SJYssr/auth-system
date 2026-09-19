@@ -43,6 +43,14 @@ const superSessionService = {
     kick: (id) => request.delete(`/admin/sessions/${id}`)
 }
 
+const superWebhookService = {
+    getAll: (params = {}) => request.get('/admin/webhooks', { params }),
+    create: (data) => request.post('/admin/webhooks', data),
+    update: (id, data) => request.put(`/admin/webhooks/${id}`, data),
+    delete: (id) => request.delete(`/admin/webhooks/${id}`),
+    test: (id) => request.post(`/admin/webhooks/${id}/test`)
+}
+
 const superCardService = {
     getAll: (params = {}) => request.get('/admin/cards', { params }),
     create: (data) => request.post('/admin/cards', data),
@@ -81,6 +89,7 @@ export {
   superDataService,
   superLogService,
   superSessionService,
+  superWebhookService,
   superCardService,
   superVersionService,
   superApiService,

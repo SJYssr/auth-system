@@ -191,6 +191,21 @@ CREATE TABLE IF NOT EXISTS app_docs (
     FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Webhook 事件推送表（卡密生命周期事件推送到开发者 URL，HMAC-SHA256 签名投递）
+CREATE TABLE IF NOT EXISTS webhooks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    app_id INT NOT NULL,
+    url VARCHAR(500) NOT NULL,
+    secret VARCHAR(128) NOT NULL COMMENT 'HMAC-SHA256 签名密钥',
+    events TEXT NOT NULL COMMENT '订阅事件 JSON 数组，如 ["card.activated","card.disabled"]',
+    status VARCHAR(20) NOT NULL DEFAULT 'enabled',
+    owner_id INT NULL COMMENT '创建者管理员ID，NULL表示历史数据',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE,
+    INDEX idx_webhooks_app (app_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 额度套餐表（临时配额包，支持限时增加软件/激活配额）
 CREATE TABLE IF NOT EXISTS admin_plans (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -292,3 +307,7 @@ INSERT IGNORE INTO apis (id, api_name, api_path, api_method, param_count, params
 -- -- 为已存在的普通管理员设置默认配额：
 -- UPDATE admins SET max_apps = 2             WHERE is_superuser = 0 AND max_apps = -1;
 -- UPDATE admins SET max_card_activations = 5 WHERE is_superuser = 0 AND max_card_activations = -1;
+-- ============================================================
+-- v2.4 Webhook 事件推送增量升级
+-- ============================================================
+-- CREATE TABLE IF NOT EXISTS webhooks ( ... );  -- 见上方建表语句

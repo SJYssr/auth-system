@@ -72,6 +72,13 @@ const routes = [
         meta: { title: '在线会话' }
       },
       {
+        // Webhook 事件推送：所有管理员可管理自己应用的 webhook（后端 owner 隔离）
+        path: 'webhooks',
+        name: 'Webhooks',
+        component: () => import('@/admin/super/Webhooks.vue'),
+        meta: { title: 'Webhook 推送' }
+      },
+      {
         path: 'versions',
         name: 'Versions',
         component: () => import('@/admin/super/Versions.vue'),
