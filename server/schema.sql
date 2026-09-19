@@ -1,9 +1,13 @@
 -- ============================================================
 -- 卡密授权管理系统 - 数据库初始化脚本 (MySQL 8.0+)
--- 使用方式：mysql -h <DB_HOST> -u <DB_USER> -p < server/schema.sql
+-- 使用方式：mysql -h <DB_HOST> -u <DB_USER> -p --default-character-set=utf8mb4 < server/schema.sql
 -- ⚠ 已有数据的库请勿直接执行本脚本建表（会因 IF NOT EXISTS 跳过、新索引不会自动加），
 --   请改用文件末尾的「增量升级」段落。
 -- ============================================================
+-- 强制本会话使用 utf8mb4：部分 mysql 客户端（如官方容器内、locale 为 C 的环境）
+-- 默认 character_set_client=latin1，不设此项会把文件里的中文按 latin1 解读后
+-- 双重编码入库，导致整站数据乱码。
+SET NAMES utf8mb4;
 
 CREATE DATABASE IF NOT EXISTS `auth-system`
   DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;

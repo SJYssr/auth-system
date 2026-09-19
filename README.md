@@ -47,7 +47,8 @@ curl --fail http://localhost:3000/health   # {"status":"ok"} 即就绪
 
 ```bash
 # 1. 初始化数据库（含表结构、默认超管、错误码字典等种子数据）
-mysql -h <DB_HOST> -u <DB_USER> -p < server/schema.sql
+#    --default-character-set 必须指定：客户端默认 latin1 时中文会被双重编码入库
+mysql -h <DB_HOST> -u <DB_USER> -p --default-character-set=utf8mb4 < server/schema.sql
 
 # 2. 后端
 cd server && cp .env.example .env   # 按实际修改

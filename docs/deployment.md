@@ -26,7 +26,8 @@ curl --fail http://localhost:3000/health   # {"status":"ok"} 即就绪
 
 ```bash
 # 1. 初始化数据库（含默认数据；已有旧库只执行文件末尾的增量段落）
-mysql -h <DB_HOST> -u <DB_USER> -p < server/schema.sql
+#    --default-character-set 必须指定：客户端默认 latin1 时中文会被双重编码入库
+mysql -h <DB_HOST> -u <DB_USER> -p --default-character-set=utf8mb4 < server/schema.sql
 
 # 2. 后端
 cd server && cp .env.example .env   # 按实际修改
@@ -76,6 +77,40 @@ docker exec -i auth-system-db-1 mysql -uauth_admin -p<密码> auth-system < back
 ```
 
 源码部署直接使用本机 `mysqldump/mysql` 即可。建议每日定时备份并保留 7 天以上。
+
+## 数据乱码的预防与修复
+
+**现象**：页面上的中文数据（站点名、错误码、公告、应用名等）显示为 `åº"ç"¨...` 样式的乱码，但界面按钮、菜单等静态文字正常。
+
+**根因**：mysql 客户端默认字符集为 latin1（常见于官方容器内、locale 为 C 的环境）。以该客户端导入 UTF-8 的 SQL 文件时，服务端把 UTF-8 字节按 latin1 解读后再转为 utf8mb4 存储，形成双重编码。
+
+**预防**：schema.sql 已在文件开头内置 `SET NAMES utf8mb4;`（v1.0.0 之后），任何导入方式都会强制本会话使用 utf8mb4。手动执行含中文的 SQL 时仍建议显式携带参数：
+
+```bash
+mysql --default-character-set=utf8mb4 -h <DB_HOST> -u <DB_USER> -p < xxx.sql
+# 容器内执行含中文的语句时同样需要：
+docker exec -i <容器名> mysql --default-character-set=utf8mb4 -u... -p... auth-system -e "..."
+```
+
+**修复**：先确认是否双重编码（乱码行的 HEX 应为 `C3A5`/`C3A7` 等开头，而正常中文是 `E5`/`E4` 开头）：
+
+```sql
+SELECT site_name, HEX(SUBSTRING(site_name, 1, 4)) FROM datas;
+```
+
+- 刚导入种子数据的库（无业务数据）：直接重建最干净——`docker compose down -v && up -d`（或 `DROP DATABASE` 后用修复后的 schema 重新导入）。
+- 含业务数据且确认相关行为双重编码时，逐列修复（模板，把表名/列名替换为实际值）：
+
+```sql
+UPDATE datas SET
+  site_name     = CONVERT(BINARY CONVERT(site_name     USING latin1) USING utf8mb4),
+  site_title    = CONVERT(BINARY CONVERT(site_title    USING latin1) USING utf8mb4),
+  description   = CONVERT(BINARY CONVERT(description   USING latin1) USING utf8mb4),
+  copyright     = CONVERT(BINARY CONVERT(copyright     USING latin1) USING utf8mb4)
+WHERE id = 1;
+```
+
+⚠ 注意：`CONVERT(... USING latin1)` 对「本来正常」的中文行会报错或产生 `?`——修复前务必先用 SELECT 确认目标行确实是乱码，并提前备份（`mysqldump`）。修复后通过应用页面复核。
 
 ## 常见问题排查
 
