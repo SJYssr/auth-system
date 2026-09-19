@@ -1,7 +1,10 @@
 // 管理员管理页面 e2e（超管）：列表/新增/禁用/启用/删除 + 普通管理员不可见入口
+// 登录方式：admin-seed.js 预置的确定性 token 注入 localStorage（需先执行 create + create-normal）
 const { chromium } = require('playwright');
 
-const BASE = process.env.E2E_BASE || 'http://localhost:3001';
+const BASE = process.env.E2E_BASE || 'http://localhost:3100';
+const TOKEN_SUPER = 'e2e-ui-token-super-admin';   // 与 admin-seed.js 保持一致
+const TOKEN_NORMAL = 'e2e-ui-token-normal-admin';
 const results = [];
 function record(name, ok, detail = '') {
   results.push({ name, ok, detail });
@@ -17,20 +20,17 @@ const NEW_ADMIN = 'e2e_tmp_admin';
   page.on('pageerror', e => consoleErrors.push('PAGEERROR: ' + e.message));
   page.setDefaultTimeout(15000);
 
-  const login = async (username) => {
-    await page.goto(BASE + '/#/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.locator('input[placeholder="用户名"]').waitFor({ timeout: 20000 });
-    await page.locator('input[placeholder="用户名"]').fill(username);
-    await page.locator('input[placeholder="密码"]').fill('E2eTest@2026');
-    await page.locator('input[placeholder="验证码"]').fill('0000');
-    await page.locator('button:has-text("登")').first().click();
-    await page.waitForURL(/admin\/dashboard/, { timeout: 10000 });
+  // 登录态注入（hash 路由跳转不重载文档，补 reload 确保以注入 token 启动）
+  const loginAs = async (rawToken, path = '/admin/dashboard') => {
+    await page.addInitScript((t) => localStorage.setItem('token', t), rawToken);
+    await page.goto(`${BASE}/#${path}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1200);
   };
 
   try {
     // ===== 超管：管理员管理页面 =====
-    await login('e2e_test_admin');
+    await loginAs(TOKEN_SUPER);
     await page.goto(BASE + '/#/admin/admins', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
     const text = await page.locator('body').innerText();
@@ -94,7 +94,7 @@ const NEW_ADMIN = 'e2e_tmp_admin';
     await page.waitForTimeout(1500);
 
     // ===== 普通管理员（独立账号 e2e_normal_admin）：入口不可见、直连被拦 =====
-    await login('e2e_normal_admin');
+    await loginAs(TOKEN_NORMAL);
     record('普通管理员登录成功', page.url().includes('dashboard'));
     const sidebarText = await page.locator('.sidebar, .el-menu').first().innerText().catch(() => '');
     record('普通管理员侧栏无「管理员管理」', !/管理员管理/.test(sidebarText), sidebarText.replace(/\s+/g, ' ').slice(0, 60));
@@ -119,5 +119,5 @@ const NEW_ADMIN = 'e2e_tmp_admin';
   const pass = results.filter(x => x.ok).length;
   console.log(`\n==== 管理员管理 e2e: ${pass}/${results.length} 通过 ====`);
   await browser.close();
-  process.exit(0);
+  process.exit(pass === results.length ? 0 : 1);
 })();

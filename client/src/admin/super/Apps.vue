@@ -207,7 +207,7 @@
 
 <script setup>
 // 导入
-import { ref, reactive, computed, onMounted, onActivated } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -306,7 +306,6 @@ const tableLoading = ref(true)
 const formRef = ref(null)
 
 // 分页相关
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const pagination = ref({
   page: 1,
@@ -328,7 +327,6 @@ const handleCurrentChange = async (val) => {
     pagination.value.total_records = Number(apps.value.pagination.total_records) || 0;
   } catch (error) { console.error('操作失败', error) }
   finally {
-    await delay(100)
     tableLoading.value = false;
   }
 }
@@ -346,7 +344,6 @@ const handleSizeChange = async (val) => {
     pagination.value.total_records = Number(apps.value.pagination.total_records) || 0;
   } catch (error) { console.error('操作失败', error) }
   finally {
-    await delay(100)
     tableLoading.value = false;
   }
 }
@@ -359,9 +356,6 @@ const rules = {
   app_name: [
     { required: true, message: '请输入应用名称', trigger: 'blur' },
     { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
-  ],
-  price: [
-    { required: true, message: '请输入价格', trigger: 'blur' }
   ],
   version: [
     { required: true, message: '请输入版本号', trigger: 'blur' }
@@ -555,9 +549,15 @@ const handleDelete = async (row) => {
 
 
 const initData = async () => {
-  await store.fetchSuperApps(pagination.value)
-  pagination.value.total_records = Number(apps.value.pagination.total_records) || 0;
-  tableLoading.value = false
+  try {
+    await store.fetchSuperApps(pagination.value)
+    pagination.value.total_records = Number(apps.value.pagination.total_records) || 0;
+  } catch (error) {
+    console.error('加载应用列表失败:', error)
+    ElMessage.error(error.message || '加载应用列表失败')
+  } finally {
+    tableLoading.value = false
+  }
 }
 
 

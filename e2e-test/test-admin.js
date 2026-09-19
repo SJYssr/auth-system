@@ -1,8 +1,11 @@
-// 后台管理全面 e2e 测试 v2（3001 桩服务器）
-// 覆盖：登录/仪表盘/应用CRUD/公告/卡密/版本/网站设置/API/错误码/日志/登出
+// 后台管理全面 e2e 测试 v2
+// 覆盖：仪表盘/应用CRUD/公告/卡密/版本/网站设置/API/错误码/日志/登出
+// 登录方式：admin-seed.js 预置的确定性 token 注入 localStorage（验证码无法在 e2e 中自动化，
+// 登录表单本身的冒烟在 test-public.js 覆盖）。需先执行 admin-seed.js create
 const { chromium } = require('playwright');
 
-const BASE = process.env.E2E_BASE || 'http://localhost:3001';
+const BASE = process.env.E2E_BASE || 'http://localhost:3100';
+const TOKEN_SUPER = 'e2e-ui-token-super-admin'; // 与 admin-seed.js 保持一致
 const results = [];
 function record(name, ok, detail = '') {
   results.push({ name, ok, detail });
@@ -19,18 +22,20 @@ const APP_NAME = 'E2E测试应用' + Date.now() % 10000;
   page.on('pageerror', e => consoleErrors.push('PAGEERROR: ' + e.message));
   page.setDefaultTimeout(15000);
 
+  // 登录态注入：addInitScript 在每次文档加载前执行；hash 路由跳转不会重载文档，
+  // 因此补一次 reload 确保应用以注入的 token 启动
+  const loginAsSuper = async (path = '/admin/dashboard') => {
+    await page.addInitScript((t) => localStorage.setItem('token', t), TOKEN_SUPER);
+    await page.goto(`${BASE}/#${path}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1200);
+  };
+
   try {
-    // ===== 1. 登录 =====
-    await page.goto(BASE + '/#/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.locator('input[placeholder="用户名"]').waitFor({ timeout: 20000 });
-    await page.locator('input[placeholder="用户名"]').fill('e2e_test_admin');
-    await page.locator('input[placeholder="密码"]').fill('E2eTest@2026');
-    await page.locator('input[placeholder="验证码"]').fill('0000');
-    await page.screenshot({ path: 'shots/01-login.png' });
-    await page.locator('button:has-text("登")').first().click();
+    // ===== 1. 登录态进入仪表盘 =====
+    await loginAsSuper();
     await page.waitForURL(/admin\/dashboard/, { timeout: 10000 });
-    record('管理员登录成功并跳转仪表盘', true, page.url());
-    await page.waitForTimeout(1800);
+    record('超管token进入仪表盘', true, page.url());
     await page.screenshot({ path: 'shots/02-dashboard.png', fullPage: true });
 
     // ===== 2. 仪表盘数据渲染 =====
@@ -200,5 +205,5 @@ const APP_NAME = 'E2E测试应用' + Date.now() % 10000;
   const pass = results.filter(x => x.ok).length;
   console.log(`\n==== 后台管理 e2e v2: ${pass}/${results.length} 通过 ====`);
   await browser.close();
-  process.exit(0);
+  process.exit(pass === results.length ? 0 : 1);
 })();

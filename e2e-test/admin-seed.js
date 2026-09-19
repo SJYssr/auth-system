@@ -1,8 +1,9 @@
-// 创建/删除 e2e 测试管理员（密码 E2eTest@2026，超管）
-// 用法: node admin-seed.js create | delete
-// 环境变量优先读 e2e-test/.env（务必指向测试库！），不存在时回退 server/.env
+// 创建/删除 e2e 测试管理员（密码 E2eTest@2026，超管/普管各一）
+// 同时写入确定性 token（存 SHA-256 哈希），供 Playwright 测试注入 localStorage 免验证码登录。
+// ⚠ 仅用于测试库！环境变量优先读 e2e-test/.env，不存在时回退 server/.env
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const envLocal = path.join(__dirname, '.env');
 const envFallback = path.join(__dirname, '../server/.env');
 require('../server/node_modules/dotenv').config({ path: fs.existsSync(envLocal) ? envLocal : envFallback });
@@ -11,6 +12,11 @@ const bcrypt = require('../server/node_modules/bcryptjs');
 
 const NAME = 'e2e_test_admin';
 const NAME_NORMAL = 'e2e_normal_admin';
+
+// 与 UI 测试套件共享的确定性 token（原文），库中只存哈希
+const UI_TOKEN_SUPER = 'e2e-ui-token-super-admin';
+const UI_TOKEN_NORMAL = 'e2e-ui-token-normal-admin';
+const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
 (async () => {
   const mode = process.argv[2];
@@ -22,22 +28,22 @@ const NAME_NORMAL = 'e2e_normal_admin';
   if (mode === 'create') {
     await conn.execute('DELETE FROM admins WHERE username = ?', [NAME]);
     await conn.execute(
-      'INSERT INTO admins (username, email, password, is_superuser, status) VALUES (?, ?, ?, 1, ?)',
-      [NAME, 'e2e-test@example.com', bcrypt.hashSync('E2eTest@2026', 10), 'enabled']
+      'INSERT INTO admins (username, email, password, is_superuser, status, token) VALUES (?, ?, ?, 1, ?, ?)',
+      [NAME, 'e2e-test@example.com', bcrypt.hashSync('E2eTest@2026', 10), 'enabled', sha256(UI_TOKEN_SUPER)]
     );
     console.log('seeded', NAME);
   } else if (mode === 'create-normal') {
     await conn.execute('DELETE FROM admins WHERE username = ?', [NAME_NORMAL]);
     await conn.execute(
-      'INSERT INTO admins (username, email, password, is_superuser, status) VALUES (?, ?, ?, 0, ?)',
-      [NAME_NORMAL, 'e2e-normal@example.com', bcrypt.hashSync('E2eTest@2026', 10), 'enabled']
+      'INSERT INTO admins (username, email, password, is_superuser, status, token) VALUES (?, ?, ?, 0, ?, ?)',
+      [NAME_NORMAL, 'e2e-normal@example.com', bcrypt.hashSync('E2eTest@2026', 10), 'enabled', sha256(UI_TOKEN_NORMAL)]
     );
     console.log('seeded normal admin', NAME_NORMAL);
   } else if (mode === 'delete') {
     const [r] = await conn.execute('DELETE FROM admins WHERE username IN (?, ?)', [NAME, NAME_NORMAL]);
     console.log('deleted rows:', r.affectedRows);
   } else {
-    console.log('usage: create | delete');
+    console.log('usage: create | create-normal | delete');
   }
   await conn.end();
 })().catch(e => { console.error(e.message); process.exit(1); });

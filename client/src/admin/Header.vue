@@ -92,7 +92,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, getCurrentInstance } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/modules/app'
@@ -100,12 +100,10 @@ import {
   Menu,
   Refresh
 } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
 
 const store = useAppStore()
 const { isCollapse } = storeToRefs(store)
 const router = useRouter()
-const instance = getCurrentInstance()
 
 // 切换侧边栏
 const toggleSidebar = () => {

@@ -91,3 +91,85 @@ jobs:
           DB_USER: root
           DB_PASSWORD: e2e_test_root
           DB_NAME: auth-system
+
+  ui-smoke:
+    # UI 冒烟：Playwright 走真实前端构建产物。登录态用 admin-seed.js 的确定性 token 注入
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: e2e_test_root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -pe2e_test_root"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 导入数据库 schema 与 UI 种子
+        run: |
+          mysql -h 127.0.0.1 -uroot -pe2e_test_root < server/schema.sql
+          mysql -h 127.0.0.1 -uroot -pe2e_test_root auth-system < e2e-test/seed-ui-test.sql
+
+      - name: 安装依赖
+        run: |
+          npm ci --prefix server
+          npm ci --prefix e2e-test
+          npm ci --prefix client
+
+      - name: 构建前端
+        run: npm run build --prefix client
+
+      - name: 安装 Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e-test
+
+      - name: 预置测试管理员
+        run: |
+          node e2e-test/admin-seed.js create
+          node e2e-test/admin-seed.js create-normal
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: e2e_test_root
+          DB_NAME: auth-system
+
+      - name: 启动后端
+        run: |
+          cd server
+          PORT=3100 DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root \
+            DB_PASSWORD=e2e_test_root DB_NAME=auth-system \
+            nohup node src/index.js > /tmp/server.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3100/health && break
+            sleep 1
+          done
+          curl -sf http://localhost:3100/health > /dev/null || (cat /tmp/server.log && exit 1)
+
+      # 每个套件末尾的登出会清空种子 token，因此套件间重新种子
+      - name: 运行 UI 冒烟套件
+        run: |
+          node e2e-test/admin-seed.js create && node e2e-test/admin-seed.js create-normal
+          node e2e-test/test-public.js
+          node e2e-test/admin-seed.js create && node e2e-test/admin-seed.js create-normal
+          node e2e-test/test-admin.js
+          node e2e-test/admin-seed.js create && node e2e-test/admin-seed.js create-normal
+          node e2e-test/test-admins-page.js
+          node e2e-test/admin-seed.js create && node e2e-test/admin-seed.js create-normal
+          node e2e-test/test-permissions.js
+        env:
+          E2E_BASE: http://localhost:3100
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: e2e_test_root
+          DB_NAME: auth-system

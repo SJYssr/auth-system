@@ -1,5 +1,5 @@
 <template>
-  <div class="login-page">
+  <div class="login-page" :style="loginBgUrl ? { backgroundImage: `url(${loginBgUrl})` } : {}">
     <div class="login-card">
       <h2>管理员登录</h2>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="0" @keyup.enter="handleLogin">
@@ -26,7 +26,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/stores/modules/app'
@@ -34,6 +34,12 @@ import request from '@/utils/request'
 
 const router = useRouter()
 const store = useAppStore()
+
+// 站点设置里的登录页背景图（后台「网站设置→图片设置」可配置），未配置时用默认纯色
+const loginBgUrl = computed(() => {
+  const url = String(store.initializeInfo?.website?.login_bg_url || '').trim()
+  return /^https?:\/\//i.test(url) || url.startsWith('/') ? url : ''
+})
 
 const loading = ref(false)
 const formRef = ref(null)
@@ -88,6 +94,8 @@ onMounted(() => { fetchCaptcha() })
   align-items: center;
   justify-content: center;
   background: #f8fafc;
+  background-size: cover;
+  background-position: center;
 }
 .login-card {
   width: 400px;

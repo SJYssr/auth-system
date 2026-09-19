@@ -13,3 +13,7 @@ client/dist/
 
 # Playwright UI 测试截图产物
 shots/
+
+# unplugin 自动生成
+client/auto-imports.d.ts
+client/components.d.ts

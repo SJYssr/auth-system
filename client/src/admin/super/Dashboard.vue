@@ -52,10 +52,10 @@
         <div ref="barChart" class="chart-content"></div>
       </div>
 
-      <!-- 右侧曲线图 -->
+      <!-- 右侧柱状图 -->
       <div class="chart-container">
         <div class="chart-header">
-          <div class="chart-title">收入趋势</div>
+          <div class="chart-title">各应用收入分布</div>
         </div>
         <div ref="lineChart" class="chart-content"></div>
       </div>
@@ -220,7 +220,8 @@ const initBarChart = () => {
 const cardTypes = ['小时卡', '天卡', '周卡', '月卡', '年卡']
 const cardColors = ['#F59E0B', '#10B981', '#14B8A6', '#3B82F6', '#8B5CF6']
 
-const initLineChart = () => {
+// 收入按应用分布（后端 revenue 口径：按应用汇总各卡型已激活卡密面值，非时间趋势）
+const initRevenueChart = () => {
   if (!lineChart.value) return
   const data = businessStore.dashboardData?.revenue ?? []
   const x = data.map(d => d.app_name)
@@ -248,13 +249,13 @@ const handleResize = () => {
 onMounted(async () => {
   await businessStore.fetchDashboardData()
   initBarChart()
-  initLineChart()
+  initRevenueChart()
   window.addEventListener('resize', handleResize)
 })
 
 watch(() => businessStore.dashboardData, () => {
   initBarChart()
-  initLineChart()
+  initRevenueChart()
 }, { deep: false })
 
 onUnmounted(() => {
@@ -268,7 +269,7 @@ onUnmounted(() => {
 /* 顶部指标卡片样式 */
 .metrics-row {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
   margin-bottom: 20px;
 }

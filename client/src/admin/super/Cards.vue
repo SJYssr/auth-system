@@ -367,7 +367,6 @@ const pointUnit = computed(() => {
   return map[form.value.card_type] || ''
 })
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
 const cardTypeColor = (type) => {
   const map = { '小时卡': 'warning', '天卡': 'success', '周卡': '', '月卡': 'primary', '年卡': 'danger' }
@@ -444,7 +443,6 @@ const handleCurrentChange = async (val) => {
     pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
   } catch (error) { console.error('分页切换失败', error) }
   finally {
-    await delay(100)
     tableLoading.value = false
   }
 }
@@ -458,7 +456,6 @@ const handleSizeChange = async (val) => {
     pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
   } catch (error) { console.error('分页大小切换失败', error) }
   finally {
-    await delay(100)
     tableLoading.value = false
   }
 }

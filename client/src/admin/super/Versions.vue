@@ -192,7 +192,6 @@ const rules = {
   ]
 }
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
 const goBack = () => {
   router.push('/admin/apps')
@@ -247,7 +246,6 @@ const handleCurrentChange = async (val) => {
     pagination.value.total_records = Number(versions.value.pagination?.total_records) || 0
   } catch (error) { }
   finally {
-    await delay(100)
     tableLoading.value = false
   }
 }
@@ -261,7 +259,6 @@ const handleSizeChange = async (val) => {
     pagination.value.total_records = Number(versions.value.pagination?.total_records) || 0
   } catch (error) { }
   finally {
-    await delay(100)
     tableLoading.value = false
   }
 }

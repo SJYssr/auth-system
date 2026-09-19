@@ -66,7 +66,7 @@
         </el-button>
         <el-button type="warning" @click="clearInvalidParams">
           <el-icon><Refresh /></el-icon>
-          清理无效参数
+          重置筛选
         </el-button>
         <el-button type="danger" @click="showDeleteDialog = true">
           <el-icon><Delete /></el-icon>
@@ -253,7 +253,6 @@ const deleteType = ref('days')
 const deleteDays = ref(30)
 
 // 分页相关
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
 const pagination = ref({
   current: 1,
@@ -296,7 +295,6 @@ const handleSearch = async () => {
   } catch (error) {
     ElMessage.error('搜索失败：' + (error.message || '未知错误'))
   } finally {
-    await delay(100)
     tableLoading.value = false
   }
 }
@@ -318,7 +316,6 @@ const handleCurrentChange = async (val) => {
   } catch (error) {
     ElMessage.error('加载失败：' + (error.message || '未知错误'))
   } finally {
-    await delay(100)
     tableLoading.value = false
   }
 }
@@ -341,7 +338,6 @@ const handleSizeChange = async (val) => {
   } catch (error) {
     ElMessage.error('加载失败：' + (error.message || '未知错误'))
   } finally {
-    await delay(100)
     tableLoading.value = false
   }
 }
@@ -358,7 +354,7 @@ const handleDateChange = (dates) => {
   handleSearch()
 }
 
-// 清理无效参数
+// 重置筛选条件
 const clearInvalidParams = () => {
   // 重置搜索表单
   searchForm.value = {
@@ -367,14 +363,14 @@ const clearInvalidParams = () => {
     module: '',
     status: ''
   }
-  
+
   // 清理日期范围
   dateRange.value = []
-  
+
   // 重置分页
   pagination.value.current = 1
-  
-  ElMessage.success('已清理所有无效参数')
+
+  ElMessage.success('已重置筛选条件')
   
   // 重新搜索
   handleSearch()
@@ -473,7 +469,6 @@ const initData = async () => {
   } catch (error) {
     ElMessage.error('初始化失败：' + (error.message || '未知错误'))
   } finally {
-    await delay(100)
     tableLoading.value = false
   }
 }

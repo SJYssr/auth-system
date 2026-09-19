@@ -114,8 +114,8 @@ auth-system/
 ## 路线图
 
 - [x] 客户端心跳保活接口（`/heartbeat` 会话续期）
-- [ ] Playwright UI 冒烟套件纳入 CI
-- [ ] Element Plus 按需自动引入（进一步压缩构建产物）
+- [x] Playwright UI 冒烟套件纳入 CI（token 注入登录，四套件真实退出码）
+- [x] Element Plus 按需自动引入（JS gzip 产物 580KB → 431KB）
 - [ ] 管理员账号到期邮件提醒
 - [ ] 产品分类体系（后台维护 + 前台产品中心过滤）
 

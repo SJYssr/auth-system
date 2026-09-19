@@ -74,16 +74,8 @@ export const useBusinessStore = defineStore('business', () => {
   })
 
   const deleteAdminLogs = (data) => handleAsync(async () => {
-    try {
-      const response = await superLogService.delete(data)
-      return response
-    } catch (error) {
-      // 后端暂未实现 DELETE /admin/logs 接口
-      if (error.response?.status === 404) {
-        throw new Error('日志清理功能暂未开放，请联系管理员')
-      }
-      throw error
-    }
+    const response = await superLogService.delete(data)
+    return response
   })
 
   // 公共应用
