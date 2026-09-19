@@ -27,6 +27,11 @@ jobs:
       - name: 单元测试（纯函数，无需数据库）
         run: npm test --prefix server
 
+      - name: 前端单元测试（vitest）
+        run: |
+          npm ci --prefix client
+          npm test --prefix client
+
   api-tests:
     runs-on: ubuntu-latest
     strategy:

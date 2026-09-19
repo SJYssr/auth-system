@@ -117,7 +117,7 @@
           导出卡密
         </el-button>
       </div>
-      <el-table :data="cards.data" v-loading="tableLoading" element-loading-text="加载中..."
+      <el-table :data="tableRows" v-loading="tableLoading" element-loading-text="加载中..."
         :cell-style="{ 'border-right': '1px solid #EEEEEE' }"
         @selection-change="handleSelectionChange">
         <template #empty>
@@ -278,47 +278,45 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { storeToRefs } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Edit, Delete, Refresh, ArrowLeft, Check, Download } from '@element-plus/icons-vue'
 import { useBusinessStore } from '@/stores/modules/business'
+import { useListPage } from '@/composables/useListPage'
 import { superCardService } from '@/utils/service'
 
 const router = useRouter()
 const route = useRoute()
 const store = useBusinessStore()
-const { cards, apps } = storeToRefs(store)
 
 // route.query 取回是字符串，转成数字才能与 el-option 的数值 id 匹配回显应用名
 const appId = ref(route.query.app_id ? (parseInt(route.query.app_id) || '') : '')
 const appName = ref('')
 const appOptions = ref([])
 
-const searchForm = reactive({
-  app_id: appId.value || '',
-  status: '',
-  is_expired: '',
-  is_activated: '',
-  card_type: '',
-  card_content: '',
-  card_remark: ''
+const {
+  rows: tableRows, loading: tableLoading, filters: searchForm, pagination,
+  fetchData, handleSearch: doSearch, handleCurrentChange, handleSizeChange
+} = useListPage({
+  // 页面必须先选应用（生成卡密依赖 app_id），未选时返回空集
+  fetcher: (params) => params.app_id ? store.fetchCards(params) : { data: [], pagination: { total_records: 0 } },
+  filters: {
+    app_id: appId.value || '',
+    status: '',
+    is_expired: '',
+    is_activated: '',
+    card_type: '',
+    card_content: '',
+    card_remark: ''
+  }
 })
 
 const drawerVisible = ref(false)
 const isEdit = computed(() => !!form.value.id)
 const saveLoading = ref(false)
-const tableLoading = ref(false)
 const formRef = ref(null)
 const selectedRows = ref([])
 const resultVisible = ref(false)
 const resultCards = ref([])
-
-const pagination = ref({
-  page: 1,
-  per_page: 20,
-  total_records: 0,
-  total_pages: 0
-})
 
 const form = ref({
   id: null,
@@ -382,45 +380,21 @@ const goBack = () => {
   router.push('/admin/apps')
 }
 
-const buildSearchParams = () => {
-  const params = { ...pagination.value }
-  if (searchForm.app_id) {
-    params.app_id = searchForm.app_id
-  }
-  if (searchForm.status) params.status = searchForm.status
-  if (searchForm.is_expired !== '') params.is_expired = searchForm.is_expired
-  if (searchForm.is_activated !== '') params.is_activated = searchForm.is_activated
-  if (searchForm.card_type) params.card_type = searchForm.card_type
-  if (searchForm.card_content) params.card_content = searchForm.card_content
-  if (searchForm.card_remark) params.card_remark = searchForm.card_remark
-  return params
-}
-
 const handleAppChange = async (val) => {
   if (!val) {
-    cards.value = {}
+    tableRows.value = []
     pagination.value.total_records = 0
     appName.value = ''
     return
   }
   const selected = appOptions.value.find(a => a.id === val)
   appName.value = selected ? selected.app_name : ''
-  pagination.value.page = 1
-  await handleSearch()
+  doSearch()
 }
 
 const handleSearch = async () => {
   if (!searchForm.app_id) return
-  try {
-    tableLoading.value = true
-    pagination.value.page = 1
-    await store.fetchCards(buildSearchParams())
-    pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
-  } catch (error) {
-    ElMessage.error('搜索失败')
-  } finally {
-    tableLoading.value = false
-  }
+  doSearch()
 }
 
 const clearSearch = async () => {
@@ -431,32 +405,7 @@ const clearSearch = async () => {
   searchForm.card_content = ''
   searchForm.card_remark = ''
   if (searchForm.app_id) {
-    await handleSearch()
-  }
-}
-
-const handleCurrentChange = async (val) => {
-  try {
-    tableLoading.value = true
-    pagination.value.page = val
-    await store.fetchCards(buildSearchParams())
-    pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
-  } catch (error) { console.error('分页切换失败', error) }
-  finally {
-    tableLoading.value = false
-  }
-}
-
-const handleSizeChange = async (val) => {
-  try {
-    tableLoading.value = true
-    pagination.value.per_page = val
-    pagination.value.page = 1
-    await store.fetchCards(buildSearchParams())
-    pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
-  } catch (error) { console.error('分页大小切换失败', error) }
-  finally {
-    tableLoading.value = false
+    handleSearch()
   }
 }
 
@@ -533,8 +482,7 @@ const handleSubmit = async () => {
       }
     }
     drawerVisible.value = false
-    await store.fetchCards(buildSearchParams())
-    pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
+    await fetchData()
   } catch (error) {
     ElMessage.error(error.message || (form.value.id ? '更新失败' : '生成失败'))
   } finally {
@@ -545,17 +493,13 @@ const handleSubmit = async () => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除该卡密吗？', '警告', { type: 'warning' })
-    tableLoading.value = true
     const response = await store.deleteCard(row.id)
     ElMessage.success(response.message || '删除成功')
-    await store.fetchCards(buildSearchParams())
-    pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
+    await fetchData()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(error.message || '删除失败')
     }
-  } finally {
-    tableLoading.value = false
   }
 }
 
@@ -592,12 +536,9 @@ const handleBatchDelete = async () => {
       ElMessage.success(`成功删除 ${ok} 张卡密`)
     }
     selectedRows.value = []
-    await store.fetchCards(buildSearchParams())
-    pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
+    await fetchData()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error.message || '批量删除失败')
-  } finally {
-    tableLoading.value = false
   }
 }
 
@@ -613,12 +554,9 @@ const handleBatchDisable = async () => {
       ElMessage.success(`成功禁用 ${ok} 张卡密`)
     }
     selectedRows.value = []
-    await store.fetchCards(buildSearchParams())
-    pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
+    await fetchData()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error(error.message || '批量禁用失败')
-  } finally {
-    tableLoading.value = false
   }
 }
 
@@ -633,12 +571,9 @@ const handleBatchEnable = async () => {
       ElMessage.success(`成功解禁 ${ok} 张卡密`)
     }
     selectedRows.value = []
-    await store.fetchCards(buildSearchParams())
-    pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
+    await fetchData()
   } catch (error) {
     ElMessage.error(error.message || '批量解禁失败')
-  } finally {
-    tableLoading.value = false
   }
 }
 
@@ -683,8 +618,8 @@ const handleExport = () => {
 
 const initData = async () => {
   // 生命周期重置：每次进入页面清空上次的卡密数据与分页，避免切换路由后残留旧状态
-  cards.value = {}
-  pagination.value = { page: 1, per_page: 20, total_records: 0, total_pages: 0 }
+  tableRows.value = []
+  pagination.value = { page: 1, per_page: 20, total_records: 0 }
   appName.value = ''
   searchForm.app_id = appId.value || ''
   await loadAppOptions()
@@ -692,10 +627,7 @@ const initData = async () => {
   if (appId.value) {
     const selected = appOptions.value.find(a => a.id === appId.value)
     appName.value = selected ? selected.app_name : ''
-    tableLoading.value = true
-    await store.fetchCards(buildSearchParams())
-    pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
-    tableLoading.value = false
+    await fetchData()
   }
 }
 

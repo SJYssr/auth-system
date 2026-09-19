@@ -282,7 +282,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
-import request from '@/utils/request'
+import { superAdminService, publicInitService } from '@/utils/service'
 
 const list = ref([])
 const loading = ref(false)
@@ -366,7 +366,7 @@ function formatTime(dateStr) {
 const fetchList = async () => {
   try {
     loading.value = true
-    const res = await request.get('/admin/admins')
+    const res = await superAdminService.getAll()
     list.value = res.data || []
   } catch (error) {
     ElMessage.error(error.message || '获取管理员列表失败')
@@ -397,7 +397,7 @@ const handleSubmit = async () => {
       delete payload.max_apps
       delete payload.max_card_activations
     }
-    const res = await request.post('/admin/admins', payload)
+    const res = await superAdminService.create(payload)
     ElMessage.success(res.message || '创建成功')
     dialogVisible.value = false
     await fetchList()
@@ -422,7 +422,7 @@ const handleEditLimits = (row) => {
 const handleSaveLimits = async () => {
   try {
     savingLimits.value = true
-    const res = await request.put(`/admin/admins/${limitsForm.id}/limits`, {
+    const res = await superAdminService.updateLimits(limitsForm.id, {
       expires_at: limitsForm.expires_at || null,
       max_apps: limitsForm.max_apps,
       max_card_activations: limitsForm.max_card_activations
@@ -468,7 +468,7 @@ const applyTemplate = (template) => {
 const handleSavePlan = async () => {
   try {
     savingPlan.value = true
-    const res = await request.post(`/admin/admins/${planForm.id}/plans`, {
+    const res = await superAdminService.grantPlan(planForm.id, {
       type: planForm.type,
       delta: planForm.delta,
       duration_days: planForm.duration_days,
@@ -490,7 +490,7 @@ const handleViewPlans = async (row) => {
   plansRecordVisible.value = true
   try {
     loadingPlans.value = true
-    const res = await request.get(`/admin/admins/${row.id}/plans`)
+    const res = await superAdminService.getPlans(row.id)
     plansList.value = res.data || []
   } catch (error) {
     ElMessage.error(error.message || '获取套餐记录失败')
@@ -513,7 +513,7 @@ const handleRenew = (row) => {
 const handleSaveRenew = async () => {
   try {
     savingRenew.value = true
-    const res = await request.post(`/admin/admins/${renewForm.id}/renew`, {
+    const res = await superAdminService.renew(renewForm.id, {
       duration_days: renewForm.duration_days,
       remark: renewForm.remark
     })
@@ -532,7 +532,7 @@ const handleToggleStatus = async (row) => {
   const action = target === 'disabled' ? '禁用' : '启用'
   try {
     await ElMessageBox.confirm(`确定要${action}管理员「${row.username}」吗？`, '警告', { type: 'warning' })
-    const res = await request.put(`/admin/admins/${row.id}/status`, { status: target })
+    const res = await superAdminService.setStatus(row.id, { status: target })
     ElMessage.success(res.message || '更新成功')
     await fetchList()
   } catch (error) {
@@ -551,7 +551,7 @@ const handleDelete = async (row) => {
       `确定要删除管理员「${row.username}」吗？此操作不可恢复。${resourceHint}`,
       '警告', { type: 'warning' }
     )
-    const res = await request.delete(`/admin/admins/${row.id}`)
+    const res = await superAdminService.delete(row.id)
     ElMessage.success(res.message || '删除成功')
     await fetchList()
   } catch (error) {
@@ -560,7 +560,7 @@ const handleDelete = async (row) => {
 }
 
 onMounted(() => {
-  request.get('/public/init').then(res => {
+  publicInitService.initialize().then(res => {
     currentUserId.value = res.data?.login_status?.user?.id ?? null
   }).catch(() => {})
   fetchList()

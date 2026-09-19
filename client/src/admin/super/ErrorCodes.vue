@@ -60,44 +60,37 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Refresh } from '@element-plus/icons-vue'
 import { superErrorCodeService } from '@/utils/service'
 import { useAppStore } from '@/stores/modules/app'
+import { useListPage } from '@/composables/useListPage'
 
 // 查看对所有管理员开放；新增/编辑/删除仅超管（后端 requireSuperuser 同步强制）
 const appStore = useAppStore()
 const isSuperuser = computed(() => !!appStore.initializeInfo?.login_status?.user?.is_superuser)
 
-const list = ref([])
-const loading = ref(true)
 const drawer = ref(false)
 const saving = ref(false)
 const formRef = ref(null)
 const isEdit = computed(() => !!form.value.id)
 
-const searchForm = reactive({ keyword: '' })
+const {
+  rows: list, loading, filters: searchForm, pagination,
+  fetchData, handleSearch, handleCurrentChange, handleSizeChange
+} = useListPage({
+  fetcher: (params) => superErrorCodeService.getAll(params),
+  filters: { keyword: '' }
+})
+
 const form = ref({ id: null, code: '', message: '', description: '', solution: '' })
-const pagination = ref({ page: 1, per_page: 20, total_records: 0 })
 const rules = {
   code: [{ required: true, message: '请输入错误码', trigger: 'blur' }],
   message: [{ required: true, message: '请输入错误信息', trigger: 'blur' }]
 }
 
-const fetchData = async () => {
-  loading.value = true
-  try {
-    const res = await superErrorCodeService.getAll({ ...pagination.value, ...searchForm })
-    list.value = res.data || []
-    pagination.value.total_records = res.pagination?.total_records || 0
-  } finally { loading.value = false }
-}
-
-const handleSearch = () => { pagination.value.page = 1; fetchData() }
 const clearSearch = () => { searchForm.keyword = ''; handleSearch() }
-const handleCurrentChange = (v) => { pagination.value.page = v; fetchData() }
-const handleSizeChange = (v) => { pagination.value.per_page = v; pagination.value.page = 1; fetchData() }
 
 const handleAdd = () => {
   form.value = { id: null, code: '', message: '', description: '', solution: '' }
@@ -128,7 +121,7 @@ const handleDelete = async (row) => {
   } catch(e) { if(e!=='cancel') ElMessage.error(e.message||'删除失败') }
 }
 
-onMounted(() => { fetchData() })
+fetchData()
 </script>
 
 <style scoped>

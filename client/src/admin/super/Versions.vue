@@ -49,7 +49,7 @@
           新增版本
         </el-button>
       </div>
-      <el-table :data="versions.data" v-loading="tableLoading" element-loading-text="加载中..."
+      <el-table :data="tableRows" v-loading="tableLoading" element-loading-text="加载中..."
         :cell-style="{ 'border-right': '1px solid #EEEEEE' }">
         <template #empty>
           <el-empty :description="searchForm.app_id ? '暂无版本数据' : '请选择应用'" :image-size="100" />
@@ -138,39 +138,33 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { storeToRefs } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Edit, Delete, Refresh, ArrowLeft } from '@element-plus/icons-vue'
 import { useBusinessStore } from '@/stores/modules/business'
+import { useListPage } from '@/composables/useListPage'
 
 const router = useRouter()
 const route = useRoute()
 const store = useBusinessStore()
-const { versions } = storeToRefs(store)
 
 // route.query 取回是字符串，转成数字才能与 el-option 的数值 id 匹配回显应用名
 const appId = ref(route.query.app_id ? (parseInt(route.query.app_id) || '') : '')
 const appName = ref('')
 const appOptions = ref([])
 
-const searchForm = reactive({
-  app_id: appId.value || '',
-  status: '',
-  version_name: ''
+const {
+  rows: tableRows, loading: tableLoading, filters: searchForm, pagination,
+  fetchData, handleSearch: doSearch, handleCurrentChange, handleSizeChange
+} = useListPage({
+  // 未选择应用时返回空集，避免无谓请求（后端会拒绝缺 app_id 的查询）
+  fetcher: (params) => params.app_id ? store.fetchVersions(params) : { data: [], pagination: { total_records: 0 } },
+  filters: { app_id: appId.value || '', status: '', version_name: '' }
 })
 
 const drawerVisible = ref(false)
 const isEdit = computed(() => !!form.value.id)
 const saveLoading = ref(false)
-const tableLoading = ref(false)
 const formRef = ref(null)
-
-const pagination = ref({
-  page: 1,
-  per_page: 20,
-  total_records: 0,
-  total_pages: 0
-})
 
 const form = ref({
   id: null,
@@ -197,69 +191,28 @@ const goBack = () => {
   router.push('/admin/apps')
 }
 
-const buildSearchParams = () => ({
-  ...pagination.value,
-  app_id: searchForm.app_id,
-  ...searchForm
-})
-
 const handleAppChange = async (val) => {
   if (!val) {
-    versions.value = {}
+    tableRows.value = []
     pagination.value.total_records = 0
     appName.value = ''
     return
   }
   const selected = appOptions.value.find(a => a.id === val)
   appName.value = selected ? selected.app_name : ''
-  pagination.value.page = 1
-  await handleSearch()
+  doSearch()
 }
 
 const handleSearch = async () => {
   if (!searchForm.app_id) return
-  try {
-    tableLoading.value = true
-    pagination.value.page = 1
-    await store.fetchVersions(buildSearchParams())
-    pagination.value.total_records = Number(versions.value.pagination?.total_records) || 0
-  } catch (error) {
-    ElMessage.error('搜索失败')
-  } finally {
-    tableLoading.value = false
-  }
+  doSearch()
 }
 
 const clearSearch = async () => {
   searchForm.status = ''
   searchForm.version_name = ''
   if (searchForm.app_id) {
-    await handleSearch()
-  }
-}
-
-const handleCurrentChange = async (val) => {
-  try {
-    tableLoading.value = true
-    pagination.value.page = val
-    await store.fetchVersions(buildSearchParams())
-    pagination.value.total_records = Number(versions.value.pagination?.total_records) || 0
-  } catch (error) { }
-  finally {
-    tableLoading.value = false
-  }
-}
-
-const handleSizeChange = async (val) => {
-  try {
-    tableLoading.value = true
-    pagination.value.per_page = val
-    pagination.value.page = 1
-    await store.fetchVersions(buildSearchParams())
-    pagination.value.total_records = Number(versions.value.pagination?.total_records) || 0
-  } catch (error) { }
-  finally {
-    tableLoading.value = false
+    handleSearch()
   }
 }
 
@@ -295,8 +248,7 @@ const handleSubmit = async () => {
     const response = await store.saveVersion(form.value)
     ElMessage.success(response.message || (form.value.id ? '更新成功' : '创建成功'))
     drawerVisible.value = false
-    await store.fetchVersions(buildSearchParams())
-    pagination.value.total_records = Number(versions.value.pagination?.total_records) || 0
+    await fetchData()
   } catch (error) {
     ElMessage.error(error.message || (form.value.id ? '更新失败' : '创建失败'))
   } finally {
@@ -307,17 +259,13 @@ const handleSubmit = async () => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm('确定要删除该版本吗？', '警告', { type: 'warning' })
-    tableLoading.value = true
     const response = await store.deleteVersion(row.id)
     ElMessage.success(response.message || '删除成功')
-    await store.fetchVersions(buildSearchParams())
-    pagination.value.total_records = Number(versions.value.pagination?.total_records) || 0
+    await fetchData()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(error.message || '删除失败')
     }
-  } finally {
-    tableLoading.value = false
   }
 }
 
@@ -332,8 +280,8 @@ const loadAppOptions = async () => {
 
 const initData = async () => {
   // 生命周期重置：每次进入页面清空上次的版本数据与分页，避免切换路由后残留旧状态
-  versions.value = {}
-  pagination.value = { page: 1, per_page: 20, total_records: 0, total_pages: 0 }
+  tableRows.value = []
+  pagination.value = { page: 1, per_page: 20, total_records: 0 }
   appName.value = ''
   searchForm.app_id = appId.value || ''
   await loadAppOptions()
@@ -341,10 +289,7 @@ const initData = async () => {
   if (appId.value) {
     const selected = appOptions.value.find(a => a.id === appId.value)
     appName.value = selected ? selected.app_name : ''
-    tableLoading.value = true
-    await store.fetchVersions(buildSearchParams())
-    pagination.value.total_records = Number(versions.value.pagination?.total_records) || 0
-    tableLoading.value = false
+    await fetchData()
   }
 }
 

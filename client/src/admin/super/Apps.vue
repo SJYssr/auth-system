@@ -45,7 +45,7 @@
           批量删除
         </el-button>
       </div>
-      <el-table :data="apps.data" v-loading="tableLoading" element-loading-text="加载中..."
+      <el-table :data="tableRows" v-loading="tableLoading" element-loading-text="加载中..."
         :cell-style="{ 'border-right': '1px solid #EEEEEE' }"
         @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="55" />
@@ -207,22 +207,16 @@
 
 <script setup>
 // 导入
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { storeToRefs } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Edit, Delete, Refresh } from '@element-plus/icons-vue'
 
 import { useBusinessStore } from '@/stores/modules/business'
 import { superAppService } from '@/utils/service'
+import { useListPage } from '@/composables/useListPage'
 
-// 搜索表单
-const searchForm = reactive({
-  app_name: '',
-  status: '',
-  start_date: '',
-  end_date: ''
-})
+const store = useBusinessStore()
 
 const router = useRouter()
 const selectedRows = ref([])
@@ -233,23 +227,14 @@ const docsVisible = ref(false)
 const docsSaving = ref(false)
 const docsForm = ref({ id: null, app_name: '', intro_title: '', intro_content: '', deploy_title: '', deploy_content: '' })
 
-// 搜索相关方法
-const handleSearch = async () => {
-  try {
-    tableLoading.value = true
-    pagination.value.page = 1
-    const searchParams = {
-      ...pagination.value,
-      ...searchForm
-    }
-    await store.fetchSuperApps(searchParams)
-    pagination.value.total_records = Number(apps.value.pagination.total_records) || 0
-  } catch (error) {
-    ElMessage.error('搜索失败')
-  } finally {
-    tableLoading.value = false
-  }
-}
+// 列表数据流（分页/加载态/搜索/错误兜底统一由 useListPage 提供）
+const {
+  rows: tableRows, loading: tableLoading, filters: searchForm, pagination,
+  fetchData, handleSearch, handleCurrentChange, handleSizeChange
+} = useListPage({
+  fetcher: (params) => store.fetchSuperApps(params),
+  filters: { app_name: '', status: '', start_date: '', end_date: '' }
+})
 
 const handleSelectionChange = (rows) => {
   selectedRows.value = rows
@@ -276,77 +261,26 @@ const handleBatchDelete = async () => {
       '警告',
       { type: 'warning' }
     )
-    tableLoading.value = true
     for (const row of selectedRows.value) {
       await store.deleteApp(row.id)
     }
     ElMessage.success(`成功删除 ${selectedRows.value.length} 个应用`)
     selectedRows.value = []
-    await store.fetchSuperApps(pagination.value)
-    pagination.value.total_records = Number(apps.value.pagination.total_records) || 0
+    await fetchData()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(error.message || '批量删除失败')
     }
-  } finally {
-    tableLoading.value = false
   }
 }
 
 
 
-
-const store = useBusinessStore()
-const { apps } = storeToRefs(store)
 
 const drawerVisible = ref(false)
 const isEdit = computed(() => !!form.value.id)
 const saveLoading = ref(false)
-const tableLoading = ref(true)
 const formRef = ref(null)
-
-// 分页相关
-
-const pagination = ref({
-  page: 1,
-  per_page: 20,
-  total_records: 0,
-  total_pages: 0
-})
-
-// 分页处理方法
-const handleCurrentChange = async (val) => {
-  try {
-    tableLoading.value = true;
-    pagination.value.page = val;
-    const searchParams = {
-      ...pagination.value,
-      ...searchForm
-    }
-    await store.fetchSuperApps(searchParams);
-    pagination.value.total_records = Number(apps.value.pagination.total_records) || 0;
-  } catch (error) { console.error('操作失败', error) }
-  finally {
-    tableLoading.value = false;
-  }
-}
-
-const handleSizeChange = async (val) => {
-  try {
-    tableLoading.value = true;
-    pagination.value.per_page = val;
-    pagination.value.page = 1; // 重置到第一页
-    const searchParams = {
-      ...pagination.value,
-      ...searchForm
-    }
-    await store.fetchSuperApps(searchParams);
-    pagination.value.total_records = Number(apps.value.pagination.total_records) || 0;
-  } catch (error) { console.error('操作失败', error) }
-  finally {
-    tableLoading.value = false;
-  }
-}
 
 
 
@@ -436,9 +370,7 @@ const handleSubmit = async () => {
     saveLoading.value = true
     const response = await store.saveApp(form.value)
     ElMessage.success(response.message || (form.value.id ? '更新成功' : '添加成功'))
-    // 重新加载数据
-    await store.fetchSuperApps(pagination.value)
-    pagination.value.total_records = Number(apps.value.pagination.total_records) || 0;
+    await fetchData()
   } catch (error) {
     ElMessage.error(error.message || (form.value.id ? '更新失败' : '添加失败'))
   } finally {
@@ -466,8 +398,7 @@ const handleAnnounceSave = async () => {
     await store.saveApp({ id: announceForm.value.id, announcement: announceForm.value.announcement })
     ElMessage.success('公告保存成功')
     announceVisible.value = false
-    await store.fetchSuperApps(pagination.value)
-    pagination.value.total_records = Number(apps.value.pagination.total_records) || 0
+    await fetchData()
   } catch (error) {
     ElMessage.error(error.message || '保存失败')
   } finally {
@@ -531,39 +462,24 @@ const handleVersions = (row) => {
 const handleDelete = async (row) => {
   try {
     await ElMessageBox.confirm(deleteConfirmMessage(row), '警告', { type: 'warning' })
-    tableLoading.value = true;
     const response = await store.deleteApp(row.id)
     ElMessage.success(response.message || '删除成功')
-    // 重新加载数据
-    await store.fetchSuperApps(pagination.value)
-    pagination.value.total_records = Number(apps.value.pagination.total_records) || 0;
+    await fetchData()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(error.message || '删除失败')
     }
-  } finally {
-    tableLoading.value = false;
-  }
-}
-
-
-
-const initData = async () => {
-  try {
-    await store.fetchSuperApps(pagination.value)
-    pagination.value.total_records = Number(apps.value.pagination.total_records) || 0;
-  } catch (error) {
-    console.error('加载应用列表失败:', error)
-    ElMessage.error(error.message || '加载应用列表失败')
-  } finally {
-    tableLoading.value = false
   }
 }
 
 
 
 
-onMounted(initData)
+
+
+
+
+onMounted(fetchData)
 
 
 </script>

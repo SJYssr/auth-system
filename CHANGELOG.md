@@ -23,6 +23,9 @@
 
 ### 优化
 
+- **前端列表页统一数据流**：新增 `useListPage` composable（loading/分页/搜索重置/错误兜底一处实现），ApiList、ErrorCodes、Apps、Versions、AdminLogs、Cards 六个页面全部接入，删除约 200 行逐页复制的重复逻辑；AdminLogs 分页字段（current/pageSize/total）收敛到统一契约；修复重构中暴露的日志页初始化引用已删函数问题。
+- **Admins.vue 接入 service 层**：8 处硬编码请求 URL 全部收口到 `superAdminService`，不再绕过统一封装直连。
+- **vitest 前端单测**：`useListPage` 5 项用例（分页契约解析/筛选合并/页码重置/错误恢复），接入 CI lint-and-unit job。
 - **Element Plus 按需自动引入**（unplugin-auto-import/components），移除全量组件与 290+ 图标全局注册，前端 JS gzip 产物 580KB → 431KB（-26%）；`v-loading` 指令与字符串引用的菜单图标单独注册。
 - **移除全站 10 处人为 `delay(100)`**：此前为 loading 动画好看而人为拖慢每次搜索/翻页。
 

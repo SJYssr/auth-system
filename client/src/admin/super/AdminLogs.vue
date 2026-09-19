@@ -78,7 +78,7 @@
     <!-- 日志列表 -->
     <div class="table-section">
       <el-table 
-        :data="adminLogs.logs || []" 
+        :data="tableRows" 
         v-loading="tableLoading" 
         element-loading-text="加载中..."
         :cell-style="{ 'border-right': '1px solid #EEEEEE' }"
@@ -117,11 +117,11 @@
       <el-pagination
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
-        :current-page="pagination.current || 1"
+        :current-page="uiPagination.current || 1"
         :page-sizes="[5, 10, 20, 30, 50]"
-        :page-size="pagination.pageSize || 20"
+        :page-size="uiPagination.pageSize || 20"
         layout="total, sizes, prev, pager, next, jumper"
-        :total="pagination.total || 0"
+        :total="uiPagination.total || 0"
         prev-text="上一页"
         next-text="下一页"
         background
@@ -223,156 +223,70 @@
 </template>
 
 <script setup>
-import { ref, onActivated } from 'vue'
-import { storeToRefs } from 'pinia'
+import { ref, computed, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Delete, Refresh } from '@element-plus/icons-vue'
 import { useBusinessStore } from '@/stores/modules/business'
+import { useListPage } from '@/composables/useListPage'
 
 const store = useBusinessStore()
-const { adminLogs } = storeToRefs(store)
 
 // 状态定义
-const tableLoading = ref(true)
 const deleteLoading = ref(false)
 const detailVisible = ref(false)
 const showDeleteDialog = ref(false)
 const selectedLog = ref(null)
 const dateRange = ref([])
 
-// 搜索表单
-const searchForm = ref({
-  username: '',
-  actionType: '',
-  module: '',
-  status: ''
-})
-
 // 删除相关
 const deleteType = ref('days')
 const deleteDays = ref(30)
 
-// 分页相关
-
-const pagination = ref({
-  current: 1,
-  pageSize: 20,
-  total: 0
+// 列表数据流（分页/加载态/搜索/错误兜底统一由 useListPage 提供）
+// 兼容模板的 current/pageSize/total 字段名，filters 中的日期范围由 handleDateChange 写入
+const {
+  rows: tableRows, loading: tableLoading, filters: searchForm, pagination,
+  handleSearch, handleCurrentChange, handleSizeChange
+} = useListPage({
+  fetcher: (params) => store.fetchAdminLogs({
+    page: params.page,
+    pageSize: params.per_page,
+    username: params.username,
+    actionType: params.actionType,
+    module: params.module,
+    status: params.status,
+    start_date: params.start_date,
+    end_date: params.end_date
+  }),
+  filters: { username: '', actionType: '', module: '', status: '' }
 })
 
-// 参数清理函数
-const cleanParams = (params) => {
-  const cleaned = {}
-  
-  // 只添加有效的参数
-  if (params.page && params.page > 0) cleaned.page = params.page
-  if (params.pageSize && params.pageSize > 0) cleaned.pageSize = params.pageSize
-  if (params.username && params.username.trim()) cleaned.username = params.username.trim()
-  if (params.actionType && params.actionType.trim()) cleaned.actionType = params.actionType.trim()
-  if (params.module && params.module.trim()) cleaned.module = params.module.trim()
-  if (params.status && params.status.trim()) cleaned.status = params.status.trim()
-  if (params.start_date && params.start_date.trim()) cleaned.start_date = params.start_date.trim()
-  if (params.end_date && params.end_date.trim()) cleaned.end_date = params.end_date.trim()
-  
-  return cleaned
-}
-
-// 方法定义
-const handleSearch = async () => {
-  try {
-    tableLoading.value = true
-    pagination.value.current = 1
-    const rawParams = {
-      page: pagination.value.current,
-      pageSize: pagination.value.pageSize,
-      ...searchForm.value
-    }
-    const params = cleanParams(rawParams)
-    const response = await store.fetchAdminLogs(params)
-    if (response?.pagination) {
-      pagination.value.total = parseInt(response.pagination.total) || 0
-    }
-  } catch (error) {
-    ElMessage.error('搜索失败：' + (error.message || '未知错误'))
-  } finally {
-    tableLoading.value = false
-  }
-}
-
-const handleCurrentChange = async (val) => {
-  try {
-    tableLoading.value = true
-    pagination.value.current = val
-    const rawParams = {
-      page: pagination.value.current,
-      pageSize: pagination.value.pageSize,
-      ...searchForm.value
-    }
-    const params = cleanParams(rawParams)
-    const response = await store.fetchAdminLogs(params)
-    if (response?.pagination) {
-      pagination.value.total = parseInt(response.pagination.total) || 0
-    }
-  } catch (error) {
-    ElMessage.error('加载失败：' + (error.message || '未知错误'))
-  } finally {
-    tableLoading.value = false
-  }
-}
-
-const handleSizeChange = async (val) => {
-  try {
-    tableLoading.value = true
-    pagination.value.pageSize = val
-    pagination.value.current = 1
-    const rawParams = {
-      page: pagination.value.current,
-      pageSize: pagination.value.pageSize,
-      ...searchForm.value
-    }
-    const params = cleanParams(rawParams)
-    const response = await store.fetchAdminLogs(params)
-    if (response?.pagination) {
-      pagination.value.total = parseInt(response.pagination.total) || 0
-    }
-  } catch (error) {
-    ElMessage.error('加载失败：' + (error.message || '未知错误'))
-  } finally {
-    tableLoading.value = false
-  }
-}
+const uiPagination = computed(() => ({
+  current: pagination.value.page,
+  pageSize: pagination.value.per_page,
+  total: pagination.value.total_records
+}))
 
 const handleDateChange = (dates) => {
   // value-format="YYYY-MM-DD"：拿到的是本地日期字符串，避免 toISOString 的 UTC 偏移改日
   if (dates && dates.length === 2) {
-    searchForm.value.start_date = dates[0]
-    searchForm.value.end_date = dates[1]
+    searchForm.start_date = dates[0]
+    searchForm.end_date = dates[1]
   } else {
-    searchForm.value.start_date = ''
-    searchForm.value.end_date = ''
+    searchForm.start_date = ''
+    searchForm.end_date = ''
   }
   handleSearch()
 }
 
 // 重置筛选条件
 const clearInvalidParams = () => {
-  // 重置搜索表单
-  searchForm.value = {
-    username: '',
-    actionType: '',
-    module: '',
-    status: ''
-  }
-
-  // 清理日期范围
+  searchForm.username = ''
+  searchForm.actionType = ''
+  searchForm.module = ''
+  searchForm.status = ''
   dateRange.value = []
-
-  // 重置分页
-  pagination.value.current = 1
-
   ElMessage.success('已重置筛选条件')
-  
-  // 重新搜索
   handleSearch()
 }
 
@@ -452,29 +366,8 @@ const formatJson = (jsonStr) => {
   }
 }
 
-// 初始化
-const initData = async () => {
-  try {
-    tableLoading.value = true
-    const rawParams = {
-      page: pagination.value.current,
-      pageSize: pagination.value.pageSize,
-      ...searchForm.value
-    }
-    const params = cleanParams(rawParams)
-    const response = await store.fetchAdminLogs(params)
-    if (response?.pagination) {
-      pagination.value.total = parseInt(response.pagination.total) || 0
-    }
-  } catch (error) {
-    ElMessage.error('初始化失败：' + (error.message || '未知错误'))
-  } finally {
-    tableLoading.value = false
-  }
-}
-
 // keep-alive 下 onActivated 在首次挂载时同样触发，仅需注册一个（否则双请求）
-onActivated(initData)
+onActivated(handleSearch)
 </script>
 
 <style scoped>

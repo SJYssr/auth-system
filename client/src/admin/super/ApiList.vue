@@ -133,18 +133,17 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Refresh, Delete } from '@element-plus/icons-vue'
 import { superApiService } from '@/utils/service'
 import { useAppStore } from '@/stores/modules/app'
+import { useListPage } from '@/composables/useListPage'
 
 // 查看对所有管理员开放；新增/编辑/删除仅超管（后端 requireSuperuser 同步强制）
 const appStore = useAppStore()
 const isSuperuser = computed(() => !!appStore.initializeInfo?.login_status?.user?.is_superuser)
 
-const list = ref([])
-const loading = ref(true)
 const drawer = ref(false)
 const saving = ref(false)
 const formRef = ref(null)
@@ -153,12 +152,18 @@ const isEdit = computed(() => !!form.value.id)
 const detailVisible = ref(false)
 const detailRow = ref(null)
 
-const searchForm = reactive({ keyword: '' })
+const {
+  rows: list, loading, filters: searchForm, pagination,
+  fetchData, handleSearch, handleCurrentChange, handleSizeChange
+} = useListPage({
+  fetcher: (params) => superApiService.getAll(params),
+  filters: { keyword: '' }
+})
+
 const form = ref({
   id: null, api_name: '', api_path: '', api_method: 'Http Post', param_count: 0,
   params: [{ name: '', desc: '' }]
 })
-const pagination = ref({ page: 1, per_page: 20, total_records: 0 })
 const rules = {
   api_name: [{ required: true, message: '请输入接口名称', trigger: 'blur' }],
   api_path: [{ required: true, message: '请输入接口地址', trigger: 'blur' }]
@@ -185,19 +190,7 @@ const detailPostEx = computed(() => {
 const addParam = () => { form.value.params.push({ name: '', desc: '' }) }
 const removeParam = (idx) => { if (form.value.params.length > 1) form.value.params.splice(idx, 1) }
 
-const fetchData = async () => {
-  loading.value = true
-  try {
-    const res = await superApiService.getAll({ ...pagination.value, ...searchForm })
-    list.value = res.data || []
-    pagination.value.total_records = res.pagination?.total_records || 0
-  } finally { loading.value = false }
-}
-
-const handleSearch = () => { pagination.value.page = 1; fetchData() }
 const clearSearch = () => { searchForm.keyword = ''; handleSearch() }
-const handleCurrentChange = (v) => { pagination.value.page = v; fetchData() }
-const handleSizeChange = (v) => { pagination.value.per_page = v; pagination.value.page = 1; fetchData() }
 
 const handleAdd = () => {
   form.value = {
@@ -258,7 +251,7 @@ const showDetail = (row) => {
   detailVisible.value = true
 }
 
-onMounted(() => { fetchData() })
+fetchData()
 </script>
 
 <style scoped>

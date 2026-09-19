@@ -51,6 +51,17 @@ const superWebhookService = {
     test: (id) => request.post(`/admin/webhooks/${id}/test`)
 }
 
+const superAdminService = {
+    getAll: () => request.get('/admin/admins'),
+    create: (data) => request.post('/admin/admins', data),
+    updateLimits: (id, data) => request.put(`/admin/admins/${id}/limits`, data),
+    grantPlan: (id, data) => request.post(`/admin/admins/${id}/plans`, data),
+    getPlans: (id) => request.get(`/admin/admins/${id}/plans`),
+    renew: (id, data) => request.post(`/admin/admins/${id}/renew`, data),
+    setStatus: (id, data) => request.put(`/admin/admins/${id}/status`, data),
+    delete: (id) => request.delete(`/admin/admins/${id}`)
+}
+
 const superCardService = {
     getAll: (params = {}) => request.get('/admin/cards', { params }),
     create: (data) => request.post('/admin/cards', data),
@@ -90,6 +101,7 @@ export {
   superLogService,
   superSessionService,
   superWebhookService,
+  superAdminService,
   superCardService,
   superVersionService,
   superApiService,
