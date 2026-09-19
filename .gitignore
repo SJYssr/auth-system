@@ -10,3 +10,6 @@ server/node_modules/
 client/dist/
 /architecture/.scratch
 /architecture
+
+# Playwright UI 测试截图产物
+shots/

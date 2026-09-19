@@ -113,63 +113,6 @@
       </div>
     </div>
   </section>
-
-  <!-- 产品详情弹窗 -->
-  <el-dialog v-model="detailVisible" :title="selectedProduct ? selectedProduct.app_name : ''" width="600px"
-    @close="handleCloseDetail">
-    <div v-if="selectedProduct" class="product-detail">
-      <div class="detail-header">
-        <div class="detail-icon">
-          <img v-if="selectedProduct.icon_url" :src="selectedProduct.icon_url" :alt="selectedProduct.app_name"
-            @error="handleIconError" />
-          <div v-else class="default-icon">
-            {{ selectedProduct.app_name ? selectedProduct.app_name.charAt(0).toUpperCase() : '?' }}
-          </div>
-        </div>
-        <div class="detail-info">
-          <h3>{{ selectedProduct.app_name }}</h3>
-          <p class="detail-developer">开发者：{{ selectedProduct.developer || '官方' }}</p>
-          <div class="detail-tags">
-
-            <span class="version-tag">v{{ selectedProduct.version || '1.0.0' }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="detail-content">
-        <h4>产品描述</h4>
-        <p>{{ selectedProduct.description || '暂无详细描述' }}</p>
-
-        <div class="detail-grid">
-          <div class="detail-item">
-            <label>价格：</label>
-            <span v-if="isProductFree(selectedProduct)" class="price-free">免费</span>
-            <span v-else class="price-amount">付费</span>
-          </div>
-          <div class="detail-item">
-            <label>状态：</label>
-            <el-tag :type="selectedProduct.status === 'enabled' ? 'success' : 'info'">
-              {{ selectedProduct.status === 'enabled' ? '可用' : '维护中' }}
-            </el-tag>
-          </div>
-          <div class="detail-item">
-            <label>创建时间：</label>
-            <span>{{ formatDate(selectedProduct.created_at) }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <template #footer>
-      <div class="dialog-footer">
-        <el-button @click="detailVisible = false">关闭</el-button>
-        <el-button type="primary" @click="handleProductAction(selectedProduct)"
-          :disabled="!selectedProduct || selectedProduct.status !== 'enabled'">
-          {{ getActionText(selectedProduct) }}
-        </el-button>
-      </div>
-    </template>
-  </el-dialog>
 </template>
 
 <script setup>
@@ -199,10 +142,6 @@ const pagination = reactive({
   per_page: 12,
   total: 0
 })
-
-// 产品详情弹窗
-const detailVisible = ref(false)
-const selectedProduct = ref(null)
 
 
 // 全量产品缓存（用于客户端过滤和分页）
@@ -285,15 +224,9 @@ const handleCurrentChange = (page) => {
   applyFiltersAndPaginate()
 }
 
-// 产品详情
+// 产品详情：跳转到应用详情页面
 const viewProductDetail = (product) => {
-  // 跳转到应用详情页面
   router.push(`/app/${product.id}`)
-}
-
-const handleCloseDetail = () => {
-  detailVisible.value = false
-  selectedProduct.value = null
 }
 
 // 产品操作
@@ -340,12 +273,6 @@ const handleIconError = (event) => {
   if (event.target.nextElementSibling) {
     event.target.nextElementSibling.style.display = 'flex'
   }
-}
-
-// 日期格式化
-const formatDate = (dateString) => {
-  if (!dateString) return '-'
-  return new Date(dateString).toLocaleDateString('zh-CN')
 }
 
 onMounted(() => {
@@ -462,62 +389,6 @@ onMounted(() => {
 
 .search-section :deep(.el-input__wrapper.is-focus) {
   border-color: #3b82f6;
-}
-
-.category-nav {
-  padding: 24px 0 20px;
-  border-bottom: 1px solid rgb(219, 223, 233);
-}
-
-.nav-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1f2937;
-  padding: 0 20px 16px;
-  letter-spacing: -0.025em;
-}
-
-.nav-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 12px;
-}
-
-.nav-item {
-  padding: 12px 16px;
-  color: #6b7280;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 14px;
-  border-radius: 8px;
-  position: relative;
-  font-weight: 400;
-}
-
-.nav-item:hover {
-  background: #f8fafc;
-  color: #374151;
-  transform: translateX(2px);
-}
-
-.nav-item.active {
-  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-  color: #1d4ed8;
-  font-weight: 500;
-  border: 1px solid #bfdbfe;
-}
-
-.nav-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 16px;
-  background: #3b82f6;
-  border-radius: 0 2px 2px 0;
 }
 
 .price-filter {
@@ -743,129 +614,12 @@ onMounted(() => {
   padding-top: 20px;
 }
 
-/* 产品详情弹窗 */
-.product-detail {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  max-width: 600px;
-  width: 90vw;
-  max-height: 80vh;
-  overflow-y: auto;
-  border: 1px solid #e5e7eb;
-}
-
-.detail-header {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.detail-icon {
-  width: 80px;
-  height: 80px;
-  border-radius: 8px;
-  overflow: hidden;
-  flex-shrink: 0;
-  background: #f8fafc;
-  border: 1px solid rgb(219, 223, 233);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.detail-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.detail-icon .default-icon {
-  background: white;
-  color: #6b7280;
-  font-size: 32px;
-  font-weight: 600;
-}
-
-.detail-info h3 {
-  margin: 0 0 8px;
-  font-size: 20px;
-  color: #111827;
-}
-
-.detail-developer {
-  margin: 0 0 12px;
-  color: #6b7280;
-}
-
-.detail-tags {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.version-tag {
-  font-size: 12px;
-  color: #6b7280;
-  background: #f3f4f6;
-  padding: 4px 8px;
-  border-radius: 6px;
-}
-
-.detail-content h4 {
-  margin: 0 0 12px;
-  color: #374151;
-}
-
-.detail-content p {
-  margin: 0 0 20px;
-  color: #6b7280;
-  line-height: 1.6;
-}
-
-.detail-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.detail-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.detail-item label {
-  font-weight: 500;
-  color: #374151;
-  min-width: 80px;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
 /* 响应式设计 */
 @media (max-width: 768px) {
   .products-container {
     padding: 16px;
     flex-direction: column;
     gap: 20px;
-  }
-
-  .products-hero {
-    padding: 40px 0;
-  }
-
-  .hero-title {
-    font-size: 28px;
-  }
-
-  .hero-subtitle {
-    font-size: 16px;
   }
 
   .sidebar-filter {
@@ -887,36 +641,6 @@ onMounted(() => {
   .search-section :deep(.el-input__wrapper) {
     height: 44px;
     padding: 0 14px;
-  }
-
-  .category-nav {
-    padding: 20px 0 16px;
-  }
-
-  .nav-title {
-    padding: 0 16px 14px;
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  .nav-list {
-    padding: 0 8px;
-    gap: 1px;
-  }
-
-  .nav-item {
-    padding: 12px 14px;
-    font-size: 13px;
-    border-radius: 6px;
-  }
-
-  .nav-item:hover {
-    transform: none;
-  }
-
-  .nav-item.active::before {
-    width: 2px;
-    height: 14px;
   }
 
   .price-filter {
@@ -1000,15 +724,6 @@ onMounted(() => {
     padding: 10px 20px !important;
     font-size: 13px !important;
     border-radius: 10px !important;
-  }
-
-  .detail-header {
-    flex-direction: column;
-    text-align: center;
-  }
-
-  .detail-icon {
-    align-self: center;
   }
 }
 </style>

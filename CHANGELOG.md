@@ -25,6 +25,7 @@
 - **`cards` 表新增 `(owner_id, created_at)` 复合索引**：归属过滤 + 按创建时间排序的常用查询免 filesort（schema 增量段落已附 ALTER 语句）。
 - **抽取 `utils/quota.effectiveLimit`**：统一 5 处「基础配额 + 临时套餐」的 DECIMAL 字符串相加逻辑，配套单元测试防止 `2 + '0' = '20'` 类回归。
 - **工程化**：新增 ESLint（`npm run lint`）与 node:test 单元测试（`npm test`），CI 增加 lint-and-unit job；Makefile 增加 `lint`/`unit` 目标；删除根目录 724KB 的架构图 HTML 冗余文件与 `validateToken` 死代码。
+- **前端重构**：`AppDetail.vue`（1788 行）拆分为 `pages/app-detail/` 下的 `AppHeaderCard`/`AppDocPanel`/`AppFeatureGrid` 三个子组件，删除约 700 行模板中不存在的死 CSS（旧购买弹窗、遗留按钮、被 `:deep()` 取代的文档排版规则）；`Products.vue`（1013→728 行）删除永远不可达的旧版详情弹窗（`detailVisible` 无处置 true，卡片点击实为路由跳转）与分类导航残留样式。经 Playwright 冒烟（9/9）、标签页切换/搜索/筛选交互与拆分前后整页截图对比验证，渲染逐像素一致。
 
 ### 修复
 
