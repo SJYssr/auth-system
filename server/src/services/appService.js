@@ -3,6 +3,7 @@
  */
 const crypto = require('crypto');
 const pool = require('../config/db');
+const sanitizeHtml = require('sanitize-html');
 const { escapeLike } = require('../utils/response');
 
 /** 生成18位随机softid（无模偏差） */
@@ -108,13 +109,29 @@ async function getDocs(appId) {
   return { intro: map.intro || null, deploy: map.deploy || null };
 }
 
-/** 按 (app_id, doc_type) 保存文档（upsert） */
+/** 应用文档白名单消毒配置：文档为富文本 HTML，保存时在服务端消毒，
+ *  不依赖前端 DOMPurify（接口直调或非 Web 客户端消费时同样有防护） */
+const DOC_SANITIZE_OPTIONS = {
+  allowedTags: [...sanitizeHtml.defaults.allowedTags, 'img', 'h1', 'h2', 'span'],
+  allowedAttributes: {
+    ...sanitizeHtml.defaults.allowedAttributes,
+    img: ['src', 'srcset', 'alt', 'title', 'width', 'height'],
+    a: ['href', 'name', 'target', 'rel', 'title'],
+    '*': ['class']
+  },
+  allowedSchemes: ['http', 'https', 'mailto'],
+  // 与 CSP 的 imgSrc 保持一致
+  allowedSchemesByTag: { img: ['http', 'https', 'data'] }
+};
+
+/** 按 (app_id, doc_type) 保存文档（upsert），content 保存前消毒 */
 async function saveDoc(appId, docType, title, content) {
   if (!['intro', 'deploy'].includes(docType)) throw new Error('文档类型不合法');
+  const safeContent = content === null || content === undefined ? null : sanitizeHtml(String(content), DOC_SANITIZE_OPTIONS);
   await pool.execute(
     'INSERT INTO app_docs (app_id, doc_type, title, content) VALUES (?, ?, ?, ?) ' +
     'ON DUPLICATE KEY UPDATE title = VALUES(title), content = VALUES(content)',
-    [appId, docType, title || null, content || null]
+    [appId, docType, title || null, safeContent]
   );
 }
 

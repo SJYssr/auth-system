@@ -4,6 +4,7 @@
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const { effectiveLimit } = require('../utils/quota');
 
 /** token 入库前统一做 SHA-256 哈希：库泄露不再等于会话泄露 */
 function hashToken(token) {
@@ -49,7 +50,6 @@ async function login(username, password) {
   );
 
   // 计算有效额度（基础 + 临时套餐）
-  // 注意：SUM/COALESCE 经 mysql2 返回字符串（DECIMAL），必须转数字，否则 2 + '0' → '20'
   let effectiveMaxApps = admin.max_apps;
   let effectiveMaxCardActivations = admin.max_card_activations;
   if (admin.is_superuser !== 1 && admin.max_apps !== -1) {
@@ -59,7 +59,7 @@ async function login(username, password) {
          AND effective_at <= NOW() AND (expires_at IS NULL OR expires_at > NOW())`,
       [admin.id]
     );
-    effectiveMaxApps = Number(admin.max_apps) + Number(planRows[0].extra || 0);
+    effectiveMaxApps = effectiveLimit(admin.max_apps, planRows[0].extra);
   }
   if (admin.is_superuser !== 1 && admin.max_card_activations !== -1) {
     const [planRows] = await pool.execute(
@@ -68,7 +68,7 @@ async function login(username, password) {
          AND effective_at <= NOW() AND (expires_at IS NULL OR expires_at > NOW())`,
       [admin.id]
     );
-    effectiveMaxCardActivations = Number(admin.max_card_activations) + Number(planRows[0].extra || 0);
+    effectiveMaxCardActivations = effectiveLimit(admin.max_card_activations, planRows[0].extra);
   }
 
   return {
@@ -88,21 +88,10 @@ async function login(username, password) {
 }
 
 /**
- * 验证 token 有效性
- */
-async function validateToken(token) {
-  const [rows] = await pool.execute(
-    'SELECT id, username, email, is_superuser FROM admins WHERE token = ? AND status = ?',
-    [hashToken(token), 'enabled']
-  );
-  return rows.length > 0 ? rows[0] : null;
-}
-
-/**
  * 登出 - 清空 token
  */
 async function logout(token) {
   await pool.execute('UPDATE admins SET token = NULL WHERE token = ?', [hashToken(token)]);
 }
 
-module.exports = { login, validateToken, logout, hashToken };
+module.exports = { login, logout, hashToken };

@@ -78,4 +78,4 @@ async function getList(filters = {}, page = 1, pageSize = 20) {
   return { rows, pagination: { page, pageSize, total: countResult[0].total } };
 }
 
-module.exports = { log, getList, cleanup };
+module.exports = { log, getList, cleanup, sanitizeRequestData };

@@ -272,7 +272,7 @@ router.get('/apps/:id', async (req, res) => {
 });
 
 router.post('/apps', async (req, res) => {
-  let created = null;
+  let created;
   try {
     // 配额校验与创建放在同一事务：COUNT ... FOR UPDATE 锁住 owner 区间，
     // 并发创建时第二个事务会等待，消除「同时通过校验双双超限」的竞态

@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS admins (
     password VARCHAR(255) NOT NULL COMMENT 'BCrypt 哈希',
     is_superuser TINYINT NOT NULL DEFAULT 0,
     status VARCHAR(20) NOT NULL DEFAULT 'enabled',
-    token VARCHAR(255) COMMENT '建议后续改为 SHA-256 哈希存储',
+    token VARCHAR(255) COMMENT '存 SHA-256 哈希，不存原文',
     last_login DATETIME NULL,
     expires_at DATETIME NULL COMMENT '账号到期时间，NULL表示永不到期',
     max_apps INT NOT NULL DEFAULT -1 COMMENT '最大软件数量，-1表示不限',
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS cards (
     activation_ip VARCHAR(45),
     last_login_time DATETIME NULL,
     last_login_ip VARCHAR(45),
-    token VARCHAR(64),
+    token VARCHAR(64) COMMENT '会话token的SHA-256哈希（16位原文不出库）',
     token_expires_at DATETIME DEFAULT NULL,
     version BIGINT DEFAULT 0,
     owner_id INT NULL COMMENT '生成者管理员ID，NULL表示历史数据/系统创建',
@@ -89,10 +89,12 @@ CREATE TABLE IF NOT EXISTS cards (
     INDEX idx_cards_token (token),
     INDEX idx_cards_expires_at (expires_at),
     INDEX idx_cards_token_expires (token_expires_at),
-    INDEX idx_cards_owner_id (owner_id)
+    INDEX idx_cards_owner_id (owner_id),
+    INDEX idx_cards_owner_created (owner_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 版本表（库级保证同一应用版本号唯一；当前代码尚未接入 /version 查询，属功能缺口）
+-- 版本表（版本事实来源：增/改/删后由 versionService.syncAppVersion 同步回 apps 表，
+-- 客户端 /version 与卡密登录的强制更新校验读 apps.version，零额外查询）
 CREATE TABLE IF NOT EXISTS app_versions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     app_id INT NOT NULL,
@@ -250,6 +252,7 @@ INSERT IGNORE INTO apis (id, api_name, api_path, api_method, param_count, params
 -- ALTER TABLE cards ADD INDEX idx_cards_expires_at (expires_at);
 -- ALTER TABLE cards ADD INDEX idx_cards_token_expires (token_expires_at);
 -- ALTER TABLE logs ADD INDEX idx_logs_module_created (module, created_at);
+-- ALTER TABLE cards ADD INDEX idx_cards_owner_created (owner_id, created_at);
 -- ALTER TABLE cards ADD CONSTRAINT chk_cards_points CHECK (points >= 0);
 -- ALTER TABLE cards ADD CONSTRAINT chk_cards_price  CHECK (price >= 0);
 -- -- 删除重复索引（UNIQUE 已覆盖）：

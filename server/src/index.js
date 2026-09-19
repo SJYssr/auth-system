@@ -13,8 +13,21 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 信任代理以获取真实客户端IP
-app.set('trust proxy', 1);
+// 信任代理以获取真实客户端IP。
+// 默认 1（适配文档部署形态：单层 OpenResty/Nginx 反代）。
+// ⚠ 进程直接暴露公网时必须设 TRUST_PROXY=false，否则客户端可伪造
+//   X-Forwarded-For 让每个请求变成“新IP”，按 IP 的限流（登录防爆破）会被绕过。
+// 取值：数字=信任的代理层数；'true'/'false'；逗号分隔的 IP/网段（如 'loopback,10.0.0.0/8'）
+const trustProxyEnv = process.env.TRUST_PROXY;
+if (trustProxyEnv === undefined) {
+  app.set('trust proxy', 1);
+} else if (trustProxyEnv === 'true' || trustProxyEnv === 'false') {
+  app.set('trust proxy', trustProxyEnv === 'true');
+} else if (!isNaN(Number(trustProxyEnv)) && trustProxyEnv.trim() !== '') {
+  app.set('trust proxy', Number(trustProxyEnv));
+} else {
+  app.set('trust proxy', trustProxyEnv);
+}
 
 // 安全响应头
 // 注意：关闭 CORP/COOP/COEP 以避免在反向代理（OpenResty）环境下影响
@@ -24,8 +37,10 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      // Vite 构建产物为外链 module script，无需 unsafe-eval；unsafe-inline 暂保留以兼容内联样式/脚本
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      // Vite 构建产物为外链 module script，无需 unsafe-eval；脚本全部同源外链，
+      // 不放行 unsafe-inline（保留会显著削弱 XSS 防线）。样式因 Element Plus
+      // 运行时内联 style 仍需 unsafe-inline
+      scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "blob:", "https:"],
       connectSrc: ["'self'"],
@@ -42,7 +57,7 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
-/** 自动获取公网 IP（多服务容错） */
+/** 自动获取公网 IP（多服务容错）。仅用于补充 CORS 允许源，失败无碍 */
 async function detectPublicIp() {
   const services = [
     { host: 'checkip.amazonaws.com', path: '/', family: 4 },
@@ -97,16 +112,22 @@ function buildAllowedOrigins(publicIp) {
 }
 
 (async () => {
-  // 自动检测公网 IP
-  const publicIp = await detectPublicIp();
-  if (publicIp) {
-    console.log(`检测到公网IP: ${publicIp}`);
-  } else {
-    console.log('未能自动检测公网IP，使用环境变量配置');
-  }
+  const pool = require('./config/db');
 
-  const allowedOrigins = buildAllowedOrigins(publicIp);
+  // CORS 允许源：环境变量与本地开发源即刻生效；公网 IP 探测改为后台执行，
+  // 不再阻塞启动（离线/内网环境最多拖慢 12s），探测完成后追加进同一数组
+  const allowedOrigins = buildAllowedOrigins(null);
   console.log(`CORS 允许的源: ${allowedOrigins.join(', ')}`);
+  detectPublicIp()
+    .then((publicIp) => {
+      if (!publicIp) return console.log('未能自动检测公网IP，使用环境变量配置');
+      console.log(`检测到公网IP: ${publicIp}`);
+      for (const o of [`http://${publicIp}`, `http://${publicIp}:${PORT}`]) {
+        if (!allowedOrigins.includes(o)) allowedOrigins.push(o);
+      }
+      console.log(`CORS 允许的源: ${allowedOrigins.join(', ')}`);
+    })
+    .catch(() => { /* 探测失败无碍启动 */ });
 
   // CORS - 精确匹配
   app.use(cors({
@@ -137,8 +158,8 @@ morgan.token('safe-url', (req) => {
 });
 app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
 
-  // 全局限流
-  app.use(rateLimit({
+  // 全局限流（仅 API 路径：静态资源不占配额；多实例部署需换共享存储如 rate-limit-redis）
+  app.use('/api', rateLimit({
     windowMs: 60 * 1000,
     max: 200,
     message: { success: false, message: '请求过于频繁，请稍后再试' }
@@ -168,12 +189,25 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     keyGenerator: (req) => req.ip
   }));
 
-  // 健康检查（必须注册在 SPA fallback 的 app.get('*') 之前，否则会被其拦截导致请求挂起）
-  app.get('/health', (req, res) => {
+  // 健康检查（必须注册在 SPA fallback 的 app.get('*') 之前，否则会被其拦截导致请求挂起）。
+  // 附带数据库连通性探测：Docker healthcheck 依赖本接口，DB 挂掉时返回 503 而非假健康
+  app.get('/health', async (req, res) => {
     const pad = n => String(n).padStart(2, '0');
     const now = new Date();
     const localTime = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    res.json({ status: 'ok', time: localTime });
+    let db = 'ok';
+    try {
+      // 3 秒兜底：DB 不可达时 pool 获取连接默认要等 connectTimeout(10s)，不能拖住 healthcheck
+      await Promise.race([
+        pool.query('SELECT 1'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('DB探测超时')), 3000))
+      ]);
+    } catch (err) {
+      db = 'down';
+      console.error('健康检查数据库探测失败:', err.message);
+    }
+    if (db === 'down') return res.status(503).json({ status: 'degraded', db, time: localTime });
+    res.json({ status: 'ok', db, time: localTime });
   });
 
   // 客户端卡密 API 限流（挂载在根路径，不被 /api/public 限流覆盖）
@@ -225,7 +259,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
   });
 
   // 全局错误处理（body-parser 的 400 等带 status 的错误透传状态码）
-  app.use((err, req, res, next) => {
+  app.use((err, req, res, _next) => {
     const status = err.status || err.statusCode || 500;
     if (status >= 500) console.error('未捕获错误:', err);
     res.status(status).json({
@@ -244,7 +278,6 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
   });
 
   // 优雅停机：先停止接新连接，等待存量请求收尾，再关闭数据库连接池
-  const pool = require('./config/db');
   let shuttingDown = false;
   async function shutdown(signal) {
     if (shuttingDown) return;

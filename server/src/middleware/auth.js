@@ -62,6 +62,12 @@ async function authMiddleware(req, res, next) {
           errcode: '-1002'
         });
       }
+      // 滑动续期：活跃用户的会话锚点（last_login）随使用后移，不再固定 24h 强制下线。
+      // 节流为距上次刷新超过 1 小时才写库，避免每个请求都 UPDATE；WHERE token=? 防止与登出并发互相覆盖
+      if (tokenAge > TOKEN_MAX_AGE / 24) {
+        pool.execute('UPDATE admins SET last_login = NOW() WHERE id = ? AND token = ?', [admin.id, hashToken(token)])
+          .catch(err => console.error('刷新会话过期锚点失败:', err.message));
+      }
     }
 
     req.currentUser = admin;

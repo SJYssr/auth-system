@@ -3,6 +3,7 @@
  */
 const pool = require('../config/db');
 const { hashToken } = require('./authService');
+const { effectiveLimit } = require('../utils/quota');
 
 /**
  * 获取初始化数据
@@ -25,9 +26,8 @@ async function getInitData(token) {
     if (admins.length > 0) {
       isLoggedIn = true;
       user = admins[0];
-      // SUM 子查询返回字符串（DECIMAL），转数字后再相加，避免 2 + '0' → '20'
-      user.effective_max_apps = user.max_apps === -1 ? -1 : Number(user.max_apps) + Number(user.apps_plan_delta || 0);
-      user.effective_max_card_activations = user.max_card_activations === -1 ? -1 : Number(user.max_card_activations) + Number(user.activations_plan_delta || 0);
+      user.effective_max_apps = user.max_apps === -1 ? -1 : effectiveLimit(user.max_apps, user.apps_plan_delta);
+      user.effective_max_card_activations = user.max_card_activations === -1 ? -1 : effectiveLimit(user.max_card_activations, user.activations_plan_delta);
     }
   }
 

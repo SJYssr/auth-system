@@ -21,26 +21,51 @@ function generateCardCode(prefix = '') {
 
 /** 批量生成卡密 */
 async function createCards(appId, count = 1, cardType = '天卡', price = 0, points = 1, remark = '', prefix = '', ownerId = null) {
-  const cards = [];
-  let attempts = 0;
-  const maxRetries = count * 3;
+  // 库里有 CHECK 约束兜底，这里给出可读的业务错误
+  if (isNaN(Number(price)) || Number(price) < 0) throw new Error('面值必须为 >= 0 的数字');
+  if (!Number.isInteger(Number(points)) || Number(points) < 0) throw new Error('点数必须为 >= 0 的整数');
 
-  while (cards.length < count && attempts < maxRetries) {
+  const cards = [];
+  const CHUNK = 50; // 单条语句批量插入的行数
+  let attempts = 0;
+  const maxAttempts = count * 3 + 3;
+  const INSERT_COLUMNS = 'app_id, card, card_type, price, points, card_remark, owner_id';
+
+  while (cards.length < count && attempts < maxAttempts) {
     attempts++;
-    const cardCode = generateCardCode(prefix);
+    const codes = Array.from({ length: Math.min(count - cards.length, CHUNK) }, () => generateCardCode(prefix));
+    const values = codes.flatMap(code => [appId, code, cardType, price, points, remark || null, ownerId]);
     try {
+      // 多行 INSERT：100 张卡从 100 次往返降为 2 次
       await pool.execute(
-        'INSERT INTO cards (app_id, card, card_type, price, points, card_remark, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [appId, cardCode, cardType, price, points, remark || null, ownerId]
+        `INSERT INTO cards (${INSERT_COLUMNS}) VALUES ${codes.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+        values
       );
-      cards.push(cardCode);
+      cards.push(...codes);
     } catch (err) {
-      if (err.code === 'ER_DUP_ENTRY') continue;
-      throw err;
+      if (err.code !== 'ER_DUP_ENTRY') throw err;
+      // 批量语句遇卡号唯一冲突会整批失败：该批退回逐条插入，冲突卡号跳过
+      for (const code of codes) {
+        try {
+          await pool.execute(
+            `INSERT INTO cards (${INSERT_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [appId, code, cardType, price, points, remark || null, ownerId]
+          );
+          cards.push(code);
+        } catch (e) {
+          if (e.code !== 'ER_DUP_ENTRY') throw e;
+        }
+      }
     }
   }
   return cards;
 }
+
+/** 卡密列表/详情返回的字段：不回 SELECT *，剔除会话凭据 token / token_expires_at，
+ *  避免后台接口把客户端的活跃会话凭据下发到前端 */
+const CARD_FIELDS = 'c.id, c.app_id, c.card, c.card_type, c.price, c.points, c.card_remark, c.status, ' +
+  'c.is_activated, c.activated_at, c.expires_at, c.mac, c.login_count, c.activation_ip, ' +
+  'c.last_login_time, c.last_login_ip, c.version, c.owner_id, c.created_at, c.updated_at';
 
 /** 卡密列表（分页），支持 app_id / card / card_remark / status / card_type / is_activated / is_expired 过滤 */
 async function getList(filters = {}, page = 1, pageSize = 20) {
@@ -61,7 +86,7 @@ async function getList(filters = {}, page = 1, pageSize = 20) {
   const whereSql = conds.length ? ` WHERE ${conds.join(' AND ')}` : '';
   const offset = (page - 1) * pageSize;
   const [rows] = await pool.execute(
-    `SELECT c.*, a.app_name FROM cards c LEFT JOIN apps a ON c.app_id = a.id${whereSql}` +
+    `SELECT ${CARD_FIELDS}, a.app_name FROM cards c LEFT JOIN apps a ON c.app_id = a.id${whereSql}` +
     ' ORDER BY c.created_at DESC LIMIT ? OFFSET ?',
     [...values, String(pageSize), String(offset)]
   );
@@ -73,7 +98,7 @@ async function getList(filters = {}, page = 1, pageSize = 20) {
 /** 获取单个卡密 */
 async function getById(id) {
   const [rows] = await pool.execute(
-    'SELECT c.*, a.app_name FROM cards c LEFT JOIN apps a ON c.app_id = a.id WHERE c.id = ?',
+    `SELECT ${CARD_FIELDS}, a.app_name FROM cards c LEFT JOIN apps a ON c.app_id = a.id WHERE c.id = ?`,
     [id]
   );
   return rows[0] || null;
@@ -116,4 +141,4 @@ async function remove(id) {
   await pool.execute('DELETE FROM cards WHERE id = ?', [id]);
 }
 
-module.exports = { createCards, getList, getById, update, remove };
+module.exports = { createCards, getList, getById, update, remove, generateCardCode };

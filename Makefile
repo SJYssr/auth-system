@@ -1,13 +1,21 @@
 # 常用开发命令：make <target>
-.PHONY: help dev build test up down seed clean
+.PHONY: help dev build test lint unit up down seed clean
 
 help:
 	@echo "dev    - 本地开发（后端 3000 + 前端 5173）"
 	@echo "build  - 构建前端产物（client/dist）"
 	@echo "test   - 运行 API 测试套件（需服务运行中，E2E_BASE 可覆盖地址）"
+	@echo "lint   - 后端 ESLint 检查"
+	@echo "unit   - 后端单元测试（纯函数，无需数据库）"
 	@echo "up     - Docker 一键部署（.env 可选，默认端口 3000）"
 	@echo "down   - 停止并移除 Docker 栈（数据卷保留，-v 连同删除）"
 	@echo "seed   - 导入 schema 到 compose 数据库（幂等）"
+
+lint:
+	npm run lint --prefix server
+
+unit:
+	npm test --prefix server
 
 dev:
 	cd server && npm run dev & cd client && npm run dev & wait

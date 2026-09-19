@@ -87,16 +87,19 @@ async function cleanup() {
     const token1 = r.data?.token;
     record('首激返回16位token', typeof token1 === 'string' && token1.length === 16, JSON.stringify(r.data).slice(0, 60));
 
-    // ===== 同设备复登：返回同一 token =====
+    // ===== 同设备复登：token 已哈希入库，轮换发放新会话（旧 token 立即失效） =====
     r = await j('POST', '/login', { Softid: softid, Card: c1, Mac: MAC_A });
-    record('同设备复登返回同一token', r.data?.token === token1);
+    const token1b = r.data?.token;
+    record('同设备复登返回新token', typeof token1b === 'string' && token1b.length === 16 && token1b !== token1, JSON.stringify(r.data).slice(0, 60));
+    r = await j('POST', '/heartbeat', { Softid: softid, Card: c1, Token: token1 });
+    record('旧token心跳→-1002', r.data?.errcode === '-1002', `errcode=${r.data?.errcode}`);
 
     // ===== 异设备：-1011 =====
     r = await j('POST', '/login', { Softid: softid, Card: c1, Mac: MAC_B });
     record('异设备登录被拒-1011', r.data?.errcode === '-1011', `errcode=${r.data?.errcode}`);
 
     // ===== 登出释放会话；机器码绑定依旧生效 =====
-    r = await j('POST', '/logout', { Softid: softid, Card: c1, Token: token1 });
+    r = await j('POST', '/logout', { Softid: softid, Card: c1, Token: token1b });
     record('登出成功result=1', r.data?.result === '1', JSON.stringify(r.data).slice(0, 60));
     r = await j('POST', '/login', { Softid: softid, Card: c1, Mac: MAC_B });
     record('登出后异设备仍被机器码绑定拒绝-1010', r.data?.errcode === '-1010', `errcode=${r.data?.errcode}`);
@@ -115,6 +118,21 @@ async function cleanup() {
     record('心跳保活返回result=1', r.data?.result === '1', JSON.stringify(r.data).slice(0, 60));
     r = await j('POST', '/heartbeat', { Softid: softid, Card: c1, Token: 'bad-token' });
     record('心跳错误token→-1002', r.data?.errcode === '-1002', `errcode=${r.data?.errcode}`);
+
+    // ===== 过期卡拦截：expires_at 已过的卡，未过期会话也不能续命（-1005） =====
+    r = await j('POST', '/api/admin/cards/batch', { app_id: appId, count: 1, card_type: '天卡', points: 1 }, superAuth);
+    const expCard = r.data?.data?.cards?.[0]?.card;
+    r = await j('POST', '/login', { Softid: softid, Card: expCard, Mac: MAC_A });
+    const expToken = r.data?.token;
+    record('过期测试卡激活', !!expToken, JSON.stringify(r.data).slice(0, 60));
+    r = await j('GET', `/api/admin/cards?card=${expCard}`, null, superAuth);
+    const expCardId = r.data?.data?.[0]?.id;
+    r = await j('PUT', `/api/admin/cards/${expCardId}`, { expires_at: '2000-01-01 00:00:00' }, superAuth);
+    record('把测试卡改为已过期', r.data?.success === true, JSON.stringify(r.data).slice(0, 60));
+    r = await j('POST', '/heartbeat', { Softid: softid, Card: expCard, Token: expToken });
+    record('过期卡心跳→-1005', r.data?.errcode === '-1005', `errcode=${r.data?.errcode}`);
+    r = await j('POST', '/login', { Softid: softid, Card: expCard, Mac: MAC_A });
+    record('过期卡重登→-1005', r.data?.errcode === '-1005', `errcode=${r.data?.errcode}`);
 
     // ===== 公告/版本 =====
     r = await j('POST', '/version', { Softid: softid });

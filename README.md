@@ -72,7 +72,7 @@ cd client && npm ci && npm run build
 - [开发指南](docs/development.md)：本地启动、测试体系、代码不变量、新接口 Checklist。
 - [系统架构](ARCHITECTURE.md)：分层结构、数据模型、关键设计决策。
 - [版本变更记录](CHANGELOG.md)：已发布版本的变更清单。
-- [交互式架构图](auth-system-architecture.html)。
+交互式架构图在本地 `architecture/` 目录（本地产物，不入库）。
 
 ## 技术栈
 

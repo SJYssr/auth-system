@@ -1,6 +1,6 @@
 # 系统架构
 
-面向软件发行商的卡密授权管理平台。本文描述分层结构、核心数据模型与关键设计决策；交互式架构图见仓库根目录 [auth-system-architecture.html](auth-system-architecture.html)。
+面向软件发行商的卡密授权管理平台。本文描述分层结构、核心数据模型与关键设计决策；交互式架构图在本地 `architecture/` 目录（不入库）。
 
 ## 总体分层
 

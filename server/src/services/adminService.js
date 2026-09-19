@@ -3,6 +3,7 @@
  */
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
+const { effectiveLimit } = require('../utils/quota');
 
 /** 新建普通管理员的默认配额 */
 const DEFAULT_MAX_APPS = 2;
@@ -50,8 +51,7 @@ async function getEffectiveLimit(adminId, type, conn = pool) {
   if (rows.length === 0) throw new Error('管理员不存在');
   if (rows[0].is_superuser === 1) return -1;
   if (rows[0].base === -1) return -1;
-  // SUM/COALESCE 经 mysql2 返回字符串（DECIMAL），必须转数字，否则 2 + '0' → '20'
-  return Number(rows[0].base) + Number(rows[0].extra || 0);
+  return effectiveLimit(rows[0].base, rows[0].extra);
 }
 
 /** 管理员列表（不含密码/token，附带已用配额 + 有效额度 + 套餐数） */
@@ -70,9 +70,8 @@ async function getList() {
      FROM admins a ORDER BY a.id`
   );
   rows.forEach(r => {
-    // SUM 子查询返回字符串（DECIMAL），转数字后再相加，避免 2 + '0' → '20'
-    r.effective_max_apps = r.max_apps === -1 ? -1 : Number(r.max_apps) + Number(r.apps_plan_delta || 0);
-    r.effective_max_card_activations = r.max_card_activations === -1 ? -1 : Number(r.max_card_activations) + Number(r.activations_plan_delta || 0);
+    r.effective_max_apps = r.max_apps === -1 ? -1 : effectiveLimit(r.max_apps, r.apps_plan_delta);
+    r.effective_max_card_activations = r.max_card_activations === -1 ? -1 : effectiveLimit(r.max_card_activations, r.activations_plan_delta);
   });
   return rows;
 }
@@ -218,7 +217,7 @@ async function getPlans(adminId) {
  * @param {number} createdBy - 操作人ID
  * @param {string} remark - 备注
  */
-async function renewSubscription(adminId, durationDays, createdBy, remark) {
+async function renewSubscription(adminId, durationDays, _createdBy, _remark) {
   const days = parseInt(durationDays);
   if (isNaN(days) || days <= 0) throw new Error('续期天数必须为正整数');
 

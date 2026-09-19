@@ -4,10 +4,22 @@
  */
 const pool = require('../config/db');
 const crypto = require('crypto');
+const { effectiveLimit } = require('../utils/quota');
 
 /** 生成16位加密安全随机Token */
 function generateToken() {
   return crypto.randomBytes(16).toString('base64url').slice(0, 16);
+}
+
+/** 卡密会话 token 入库前统一做 SHA-256：与 admins.token 同策略，库泄露不再等于会话泄露 */
+function hashCardToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
+/** 兼容历史明文 token 的比对（哈希不中再比原文）。迁移过渡期使用，存量会话全部轮换后可移除 */
+function cardTokenMatches(stored, raw) {
+  if (!stored || !raw) return false;
+  return stored === hashCardToken(raw) || stored === String(raw);
 }
 
 /** 计算到期时间 */
@@ -82,18 +94,16 @@ async function cardLogin(softid, card, mac, version, ip) {
            FROM admins a WHERE a.id = ? FOR UPDATE`,
           [cardData.owner_id]
         );
-        if (owner.length > 0 && owner[0].is_superuser !== 1 && owner[0].max_card_activations !== -1) {
-          // 注意：SUM/COALESCE 经 mysql2 返回的是字符串（DECIMAL），必须显式转数字，
-          // 否则 2 + '0' 会拼成 '20'，配额形同虚设
-          const limit = Number(owner[0].max_card_activations) + Number(owner[0].plan_delta || 0);
-          const [cnt] = await conn.execute(
-            'SELECT COUNT(*) as total FROM cards WHERE owner_id = ? AND is_activated = 1',
-            [cardData.owner_id]
-          );
-          if (cnt[0].total >= limit) {
-            throw new Error('-1012'); // 管理员激活配额已满
+          if (owner.length > 0 && owner[0].is_superuser !== 1 && owner[0].max_card_activations !== -1) {
+            const limit = effectiveLimit(owner[0].max_card_activations, owner[0].plan_delta);
+            const [cnt] = await conn.execute(
+              'SELECT COUNT(*) as total FROM cards WHERE owner_id = ? AND is_activated = 1',
+              [cardData.owner_id]
+            );
+            if (cnt[0].total >= limit) {
+              throw new Error('-1012'); // 管理员激活配额已满
+            }
           }
-        }
       }
       // 首次激活
       token = generateToken();
@@ -103,7 +113,7 @@ async function cardLogin(softid, card, mac, version, ip) {
         'activated_at = ?, expires_at = ?, login_count = login_count + 1, ' +
         'last_login_time = ?, last_login_ip = ?, version = version + 1 ' +
         'WHERE id = ?',
-        [mac, ip, token, now, expiresAt, now, ip, cardData.id]
+        [mac, ip, hashCardToken(token), now, expiresAt, now, ip, cardData.id]
       );
     } else {
       // 再次登录
@@ -115,9 +125,20 @@ async function cardLogin(softid, card, mac, version, ip) {
       if (!tokenExpired) {
         // Token 未过期：并发登录限制
         if (cardData.mac && cardData.mac.toLowerCase() === mac.toLowerCase()) {
-          // 同设备：直接返回已有 token
+          // 同设备复登：token 只存哈希无法回传原文，轮换发放新会话（旧 token 立即失效）。
+          // 卡已到期同样拒绝（-1005），避免有效会话跨过 expires_at 续命
+          if (cardData.expires_at && new Date(cardData.expires_at) < now) {
+            throw new Error('-1005'); // 卡密已过期
+          }
+          token = generateToken();
+          await conn.execute(
+            'UPDATE cards SET token = ?, token_expires_at = NOW() + INTERVAL 24 HOUR, login_count = login_count + 1, ' +
+            'last_login_time = ?, last_login_ip = ?, version = version + 1 ' +
+            'WHERE id = ?',
+            [hashCardToken(token), now, ip, cardData.id]
+          );
           await conn.commit();
-          return cardData.token;
+          return token;
         } else {
           throw new Error('-1011'); // 卡密已在其他设备登录
         }
@@ -138,7 +159,7 @@ async function cardLogin(softid, card, mac, version, ip) {
         'UPDATE cards SET token = ?, token_expires_at = NOW() + INTERVAL 24 HOUR, login_count = login_count + 1, ' +
         'last_login_time = ?, last_login_ip = ?, version = version + 1 ' +
         'WHERE id = ?',
-        [token, now, ip, cardData.id]
+        [hashCardToken(token), now, ip, cardData.id]
       );
     }
 
@@ -155,19 +176,33 @@ async function cardLogin(softid, card, mac, version, ip) {
 
 /**
  * 心跳保活：校验有效会话后把 token 有效期延长 24 小时。
- * 会话已过期时返回 -1002，客户端应重新走 /login。
+ * 会话已过期时返回 -1002，客户端应重新走 /login；卡密已到期返回 -1005。
+ * 快路径用单条 UPDATE 完成（校验+续期），未命中再走慢路径区分具体错误码。
  */
 async function heartbeat(softid, card, token) {
+  if (!token) throw new Error('-1002');
+  const [upd] = await pool.execute(
+    'UPDATE cards c JOIN apps a ON c.app_id = a.id ' +
+    'SET c.token_expires_at = NOW() + INTERVAL 24 HOUR ' +
+    'WHERE a.softid = ? AND c.card = ? AND c.token = ? AND c.token_expires_at IS NOT NULL ' +
+    "AND c.token_expires_at > NOW() AND c.status = 'enabled' " +
+    'AND (c.expires_at IS NULL OR c.expires_at > NOW())',
+    [softid, card, hashCardToken(token)]
+  );
+  if (upd.affectedRows === 1) return;
+
+  // 慢路径：定位失败原因（兼容历史明文 token 的比对也在这里）
   const [rows] = await pool.execute(
-    'SELECT c.id, c.token, c.token_expires_at, c.status FROM cards c JOIN apps a ON c.app_id = a.id ' +
+    'SELECT c.id, c.token, c.token_expires_at, c.expires_at, c.status FROM cards c JOIN apps a ON c.app_id = a.id ' +
     'WHERE a.softid = ? AND c.card = ?',
     [softid, card]
   );
   if (rows.length === 0) throw new Error('-1004');
   const row = rows[0];
   if (row.status !== 'enabled') throw new Error('-1006');
-  if (!token || row.token !== token) throw new Error('-1002');
+  if (!cardTokenMatches(row.token, token)) throw new Error('-1002');
   if (!row.token_expires_at || new Date(row.token_expires_at) < new Date()) throw new Error('-1002');
+  if (row.expires_at && new Date(row.expires_at) < new Date()) throw new Error('-1005');
   await pool.execute(
     'UPDATE cards SET token_expires_at = NOW() + INTERVAL 24 HOUR WHERE id = ?',
     [row.id]
@@ -184,7 +219,7 @@ async function cardLogout(softid, card, token) {
     [softid, card]
   );
   if (rows.length === 0) throw new Error('-1004');
-  if (rows[0].token !== token) throw new Error('-1002');
+  if (!cardTokenMatches(rows[0].token, token)) throw new Error('-1002');
   await pool.execute('UPDATE cards SET token = NULL, token_expires_at = NULL WHERE id = ?', [rows[0].id]);
 }
 
@@ -198,10 +233,10 @@ async function getExpiry(softid, card, token) {
     [softid, card]
   );
   if (rows.length === 0) throw new Error('-1004');
-  if (!token || rows[0].token !== token) throw new Error('-1002'); // 未登录/Token无效
+  if (!cardTokenMatches(rows[0].token, token)) throw new Error('-1002'); // 未登录/Token无效
   const expiresAt = rows[0].expires_at;
   if (!expiresAt) throw new Error('-1004');
   return expiresAt;
 }
 
-module.exports = { cardLogin, cardLogout, heartbeat, getExpiry, generateToken, expireTime };
+module.exports = { cardLogin, cardLogout, heartbeat, getExpiry, generateToken, expireTime, hashCardToken, cardTokenMatches };
