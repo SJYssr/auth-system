@@ -49,8 +49,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 创建 GitHub Release（使用 CHANGELOG 内容）
+      - name: 从 CHANGELOG 提取本版本说明
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v ver="[$VERSION]" '
+            $0 ~ "^## \\[" ver "\\]" {flag=1; next}
+            flag && /^## \[/ {exit}
+            flag {print}
+          ' CHANGELOG.md > RELEASE_NOTES.md
+          echo "--- RELEASE_NOTES.md 预览 ---"
+          head -5 RELEASE_NOTES.md
+
+      - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          body_path: CHANGELOG.md
+          body_path: RELEASE_NOTES.md
           generate_release_notes: true

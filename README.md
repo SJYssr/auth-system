@@ -112,7 +112,7 @@ auth-system/
 
 ## 版本记录与升级
 
-- 当前版本 **v1.0.0**，变更清单见 [CHANGELOG.md](CHANGELOG.md)，历史发布见 [Releases](https://github.com/SJYssr/auth-system/releases)。
+- 当前版本 **v1.1.0**，变更清单见 [CHANGELOG.md](CHANGELOG.md)，历史发布见 [Releases](https://github.com/SJYssr/auth-system/releases)。
 - 升级流程（备份 → 拉取 → schema 增量段落 → 重建）见 [docs/deployment.md#升级流程](docs/deployment.md#升级流程)。
 
 ## 路线图

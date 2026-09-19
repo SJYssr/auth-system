@@ -2,7 +2,9 @@
 
 所有对外可见的变更都记录在本文件。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [1.1.0] - 2026-09-19
+
+> 本版本起打 `v*` tag 即自动发布 Docker 镜像（GHCR）与 GitHub Release。自 1.0.0 以来的安全加固、平台化功能与工程化改进见下。
 
 ### 新增
 
