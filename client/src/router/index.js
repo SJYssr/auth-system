@@ -2,10 +2,6 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import Layout from '@/pages/Layout.vue'
 import Login from '@/pages/Login.vue'
 import Admin from '@/admin/Admin.vue'
-import Dashboard from '@/admin/super/Dashboard.vue'
-import Apps from '@/admin/super/Apps.vue'
-import Datas from '@/admin/super/Datas.vue'
-import AdminLogs from '@/admin/super/AdminLogs.vue'
 
 import { useTabsStore } from '@/stores/modules/tabs'
 import { useAppStore } from '@/stores/modules/app'
@@ -53,13 +49,13 @@ const routes = [
       {
         path: 'dashboard',
         name: 'Dashboard',
-        component: Dashboard,
+        component: () => import('@/admin/super/Dashboard.vue'),
         meta: { keepAlive: true, title: '管理面板' }
       },
       {
         path: 'apps',
         name: 'Apps',
-        component: Apps,
+        component: () => import('@/admin/super/Apps.vue'),
         meta: { keepAlive: true, title: '应用管理' }
       },
       {
@@ -77,13 +73,13 @@ const routes = [
       {
         path: 'datas',
         name: 'Datas',
-        component: Datas,
+        component: () => import('@/admin/super/Datas.vue'),
         meta: { keepAlive: true, title: '网站设置', superuserOnly: true }
       },
       {
         path: 'admin-logs',
         name: 'AdminLogs',
-        component: AdminLogs,
+        component: () => import('@/admin/super/AdminLogs.vue'),
         meta: { keepAlive: true, title: '操作日志', superuserOnly: true }
       },
       {

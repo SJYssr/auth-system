@@ -104,6 +104,19 @@ router.post('/purchase', async (req, res) => {
   }
 });
 
+/** 心跳保活（校验会话并将 token 有效期延长 24 小时） */
+router.post('/heartbeat', async (req, res) => {
+  try {
+    const { Softid, Card, Token } = req.body;
+    if (!Softid || !Card || !Token) return res.json({ errcode: '-1001' });
+    if (!validateSoftid(Softid)) return res.json({ errcode: '-1001' });
+    await clientAuthService.heartbeat(Softid, Card, Token);
+    res.json({ result: '1' });
+  } catch (err) {
+    res.json({ errcode: err.message || '-1009' });
+  }
+});
+
 /** Date → 本地时间字符串 YYYY-MM-DD HH:mm:ss */
 function toLocalStr(d) {
   const pad = n => String(n).padStart(2, '0');

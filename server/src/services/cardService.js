@@ -3,6 +3,7 @@
  */
 const crypto = require('crypto');
 const pool = require('../config/db');
+const { escapeLike } = require('../utils/response');
 
 /** 生成卡密：可选前缀 + 14位随机段（无模偏差） */
 function generateCardCode(prefix = '') {
@@ -47,8 +48,8 @@ async function getList(filters = {}, page = 1, pageSize = 20) {
   const values = [];
 
   if (filters.app_id) { conds.push('c.app_id = ?'); values.push(filters.app_id); }
-  if (filters.card) { conds.push('c.card LIKE ?'); values.push(`%${filters.card}%`); }
-  if (filters.card_remark) { conds.push('c.card_remark LIKE ?'); values.push(`%${filters.card_remark}%`); }
+  if (filters.card) { conds.push('c.card LIKE ?'); values.push(`%${escapeLike(filters.card)}%`); }
+  if (filters.card_remark) { conds.push('c.card_remark LIKE ?'); values.push(`%${escapeLike(filters.card_remark)}%`); }
   if (filters.status) { conds.push('c.status = ?'); values.push(filters.status); }
   if (filters.card_type) { conds.push('c.card_type = ?'); values.push(filters.card_type); }
   if (filters.is_activated !== undefined && filters.is_activated !== '') { conds.push('c.is_activated = ?'); values.push(filters.is_activated); }

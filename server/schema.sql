@@ -231,7 +231,8 @@ INSERT IGNORE INTO apis (id, api_name, api_path, api_method, param_count, params
 (5, '获取下载地址', '/download', 'Http Post', 1, '[{"name":"Softid","desc":"软件标识"}]', '成功返回下载url，失败返回错误码', ''),
 (6, '获取使用说明地址', '/usage', 'Http Post', 1, '[{"name":"Softid","desc":"软件标识"}]', '成功返回使用说明url。失败返回错误码', ''),
 (7, '获取购买地址', '/purchase', 'Http Post', 1, '[{"name":"Softid","desc":"软件标识"}]', '成功返回购买url，失败返回错误码', ''),
-(8, '获取到期时间', '/expiry', 'Http Post', 3, '[{"name":"Softid","desc":"软件标识"},{"name":"Card","desc":"卡密"},{"name":"Token","desc":"登陆成功后返回的一串16位字符串"}]', '成功返回到期时间，失败返回错误码', '');
+(8, '获取到期时间', '/expiry', 'Http Post', 3, '[{"name":"Softid","desc":"软件标识"},{"name":"Card","desc":"卡密"},{"name":"Token","desc":"登陆成功后返回的一串16位字符串"}]', '成功返回到期时间，失败返回错误码', ''),
+(9, '心跳保活', '/heartbeat', 'Http Post', 3, '[{"name":"Softid","desc":"软件标识"},{"name":"Card","desc":"卡密"},{"name":"Token","desc":"登陆成功后返回的一串16位字符串"}]', '成功返回1并将会话延长24小时，失败返回错误码（-1002表示需重新登录）', '');
 
 -- ============================================================
 -- 增量升级段落：已按旧 schema.sql 建库的环境，只需执行这里
@@ -272,6 +273,9 @@ INSERT IGNORE INTO apis (id, api_name, api_path, api_method, param_count, params
 -- CREATE TABLE IF NOT EXISTS app_docs ( ... );  -- 见上方建表语句
 -- -- 修正 -1008 错误码字典与实际含义不符（API 中 -1008 表示强制更新，而非版本号重复）：
 -- UPDATE error_codes SET message='版本不匹配，需强制更新', description='客户端版本低于应用要求的最低版本', solution='下载并更新到最新版本' WHERE code='-1008';
+-- -- 新增心跳保活接口文档：
+-- INSERT IGNORE INTO apis (id, api_name, api_path, api_method, param_count, params_config, return_desc, description)
+--   VALUES (9, '心跳保活', '/heartbeat', 'Http Post', 3, '[{"name":"Softid","desc":"软件标识"},{"name":"Card","desc":"卡密"},{"name":"Token","desc":"登陆成功后返回的一串16位字符串"}]', '成功返回1并将会话延长24小时，失败返回错误码（-1002表示需重新登录）', '');
 -- ============================================================
 -- -- 将历史数据归属到默认超管 (id=1)，保证配额统计完整：
 -- UPDATE apps  SET owner_id = 1 WHERE owner_id IS NULL;

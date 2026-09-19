@@ -2,6 +2,7 @@
  * 操作日志服务
  */
 const pool = require('../config/db');
+const { escapeLike } = require('../utils/response');
 
 // 敏感字段列表，记录日志时剔除
 const SENSITIVE_FIELDS = ['password', 'token', 'secret', 'admin_password', 'old_password', 'new_password'];
@@ -59,7 +60,7 @@ async function getList(filters = {}, page = 1, pageSize = 20) {
   if (filters.user_id) { conds.push('user_id = ?'); values.push(filters.user_id); }
   if (filters.action) { conds.push('action = ?'); values.push(filters.action); }
   if (filters.module) { conds.push('module = ?'); values.push(filters.module); }
-  if (filters.username) { conds.push('username LIKE ?'); values.push(`%${filters.username}%`); }
+  if (filters.username) { conds.push('username LIKE ?'); values.push(`%${escapeLike(filters.username)}%`); }
   if (filters.response_status) { conds.push('response_status = ?'); values.push(filters.response_status); }
   if (filters.start_date) { conds.push('created_at >= ?'); values.push(`${filters.start_date} 00:00:00`); }
   if (filters.end_date) { conds.push('created_at < DATE_ADD(?, INTERVAL 1 DAY)'); values.push(filters.end_date); }

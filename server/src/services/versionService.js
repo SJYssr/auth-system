@@ -3,6 +3,15 @@
  */
 const pool = require('../config/db');
 
+// 与前端一致的版本号格式约束（服务端兜底，避免脏数据进入 /version 接口）
+const VERSION_RE = /^\d+\.\d+\.\d+$/;
+
+function validateVersion(version) {
+  if (version !== undefined && !VERSION_RE.test(String(version))) {
+    throw new Error('版本号格式须为 x.y.z');
+  }
+}
+
 async function getList(appId, page = 1, pageSize = 20, status = '') {
   const conds = ['av.app_id = ?'];
   const values = [appId];
@@ -47,6 +56,7 @@ async function syncAppVersion(appId) {
 }
 
 async function create(data) {
+  validateVersion(data.version);
   const [result] = await pool.execute(
     'INSERT INTO app_versions (app_id, version, version_name, status, force_update) VALUES (?, ?, ?, ?, ?)',
     [data.app_id, data.version, data.version_name || null, data.status || 'enabled',
@@ -58,6 +68,7 @@ async function create(data) {
 
 /** 更新版本（仅允许白名单字段），成功后同步 apps 版本信息 */
 async function update(id, data) {
+  validateVersion(data.version);
   const fields = []; const values = [];
   const allowedFields = ['version', 'version_name', 'status', 'force_update'];
   for (const key of allowedFields) {

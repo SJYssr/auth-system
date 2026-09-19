@@ -11,11 +11,9 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.1.4",
     "axios": "^1.6.2",
-    "crypto-js": "^4.2.0",
     "dompurify": "^3.4.5",
     "echarts": "^5.6.0",
     "element-plus": "^2.4.4",
-    "md5": "^2.3.0",
     "nprogress": "^0.2.0",
     "pinia": "^2.1.7",
     "vue": "^3.3.11",

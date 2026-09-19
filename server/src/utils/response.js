@@ -33,11 +33,17 @@ function paginated(data, pagination) {
   };
 }
 
-/** 解析分页参数（兼容 pageSize/per_page） */
+/** 解析分页参数（兼容 pageSize/per_page），pageSize 上限 200 防止全表拖取 */
 function parsePagination(query) {
-  const page = parseInt(query.page) || 1;
-  const pageSize = parseInt(query.pageSize) || parseInt(query.per_page) || 20;
+  const page = Math.max(parseInt(query.page) || 1, 1);
+  let pageSize = parseInt(query.pageSize) || parseInt(query.per_page) || 20;
+  pageSize = Math.min(Math.max(pageSize, 1), 200);
   return { page, pageSize };
 }
 
-module.exports = { success, error, paginated, parsePagination };
+/** LIKE 模糊搜索时转义 % _ 通配符，让用户输入按字面匹配（MySQL 默认转义符为反斜杠） */
+function escapeLike(str) {
+  return String(str).replace(/[\\%_]/g, ch => '\\' + ch);
+}
+
+module.exports = { success, error, paginated, parsePagination, escapeLike };

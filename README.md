@@ -106,11 +106,11 @@ auth-system/
 
 ## 路线图
 
+- [x] 客户端心跳保活接口（`/heartbeat` 会话续期）
 - [ ] Playwright UI 冒烟套件纳入 CI
-- [ ] 前端代码分割与按需加载（当前主 chunk 偏大）
-- [ ] 客户端心跳保活接口（`/heartbeat` 会话续期）
+- [ ] Element Plus 按需自动引入（进一步压缩构建产物）
 - [ ] 管理员账号到期邮件提醒
-- [ ] 卡密流 watermarked 导出与发卡对接
+- [ ] 产品分类体系（后台维护 + 前台产品中心过滤）
 
 ## 客户端 API（卡密终端调用）
 
@@ -122,6 +122,7 @@ auth-system/
 | `/version` | POST | 获取最新版本号 |
 | `/login` | POST | 卡密登录（卡密 + 机器码绑定，首次激活计算有效期） |
 | `/logout` | POST | 卡密登出（释放会话，设备绑定保留） |
+| `/heartbeat` | POST | 心跳保活（校验会话并延长 24 小时，过期返回 -1002 需重新登录） |
 | `/download` | POST | 获取下载地址 |
 | `/usage` | POST | 获取使用说明地址 |
 | `/purchase` | POST | 获取购买地址 |

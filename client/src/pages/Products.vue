@@ -29,20 +29,6 @@
             </el-input>
           </div>
 
-          <!-- 分类导航 -->
-          <div class="category-nav">
-            <div class="nav-title">全部分类</div>
-            <div class="nav-list">
-              <div class="nav-item" :class="{ active: searchForm.category === '' }" @click="selectCategory('')">
-                全部分类
-              </div>
-              <div v-for="category in categories" :key="category.id" class="nav-item"
-                :class="{ active: searchForm.category === category.id }" @click="selectCategory(category.id)">
-                {{ category.label }}
-              </div>
-            </div>
-          </div>
-
           <!-- 价格筛选 -->
           <div class="price-filter">
             <div class="filter-title">价格</div>
@@ -204,13 +190,8 @@ const products = ref([])
 const productsLoading = ref(false)
 const searchForm = reactive({
   keyword: '',
-  category: '',
   price_type: ''
 })
-
-// 分类数据
-const categories = ref([])
-const categoriesLoading = ref(false)
 
 // 分页
 const pagination = reactive({
@@ -280,16 +261,10 @@ const applyFiltersAndPaginate = () => {
   products.value = filtered.slice(start, start + pagination.per_page)
 }
 
-// 搜索处理
+// 搜索处理（数据已在客户端缓存，过滤/翻页无需重新请求）
 const handleSearch = () => {
   pagination.page = 1
-  fetchProducts()
-}
-
-// 分类选择
-const selectCategory = (category) => {
-  searchForm.category = category
-  handleSearch()
+  applyFiltersAndPaginate()
 }
 
 // 价格类型选择
@@ -302,12 +277,12 @@ const selectPriceType = (priceType) => {
 const handleSizeChange = (size) => {
   pagination.per_page = size
   pagination.page = 1
-  fetchProducts()
+  applyFiltersAndPaginate()
 }
 
 const handleCurrentChange = (page) => {
   pagination.page = page
-  fetchProducts()
+  applyFiltersAndPaginate()
 }
 
 // 产品详情
@@ -373,14 +348,7 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString('zh-CN')
 }
 
-// 获取分类列表（当前后端无分类接口，预留扩展点）
-const fetchCategories = async () => {
-  // 暂时使用空数组，后续可对接分类API
-  categories.value = []
-}
-
 onMounted(() => {
-  fetchCategories()
   fetchProducts()
 })
 </script>

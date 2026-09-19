@@ -104,10 +104,17 @@ async function cleanup() {
     record('登出后同设备可重新登录(新token)', typeof r.data?.token === 'string' && r.data.token !== token1, JSON.stringify(r.data).slice(0, 60));
 
     // ===== 到期时间（需 token）=====
-    r = await j('POST', '/expiry', { Softid: softid, Card: c1, Token: r.data.token });
+    const token2 = r.data?.token;
+    r = await j('POST', '/expiry', { Softid: softid, Card: c1, Token: token2 });
     record('到期时间返回expires_at', /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(r.data?.expires_at || ''), r.data?.expires_at);
     r = await j('POST', '/expiry', { Softid: softid, Card: c1, Token: 'bad-token' });
     record('到期时间错误token→-1002', r.data?.errcode === '-1002', `errcode=${r.data?.errcode}`);
+
+    // ===== 心跳保活 =====
+    r = await j('POST', '/heartbeat', { Softid: softid, Card: c1, Token: token2 });
+    record('心跳保活返回result=1', r.data?.result === '1', JSON.stringify(r.data).slice(0, 60));
+    r = await j('POST', '/heartbeat', { Softid: softid, Card: c1, Token: 'bad-token' });
+    record('心跳错误token→-1002', r.data?.errcode === '-1002', `errcode=${r.data?.errcode}`);
 
     // ===== 公告/版本 =====
     r = await j('POST', '/version', { Softid: softid });
@@ -141,6 +148,12 @@ async function cleanup() {
     // ===== 归属隔离：普通管理员动不了超管的应用 =====
     r = await j('PUT', `/api/admin/apps/${appId}`, { announcement: 'hijack' }, normalAuth);
     record('普通管理员改超管应用被拒-1003', r.status === 403 && r.data?.errcode === '-1003', `status=${r.status}`);
+
+    // ===== 服务端校验与分页上限 =====
+    r = await j('POST', '/api/admin/versions', { app_id: appId, version: 'bad.version', version_name: 'x' }, superAuth);
+    record('非法版本号被拒', r.data?.success === false && /x\.y\.z/.test(r.data?.message || ''), r.data?.message);
+    r = await j('GET', `/api/admin/cards?app_id=${appId}&pageSize=9999`, null, superAuth);
+    record('pageSize 上限 200', r.data?.pagination?.pageSize <= 200, `pageSize=${r.data?.pagination?.pageSize}`);
 
     // ===== 应用文档 =====
     r = await j('PUT', `/api/admin/apps/${appId}/docs`, { intro: { title: 'intro', content: '<p>doc</p>' } }, superAuth);

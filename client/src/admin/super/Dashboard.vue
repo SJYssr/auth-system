@@ -139,7 +139,14 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
-import * as echarts from 'echarts'
+// 按需引入 ECharts（仪表盘只用柱状图），避免全量打包拖大主 chunk
+import { init as echartsInit, use } from 'echarts/core'
+import { BarChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+
+use([BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
+
 import { useBusinessStore } from '@/stores/modules/business'
 
 // store
@@ -194,7 +201,7 @@ const initBarChart = () => {
   if (!barChart.value) return
   const data = businessStore.dashboardData?.app_distribution ?? []
   const x = data.map(d => d.app_name)
-  if (!barChartInstance) barChartInstance = echarts.init(barChart.value)
+  if (!barChartInstance) barChartInstance = echartsInit(barChart.value)
   const option = {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     legend: { data: cardTypes },
@@ -217,7 +224,7 @@ const initLineChart = () => {
   if (!lineChart.value) return
   const data = businessStore.dashboardData?.revenue ?? []
   const x = data.map(d => d.app_name)
-  if (!lineChartInstance) lineChartInstance = echarts.init(lineChart.value)
+  if (!lineChartInstance) lineChartInstance = echartsInit(lineChart.value)
   const option = {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     legend: { data: cardTypes },

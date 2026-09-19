@@ -2,13 +2,14 @@
  * API元数据管理服务
  */
 const pool = require('../config/db');
+const { escapeLike } = require('../utils/response');
 
 async function getList(page = 1, pageSize = 20, keyword = '') {
   const conds = [];
   const values = [];
   if (keyword) {
     conds.push('(api_name LIKE ? OR api_path LIKE ?)');
-    values.push(`%${keyword}%`, `%${keyword}%`);
+    values.push(`%${escapeLike(keyword)}%`, `%${escapeLike(keyword)}%`);
   }
   const whereSql = conds.length ? ` WHERE ${conds.join(' AND ')}` : '';
   const offset = (page - 1) * pageSize;

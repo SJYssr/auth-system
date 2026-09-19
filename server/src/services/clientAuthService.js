@@ -154,6 +154,27 @@ async function cardLogin(softid, card, mac, version, ip) {
 }
 
 /**
+ * 心跳保活：校验有效会话后把 token 有效期延长 24 小时。
+ * 会话已过期时返回 -1002，客户端应重新走 /login。
+ */
+async function heartbeat(softid, card, token) {
+  const [rows] = await pool.execute(
+    'SELECT c.id, c.token, c.token_expires_at, c.status FROM cards c JOIN apps a ON c.app_id = a.id ' +
+    'WHERE a.softid = ? AND c.card = ?',
+    [softid, card]
+  );
+  if (rows.length === 0) throw new Error('-1004');
+  const row = rows[0];
+  if (row.status !== 'enabled') throw new Error('-1006');
+  if (!token || row.token !== token) throw new Error('-1002');
+  if (!row.token_expires_at || new Date(row.token_expires_at) < new Date()) throw new Error('-1002');
+  await pool.execute(
+    'UPDATE cards SET token_expires_at = NOW() + INTERVAL 24 HOUR WHERE id = ?',
+    [row.id]
+  );
+}
+
+/**
  * 卡密登出
  */
 async function cardLogout(softid, card, token) {
@@ -183,4 +204,4 @@ async function getExpiry(softid, card, token) {
   return expiresAt;
 }
 
-module.exports = { cardLogin, cardLogout, getExpiry, generateToken, expireTime };
+module.exports = { cardLogin, cardLogout, heartbeat, getExpiry, generateToken, expireTime };

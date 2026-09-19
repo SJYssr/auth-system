@@ -3,6 +3,7 @@
  */
 const crypto = require('crypto');
 const pool = require('../config/db');
+const { escapeLike } = require('../utils/response');
 
 /** 生成18位随机softid（无模偏差） */
 function generateSoftid() {
@@ -121,7 +122,7 @@ async function saveDoc(appId, docType, title, content) {
 async function getList(page = 1, pageSize = 20, filters = {}) {
   const conds = [];
   const values = [];
-  if (filters.app_name) { conds.push('a.app_name LIKE ?'); values.push(`%${filters.app_name}%`); }
+  if (filters.app_name) { conds.push('a.app_name LIKE ?'); values.push(`%${escapeLike(filters.app_name)}%`); }
   if (filters.status) { conds.push('a.status = ?'); values.push(filters.status); }
   if (filters.owner_id) { conds.push('a.owner_id = ?'); values.push(filters.owner_id); }
   const whereSql = conds.length ? ` WHERE ${conds.join(' AND ')}` : '';

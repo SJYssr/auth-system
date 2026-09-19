@@ -178,7 +178,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
 
   // 客户端卡密 API 限流（挂载在根路径，不被 /api/public 限流覆盖）
   app.post(
-    ['/announcement', '/version', '/login', '/logout', '/download', '/usage', '/purchase', '/expiry'],
+    ['/announcement', '/version', '/login', '/logout', '/heartbeat', '/download', '/usage', '/purchase', '/expiry'],
     rateLimit({
       windowMs: 60 * 1000,
       max: 60,

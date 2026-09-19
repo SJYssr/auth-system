@@ -2,13 +2,14 @@
  * 错误码字典服务
  */
 const pool = require('../config/db');
+const { escapeLike } = require('../utils/response');
 
 async function getList(page = 1, pageSize = 20, keyword = '') {
   const conds = [];
   const values = [];
   if (keyword) {
     conds.push('(code LIKE ? OR message LIKE ? OR description LIKE ?)');
-    values.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+    values.push(`%${escapeLike(keyword)}%`, `%${escapeLike(keyword)}%`, `%${escapeLike(keyword)}%`);
   }
   const whereSql = conds.length ? ` WHERE ${conds.join(' AND ')}` : '';
   const offset = (page - 1) * pageSize;

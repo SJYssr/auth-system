@@ -548,7 +548,7 @@ router.post('/versions', async (req, res) => {
     if (err.code === 'ER_DUP_ENTRY') {
       return res.json(error('该应用的版本号已存在', '-1008'));
     }
-    res.json(error('创建版本失败'));
+    res.json(error(err.message === '版本号格式须为 x.y.z' ? err.message : '创建版本失败'));
   }
 });
 
@@ -568,7 +568,7 @@ router.put('/versions/:id', async (req, res) => {
     res.json(success(null, '更新成功'));
   } catch (err) {
     console.error('更新版本:', err.message);
-    res.json(error('更新版本失败'));
+    res.json(error(err.message === '版本号格式须为 x.y.z' ? err.message : '更新版本失败'));
   }
 });
 
