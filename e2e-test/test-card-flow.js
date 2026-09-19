@@ -125,6 +125,13 @@ async function cleanup() {
     r = await j('POST', '/login', { Softid: softid, Card: expCard, Mac: MAC_A });
     const expToken = r.data?.token;
     record('过期测试卡激活', !!expToken, JSON.stringify(r.data).slice(0, 60));
+
+    // ===== 在线会话列表 =====
+    r = await j('GET', `/api/admin/sessions?keyword=${expCard}`, null, superAuth);
+    const sessRow = (r.data?.data || []).find(s => s.card === expCard);
+    record('会话列表包含刚激活的卡', !!sessRow, JSON.stringify(r.data).slice(0, 80));
+
+    // ===== 过期卡拦截（会话仍有效 + 卡已过期 → -1005） =====
     r = await j('GET', `/api/admin/cards?card=${expCard}`, null, superAuth);
     const expCardId = r.data?.data?.[0]?.id;
     r = await j('PUT', `/api/admin/cards/${expCardId}`, { expires_at: '2000-01-01 00:00:00' }, superAuth);
@@ -133,6 +140,15 @@ async function cleanup() {
     record('过期卡心跳→-1005', r.data?.errcode === '-1005', `errcode=${r.data?.errcode}`);
     r = await j('POST', '/login', { Softid: softid, Card: expCard, Mac: MAC_A });
     record('过期卡重登→-1005', r.data?.errcode === '-1005', `errcode=${r.data?.errcode}`);
+
+    // ===== 踢下线（kill switch）：借 c1 的活跃会话验证 =====
+    r = await j('GET', `/api/admin/sessions?keyword=${c1}`, null, superAuth);
+    const c1Sess = (r.data?.data || []).find(s => s.card === c1);
+    record('会话列表包含c1活跃会话', !!c1Sess);
+    r = await j('DELETE', `/api/admin/sessions/${c1Sess?.id}`, null, superAuth);
+    record('踢下线成功', r.data?.success === true, JSON.stringify(r.data).slice(0, 60));
+    r = await j('POST', '/heartbeat', { Softid: softid, Card: c1, Token: token2 });
+    record('被踢会话心跳→-1002', r.data?.errcode === '-1002', `errcode=${r.data?.errcode}`);
 
     // ===== 公告/版本 =====
     r = await j('POST', '/version', { Softid: softid });
@@ -160,6 +176,12 @@ async function cleanup() {
     record('普通管理员第1张卡激活', !!r.data?.token, JSON.stringify(r.data).slice(0, 60));
     r = await j('POST', '/login', { Softid: normalSoftid, Card: normCards[1], Mac: MAC_A });
     record('普通管理员第2张卡激活', !!r.data?.token);
+
+    // ===== 会话 owner 隔离：普管只见自己名下会话 =====
+    r = await j('GET', `/api/admin/sessions?keyword=${normCards[0]}`, null, normalAuth);
+    record('普通管理员看到自己卡密的会话', (r.data?.data || []).some(s => s.card === normCards[0]));
+    r = await j('GET', `/api/admin/sessions?keyword=${expCard}`, null, normalAuth);
+    record('普通管理员看不到超管卡密的会话', !(r.data?.data || []).some(s => s.card === expCard));
     r = await j('POST', '/login', { Softid: normalSoftid, Card: normCards[2], Mac: MAC_A });
     record('第3张卡激活被拒-1012', r.data?.errcode === '-1012', `errcode=${r.data?.errcode}`);
 

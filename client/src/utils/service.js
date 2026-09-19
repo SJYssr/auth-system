@@ -38,6 +38,11 @@ const superLogService = {
     delete: (data) => request.delete('/admin/logs', { data })
 }
 
+const superSessionService = {
+    getAll: (params = {}) => request.get('/admin/sessions', { params }),
+    kick: (id) => request.delete(`/admin/sessions/${id}`)
+}
+
 const superCardService = {
     getAll: (params = {}) => request.get('/admin/cards', { params }),
     create: (data) => request.post('/admin/cards', data),
@@ -75,6 +80,7 @@ export {
   superDashboardService,
   superDataService,
   superLogService,
+  superSessionService,
   superCardService,
   superVersionService,
   superApiService,

@@ -65,6 +65,13 @@ const routes = [
         meta: { title: '卡密管理' }
       },
       {
+        // 在线会话：所有管理员可见，非超管只看自己名下卡密的会话（后端 owner 隔离）
+        path: 'sessions',
+        name: 'Sessions',
+        component: () => import('@/admin/super/Sessions.vue'),
+        meta: { title: '在线会话' }
+      },
+      {
         path: 'versions',
         name: 'Versions',
         component: () => import('@/admin/super/Versions.vue'),

@@ -3,7 +3,7 @@ import { createPinia } from 'pinia'
 import { ElLoading } from 'element-plus'
 import {
   Monitor, Grid, Tickets, Upload, DocumentCopy, UserFilled, Setting, Management,
-  User, Lock
+  User, Lock, Connection
 } from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router'
@@ -17,7 +17,7 @@ app.use(ElLoading)
 
 // 2. 侧栏菜单数据与 prefix-icon 以字符串引用的图标，需要全局注册；
 //    其余图标均在各组件内显式 import，不再全量注册
-const globalIcons = { Monitor, Grid, Tickets, Upload, DocumentCopy, UserFilled, Setting, Management, User, Lock }
+const globalIcons = { Monitor, Grid, Tickets, Upload, DocumentCopy, UserFilled, Setting, Management, User, Lock, Connection }
 for (const [key, component] of Object.entries(globalIcons)) {
   app.component(key, component)
 }

@@ -514,6 +514,42 @@ router.delete('/cards/:id', async (req, res) => {
   }
 });
 
+/** ===== 在线会话管理（owner 隔离：非超管只能查看/踢自己名下卡密的会话） ===== */
+router.get('/sessions', async (req, res) => {
+  try {
+    const { page, pageSize } = parsePagination(req.query);
+    const filters = {};
+    if (req.query.keyword) filters.keyword = req.query.keyword;
+    if (req.query.app_id) filters.app_id = parseInt(req.query.app_id);
+    if (!req.isSuperuser) filters.owner_id = req.currentUser.id;
+    const result = await cardService.listSessions(filters, page, pageSize);
+    res.json(paginated(result.rows, result.pagination));
+  } catch (err) {
+    console.error('在线会话列表:', err.message);
+    res.json(error('获取在线会话失败'));
+  }
+});
+
+router.delete('/sessions/:id', async (req, res) => {
+  try {
+    const operator = { is_superuser: req.isSuperuser, id: req.currentUser.id };
+    const result = await cardService.kickSession(parseInt(req.params.id), operator);
+    if (!result.ok) {
+      const messages = { not_found: '会话不存在', forbidden: '无权操作该会话', no_session: '该卡密当前没有在线会话' };
+      return res.json(error(messages[result.reason] || '踢下线失败'));
+    }
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'kick_session', module: 'cards', target_type: 'card', target_id: parseInt(req.params.id),
+      target_name: result.card, description: `踢下线卡密「${result.card}」的在线会话`, ip_address: req.ip
+    });
+    res.json(success(null, '已踢下线'));
+  } catch (err) {
+    console.error('踢下线:', err.message);
+    res.json(error('踢下线失败'));
+  }
+});
+
 /** ===== 版本管理 ===== */
 router.get('/versions', async (req, res) => {
   try {

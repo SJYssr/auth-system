@@ -136,9 +136,48 @@ async function update(id, data) {
   await pool.execute(`UPDATE cards SET ${fields.join(', ')} WHERE id = ?`, values);
 }
 
+/** 在线会话列表（分页）：token 未过期即视为在线，支持卡密/机器码关键词与应用过滤。
+ *  非超管只能看到自己名下卡密的会话（owner_id 隔离，与卡密列表同规则） */
+async function listSessions(filters = {}, page = 1, pageSize = 20) {
+  const conds = ['c.token IS NOT NULL', 'c.token_expires_at IS NOT NULL', 'c.token_expires_at > NOW()'];
+  const values = [];
+  if (filters.owner_id) { conds.push('c.owner_id = ?'); values.push(filters.owner_id); }
+  if (filters.app_id) { conds.push('c.app_id = ?'); values.push(filters.app_id); }
+  if (filters.keyword) {
+    conds.push('(c.card LIKE ? OR c.mac LIKE ?)');
+    const kw = `%${escapeLike(filters.keyword)}%`;
+    values.push(kw, kw);
+  }
+  const whereSql = ` WHERE ${conds.join(' AND ')}`;
+  const offset = (page - 1) * pageSize;
+  const [rows] = await pool.execute(
+    'SELECT c.id, c.card, c.app_id, a.app_name, c.mac, c.last_login_time, c.last_login_ip, ' +
+    'c.token_expires_at, c.login_count, c.is_activated, c.expires_at, c.owner_id ' +
+    `FROM cards c LEFT JOIN apps a ON c.app_id = a.id${whereSql}` +
+    ' ORDER BY c.last_login_time DESC LIMIT ? OFFSET ?',
+    [...values, String(pageSize), String(offset)]
+  );
+  const [countRes] = await pool.execute(`SELECT COUNT(*) as total FROM cards c${whereSql}`, values);
+  return { rows, pagination: { page, pageSize, total: countRes[0].total } };
+}
+
+/** 踢下线（远程 kill switch）：清空会话使该卡密 token 立即失效。
+ *  返回 false 表示会话已不存在或无权操作；成功返回 true。 */
+async function kickSession(id, operator = { is_superuser: false, id: null }) {
+  const [rows] = await pool.execute('SELECT id, card, owner_id, token FROM cards WHERE id = ?', [id]);
+  if (rows.length === 0) return { ok: false, reason: 'not_found' };
+  const card = rows[0];
+  if (!operator.is_superuser && Number(card.owner_id) !== Number(operator.id)) {
+    return { ok: false, reason: 'forbidden' };
+  }
+  if (!card.token) return { ok: false, reason: 'no_session' };
+  await pool.execute('UPDATE cards SET token = NULL, token_expires_at = NULL WHERE id = ?', [id]);
+  return { ok: true, card: card.card };
+}
+
 /** 删除卡密 */
 async function remove(id) {
   await pool.execute('DELETE FROM cards WHERE id = ?', [id]);
 }
 
-module.exports = { createCards, getList, getById, update, remove, generateCardCode };
+module.exports = { createCards, getList, getById, update, remove, generateCardCode, listSessions, kickSession };
