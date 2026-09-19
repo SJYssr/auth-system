@@ -5,7 +5,7 @@
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const mysql = require('mysql2/promise');
 
-const EXPECTED_TABLES = ['admins', 'apps', 'cards', 'app_versions', 'logs', 'datas', 'apis', 'error_codes'];
+const EXPECTED_TABLES = ['admins', 'apps', 'cards', 'app_versions', 'app_docs', 'logs', 'datas', 'apis', 'error_codes', 'admin_plans'];
 
 (async () => {
   let conn;

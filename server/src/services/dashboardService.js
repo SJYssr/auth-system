@@ -64,6 +64,7 @@ async function getStats(adminId = null, isSuperuser = false) {
     '(SELECT COUNT(*) FROM cards c WHERE c.app_id = a.id AND c.is_activated = 1) as activated, ' +
     '(SELECT COUNT(*) FROM cards c WHERE c.app_id = a.id AND c.is_activated = 1 AND c.card_type = \'小时卡\') as `小时卡`, ' +
     '(SELECT COUNT(*) FROM cards c WHERE c.app_id = a.id AND c.is_activated = 1 AND c.card_type = \'天卡\') as `天卡`, ' +
+    '(SELECT COUNT(*) FROM cards c WHERE c.app_id = a.id AND c.is_activated = 1 AND c.card_type = \'周卡\') as `周卡`, ' +
     '(SELECT COUNT(*) FROM cards c WHERE c.app_id = a.id AND c.is_activated = 1 AND c.card_type = \'月卡\') as `月卡`, ' +
     '(SELECT COUNT(*) FROM cards c WHERE c.app_id = a.id AND c.is_activated = 1 AND c.card_type = \'年卡\') as `年卡` ' +
     `FROM apps a ${appDistWhere} ORDER BY a.id`,
@@ -76,6 +77,7 @@ async function getStats(adminId = null, isSuperuser = false) {
     'SELECT a.app_name, ' +
     'COALESCE(SUM(CASE WHEN c.card_type = \'小时卡\' THEN c.price ELSE 0 END), 0) as `小时卡`, ' +
     'COALESCE(SUM(CASE WHEN c.card_type = \'天卡\' THEN c.price ELSE 0 END), 0) as `天卡`, ' +
+    'COALESCE(SUM(CASE WHEN c.card_type = \'周卡\' THEN c.price ELSE 0 END), 0) as `周卡`, ' +
     'COALESCE(SUM(CASE WHEN c.card_type = \'月卡\' THEN c.price ELSE 0 END), 0) as `月卡`, ' +
     'COALESCE(SUM(CASE WHEN c.card_type = \'年卡\' THEN c.price ELSE 0 END), 0) as `年卡` ' +
     `FROM apps a LEFT JOIN cards c ON a.id = c.app_id AND c.is_activated = 1 ${revenueWhere} GROUP BY a.id`,

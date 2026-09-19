@@ -1,5 +1,5 @@
 // API 层功能测试：客户端卡密 API + 公开 API + 后台管理 API（真实登录获取 token）
-const BASE = 'http://localhost:3000';
+const BASE = process.env.E2E_BASE || 'http://localhost:3001';
 const results = [];
 function record(name, ok, detail = '') {
   results.push({ name, ok, detail });
@@ -17,6 +17,7 @@ async function j(method, path, body, headers = {}) {
 }
 
 (async () => {
+  try {
   // ===== 公开 API =====
   let r = await j('GET', '/health');
   record('GET /health', r.status === 200 && r.data.status === 'ok', JSON.stringify(r.data));
@@ -28,8 +29,10 @@ async function j(method, path, body, headers = {}) {
   const apps = r.data?.data || [];
   record('GET /api/public/apps', r.data?.success === true && Array.isArray(apps) && apps.length > 0, `${apps.length} 个应用`);
 
-  r = await j('GET', '/api/public/apps/1');
-  record('GET /api/public/apps/1', r.data?.success === true && r.data.data?.id === 1, r.data?.data?.app_name);
+  // 详情断言基于列表实际返回的 id，不假设库中存在 id=1（对库状态解耦）
+  const firstAppId = apps[0]?.id;
+  r = await j('GET', `/api/public/apps/${firstAppId}`);
+  record('GET /api/public/apps/:id', r.data?.success === true && r.data.data?.id === firstAppId, r.data?.data?.app_name);
 
   r = await j('GET', '/api/public/apis');
   record('GET /api/public/apis', r.data?.success === true && Array.isArray(r.data?.data), `${(r.data?.data || []).length} 条API文档`);
@@ -81,4 +84,9 @@ async function j(method, path, body, headers = {}) {
   const pass = results.filter(x => x.ok).length;
   console.log(`\n==== API 功能测试: ${pass}/${results.length} 通过 ====`);
   process.exit(pass === results.length ? 0 : 1);
+  } catch (e) {
+    // 网络抖动等基础设施异常按测试失败处理，不裸崩
+    record('测试执行异常', false, e.message);
+    process.exit(1);
+  }
 })();

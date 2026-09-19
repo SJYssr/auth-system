@@ -1,6 +1,11 @@
 // 创建/删除 e2e 测试管理员（密码 E2eTest@2026，超管）
 // 用法: node admin-seed.js create | delete
-require('../server/node_modules/dotenv').config({ path: require('path').join(__dirname, '../server/.env') });
+// 环境变量优先读 e2e-test/.env（务必指向测试库！），不存在时回退 server/.env
+const path = require('path');
+const fs = require('fs');
+const envLocal = path.join(__dirname, '.env');
+const envFallback = path.join(__dirname, '../server/.env');
+require('../server/node_modules/dotenv').config({ path: fs.existsSync(envLocal) ? envLocal : envFallback });
 const mysql = require('../server/node_modules/mysql2/promise');
 const bcrypt = require('../server/node_modules/bcryptjs');
 

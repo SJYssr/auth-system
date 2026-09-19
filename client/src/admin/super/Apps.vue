@@ -72,12 +72,13 @@
             <span>{{ row.activated_cards ?? 0 }} / {{ row.total_cards ?? 0 }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="320">
+        <el-table-column label="操作" width="380">
           <template #default="{ row }">
             <el-button-group>
               <el-button type="primary" size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
               <el-button type="warning" size="small" @click="handleAnnouncement(row)">公告</el-button>
               <el-button type="success" size="small" @click="handleVersions(row)">版本</el-button>
+              <el-button type="info" size="small" @click="handleDocs(row)">文档</el-button>
               <el-button type="danger" size="small" :icon="Delete" @click="handleDelete(row)">删除</el-button>
             </el-button-group>
           </template>
@@ -173,6 +174,34 @@
       </template>
     </el-dialog>
 
+    <!-- 应用文档弹窗（产品介绍/部署文档，前台应用详情页展示） -->
+    <el-dialog v-model="docsVisible" title="应用文档" width="720px">
+      <el-alert type="info" :closable="false" style="margin-bottom:16px"
+        title="支持 HTML 片段，前台展示时会经过 DOMPurify 消毒；留空表示不展示该文档" />
+      <el-form label-width="90px">
+        <el-divider content-position="left">产品介绍</el-divider>
+        <el-form-item label="标题">
+          <el-input v-model="docsForm.intro_title" placeholder="如：产品功能介绍（可留空）" maxlength="100" />
+        </el-form-item>
+        <el-form-item label="内容">
+          <el-input v-model="docsForm.intro_content" type="textarea" :rows="6"
+            placeholder="<h3>功能亮点</h3><p>支持xxx</p>" />
+        </el-form-item>
+        <el-divider content-position="left">部署文档</el-divider>
+        <el-form-item label="标题">
+          <el-input v-model="docsForm.deploy_title" placeholder="如：部署教程（可留空）" maxlength="100" />
+        </el-form-item>
+        <el-form-item label="内容">
+          <el-input v-model="docsForm.deploy_content" type="textarea" :rows="6"
+            placeholder="<ol><li>下载后解压</li><li>运行 install.exe</li></ol>" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="docsVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleDocsSave" :loading="docsSaving">保存</el-button>
+      </template>
+    </el-dialog>
+
   </el-main>
 </template>
 
@@ -185,6 +214,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Edit, Delete, Refresh } from '@element-plus/icons-vue'
 
 import { useBusinessStore } from '@/stores/modules/business'
+import { superAppService } from '@/utils/service'
 
 // 搜索表单
 const searchForm = reactive({
@@ -199,6 +229,9 @@ const selectedRows = ref([])
 const announceVisible = ref(false)
 const announceSaving = ref(false)
 const announceForm = ref({ softid: '', app_name: '', announcement: '', id: null })
+const docsVisible = ref(false)
+const docsSaving = ref(false)
+const docsForm = ref({ id: null, app_name: '', intro_title: '', intro_content: '', deploy_title: '', deploy_content: '' })
 
 // 搜索相关方法
 const handleSearch = async () => {
@@ -233,8 +266,13 @@ const clearSearch = async () => {
 const handleBatchDelete = async () => {
   if (selectedRows.value.length === 0) return
   try {
+    const totalCards = selectedRows.value.reduce((s, r) => s + (r.total_cards ?? 0), 0)
+    const activatedCards = selectedRows.value.reduce((s, r) => s + (r.activated_cards ?? 0), 0)
     await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedRows.value.length} 个应用吗？`,
+      `确定要删除选中的 ${selectedRows.value.length} 个应用吗？` +
+      (totalCards > 0
+        ? `这些应用下共有 ${totalCards} 张卡密${activatedCards > 0 ? `（其中已激活 ${activatedCards} 张）` : ''}，删除后将一并清除，此操作不可恢复！`
+        : '此操作不可恢复。'),
       '警告',
       { type: 'warning' }
     )
@@ -443,13 +481,62 @@ const handleAnnounceSave = async () => {
   }
 }
 
+/** 打开应用文档弹窗并加载已有内容 */
+const handleDocs = async (row) => {
+  docsForm.value = {
+    id: row.id,
+    app_name: row.app_name || '',
+    intro_title: '', intro_content: '',
+    deploy_title: '', deploy_content: ''
+  }
+  docsVisible.value = true
+  try {
+    const res = await superAppService.getDocs(row.id)
+    const docs = res.data || {}
+    docsForm.value.intro_title = docs.intro?.title || ''
+    docsForm.value.intro_content = docs.intro?.content || ''
+    docsForm.value.deploy_title = docs.deploy?.title || ''
+    docsForm.value.deploy_content = docs.deploy?.content || ''
+  } catch (error) {
+    ElMessage.error(error.message || '加载文档失败')
+  }
+}
+
+const handleDocsSave = async () => {
+  try {
+    docsSaving.value = true
+    await superAppService.saveDocs(docsForm.value.id, {
+      intro: { title: docsForm.value.intro_title, content: docsForm.value.intro_content },
+      deploy: { title: docsForm.value.deploy_title, content: docsForm.value.deploy_content }
+    })
+    ElMessage.success('文档保存成功')
+    docsVisible.value = false
+  } catch (error) {
+    ElMessage.error(error.message || '保存失败')
+  } finally {
+    docsSaving.value = false
+  }
+}
+
+/** 删除确认文案：明确提示会级联删除的卡密数量 */
+const deleteConfirmMessage = (row) => {
+  const total = row.total_cards ?? 0
+  const activated = row.activated_cards ?? 0
+  if (total > 0) {
+    return `确定要删除应用「${row.app_name}」吗？该应用下有 ${total} 张卡密` +
+      (activated > 0 ? `（其中已激活 ${activated} 张）` : '') +
+      `，删除后将一并清除，此操作不可恢复！`
+  }
+  return `确定要删除应用「${row.app_name}」吗？此操作不可恢复。`
+}
+
 const handleVersions = (row) => {
   router.push({ path: '/admin/versions', query: { app_id: row.id } })
 }
 
 const handleDelete = async (row) => {
   try {
-    await ElMessageBox.confirm('确定要删除该应用吗？', '警告', { type: 'warning' })
+    await ElMessageBox.confirm(deleteConfirmMessage(row), '警告', { type: 'warning' })
     tableLoading.value = true;
     const response = await store.deleteApp(row.id)
     ElMessage.success(response.message || '删除成功')

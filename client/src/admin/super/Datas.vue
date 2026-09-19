@@ -8,6 +8,12 @@
               <el-form-item label="网站名称" prop="site_name">
                 <el-input v-model="form.site_name" placeholder="请输入网站名称" />
               </el-form-item>
+              <el-form-item label="浏览器标题" prop="site_title">
+                <el-input v-model="form.site_title" placeholder="浏览器标签页标题（留空则用网站名称）" />
+              </el-form-item>
+              <el-form-item label="SEO关键词">
+                <el-input v-model="form.keywords" placeholder="多个关键词用英文逗号分隔" />
+              </el-form-item>
               <el-form-item label="底部描述">
                 <el-input v-model="form.description" placeholder="请输入底部描述文字" />
               </el-form-item>
@@ -26,6 +32,9 @@
               <el-form-item label="联系电话">
                 <el-input v-model="form.contact_phone" placeholder="请输入联系电话" />
               </el-form-item>
+              <el-form-item label="联系地址">
+                <el-input v-model="form.contact_address" placeholder="请输入联系地址（可选）" />
+              </el-form-item>
             </div>
           </el-tab-pane>
 
@@ -41,6 +50,12 @@
                 <div class="image-input">
                   <el-input v-model="form.favicon_url" placeholder="请输入网站图标地址" />
                   <el-button type="primary" link @click="previewImage(form.favicon_url)">预览</el-button>
+                </div>
+              </el-form-item>
+              <el-form-item label="登录页背景">
+                <div class="image-input">
+                  <el-input v-model="form.login_bg_url" placeholder="请输入登录页背景图地址（可选）" />
+                  <el-button type="primary" link @click="previewImage(form.login_bg_url)">预览</el-button>
                 </div>
               </el-form-item>
             </div>
@@ -78,14 +93,18 @@ const activeTab = ref('basic')
 
 const form = ref({
   site_name: '',
+  site_title: '',
+  keywords: '',
   description: '',
   copyright: '',
   copyright_since: '',
   icp_number: '',
   logo_url: '',
   favicon_url: '',
+  login_bg_url: '',
   contact_email: '',
-  contact_phone: ''
+  contact_phone: '',
+  contact_address: ''
 })
 
 const rules = ref({
@@ -120,14 +139,18 @@ onMounted(async () => {
   await store.getWebsiteInfo()
   form.value = {
     site_name: websiteInfo.value?.site_name || '',
+    site_title: websiteInfo.value?.site_title || '',
+    keywords: websiteInfo.value?.keywords || '',
     description: websiteInfo.value?.description || '',
     copyright: websiteInfo.value?.copyright || '',
     copyright_since: websiteInfo.value?.copyright_since || '',
     icp_number: websiteInfo.value?.icp_number || '',
     logo_url: websiteInfo.value?.logo_url || '',
     favicon_url: websiteInfo.value?.favicon_url || '',
+    login_bg_url: websiteInfo.value?.login_bg_url || '',
     contact_email: websiteInfo.value?.contact_email || '',
-    contact_phone: websiteInfo.value?.contact_phone || ''
+    contact_phone: websiteInfo.value?.contact_phone || '',
+    contact_address: websiteInfo.value?.contact_address || ''
   }
 })
 </script>

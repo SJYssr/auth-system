@@ -1,7 +1,7 @@
 // 管理员管理页面 e2e（超管）：列表/新增/禁用/启用/删除 + 普通管理员不可见入口
 const { chromium } = require('playwright');
 
-const BASE = 'http://localhost:3001';
+const BASE = process.env.E2E_BASE || 'http://localhost:3001';
 const results = [];
 function record(name, ok, detail = '') {
   results.push({ name, ok, detail });

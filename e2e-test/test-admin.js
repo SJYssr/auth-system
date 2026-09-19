@@ -2,7 +2,7 @@
 // 覆盖：登录/仪表盘/应用CRUD/公告/卡密/版本/网站设置/API/错误码/日志/登出
 const { chromium } = require('playwright');
 
-const BASE = 'http://localhost:3001';
+const BASE = process.env.E2E_BASE || 'http://localhost:3001';
 const results = [];
 function record(name, ok, detail = '') {
   results.push({ name, ok, detail });

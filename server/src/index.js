@@ -24,7 +24,8 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      // Vite 构建产物为外链 module script，无需 unsafe-eval；unsafe-inline 暂保留以兼容内联样式/脚本
+      scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "blob:", "https:"],
       connectSrc: ["'self'"],
@@ -223,21 +224,46 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
   });
 
-  // 全局错误处理
+  // 全局错误处理（body-parser 的 400 等带 status 的错误透传状态码）
   app.use((err, req, res, next) => {
-    console.error('未捕获错误:', err);
-    res.status(500).json({
+    const status = err.status || err.statusCode || 500;
+    if (status >= 500) console.error('未捕获错误:', err);
+    res.status(status).json({
       success: false,
-      message: '服务器内部错误',
+      message: status >= 500 ? '服务器内部错误' : '请求格式错误',
       errcode: '-1009'
     });
   });
 
   // 启动
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`卡密授权系统后端已启动，端口: ${PORT}`);
     console.log(`客户端API: http://localhost:${PORT}/`);
     console.log(`前台API:   http://localhost:${PORT}/api/public/`);
     console.log(`后台API:   http://localhost:${PORT}/api/admin/`);
+  });
+
+  // 优雅停机：先停止接新连接，等待存量请求收尾，再关闭数据库连接池
+  const pool = require('./config/db');
+  let shuttingDown = false;
+  async function shutdown(signal) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`收到 ${signal}，正在优雅停机...`);
+    const forceTimer = setTimeout(() => process.exit(1), 10000);
+    server.close(async () => {
+      clearTimeout(forceTimer);
+      try { await pool.end(); } catch { /* 连接池已关闭 */ }
+      process.exit(0);
+    });
+  }
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('unhandledRejection', (reason) => {
+    console.error('未处理的 Promise 拒绝:', reason);
+  });
+  process.on('uncaughtException', (err) => {
+    console.error('未捕获异常:', err);
+    shutdown('uncaughtException');
   });
 })();

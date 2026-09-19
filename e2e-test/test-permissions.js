@@ -5,7 +5,7 @@
 // - 超管登录时页面出现编辑按钮（对照）
 const { chromium } = require('playwright');
 
-const BASE = 'http://localhost:3001';
+const BASE = process.env.E2E_BASE || 'http://localhost:3001';
 const results = [];
 function record(name, ok, detail = '') {
   results.push({ name, ok, detail });

@@ -56,6 +56,7 @@
           range-separator="至"
           start-placeholder="开始日期"
           end-placeholder="结束日期"
+          value-format="YYYY-MM-DD"
           style="width: 240px; margin-right: 10px;"
           @change="handleDateChange"
         />
@@ -346,9 +347,10 @@ const handleSizeChange = async (val) => {
 }
 
 const handleDateChange = (dates) => {
+  // value-format="YYYY-MM-DD"：拿到的是本地日期字符串，避免 toISOString 的 UTC 偏移改日
   if (dates && dates.length === 2) {
-    searchForm.value.start_date = dates[0].toISOString().split('T')[0]
-    searchForm.value.end_date = dates[1].toISOString().split('T')[0]
+    searchForm.value.start_date = dates[0]
+    searchForm.value.end_date = dates[1]
   } else {
     searchForm.value.start_date = ''
     searchForm.value.end_date = ''

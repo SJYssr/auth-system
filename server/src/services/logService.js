@@ -23,16 +23,32 @@ function sanitizeRequestData(data) {
   return JSON.stringify(obj);
 }
 
-/** 记录日志 */
+/** 记录日志（非致命：写日志失败只记控制台，不连累已成功的业务操作） */
 async function log(data) {
-  const safeData = sanitizeRequestData(data.request_data);
-  await pool.execute(
-    'INSERT INTO logs (user_id, username, action, module, target_type, target_id, target_name, description, ip_address, user_agent, request_data, response_status, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [data.user_id || null, data.username || null, data.action, data.module || null,
-     data.target_type || null, data.target_id || null, data.target_name || null,
-     data.description || null, data.ip_address || null, data.user_agent || null,
-     safeData || null, data.response_status || 'success', data.error_message || null]
-  );
+  try {
+    const safeData = sanitizeRequestData(data.request_data);
+    await pool.execute(
+      'INSERT INTO logs (user_id, username, action, module, target_type, target_id, target_name, description, ip_address, user_agent, request_data, response_status, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [data.user_id || null, data.username || null, data.action, data.module || null,
+       data.target_type || null, data.target_id || null, data.target_name || null,
+       data.description || null, data.ip_address || null, data.user_agent || null,
+       safeData || null, data.response_status || 'success', data.error_message || null]
+    );
+  } catch (err) {
+    console.error('写入操作日志失败（不影响业务）:', err.message);
+  }
+}
+
+/** 清理日志（仅超管调用）：mode='days' 按 days 天前清理，mode='all' 清空；返回删除行数 */
+async function cleanup({ mode, days }) {
+  if (mode === 'all') {
+    const [res] = await pool.execute('DELETE FROM logs');
+    return res.affectedRows;
+  }
+  const n = parseInt(days);
+  if (isNaN(n) || n <= 0) throw new Error('清理天数必须为正整数');
+  const [res] = await pool.execute('DELETE FROM logs WHERE created_at < NOW() - INTERVAL ? DAY', [n]);
+  return res.affectedRows;
 }
 
 /** 查询日志（分页）
@@ -61,4 +77,4 @@ async function getList(filters = {}, page = 1, pageSize = 20) {
   return { rows, pagination: { page, pageSize, total: countResult[0].total } };
 }
 
-module.exports = { log, getList };
+module.exports = { log, getList, cleanup };

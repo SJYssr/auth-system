@@ -289,7 +289,8 @@ const route = useRoute()
 const store = useBusinessStore()
 const { cards, apps } = storeToRefs(store)
 
-const appId = ref(route.query.app_id || '')
+// route.query 取回是字符串，转成数字才能与 el-option 的数值 id 匹配回显应用名
+const appId = ref(route.query.app_id ? (parseInt(route.query.app_id) || '') : '')
 const appName = ref('')
 const appOptions = ref([])
 
@@ -574,13 +575,25 @@ const handleSelectionChange = (rows) => {
   selectedRows.value = rows
 }
 
+/** 批量执行单卡请求，返回成功/失败数量（单个失败不中断其余） */
+const runBatch = async (rows, fn) => {
+  const results = await Promise.allSettled(rows.map(row => fn(row)))
+  const ok = results.filter(r => r.status === 'fulfilled').length
+  const failed = results.length - ok
+  return { ok, failed }
+}
+
 const handleBatchDelete = async () => {
   if (selectedRows.value.length === 0) return
   try {
     await ElMessageBox.confirm(`确定要删除选中的 ${selectedRows.value.length} 张卡密吗？`, '警告', { type: 'warning' })
     tableLoading.value = true
-    await Promise.all(selectedRows.value.map(row => store.deleteCard(row.id)))
-    ElMessage.success(`成功删除 ${selectedRows.value.length} 张卡密`)
+    const { ok, failed } = await runBatch(selectedRows.value, row => store.deleteCard(row.id))
+    if (failed > 0) {
+      ElMessage.warning(`成功删除 ${ok} 张，失败 ${failed} 张（可能已被他人删除或无权限）`)
+    } else {
+      ElMessage.success(`成功删除 ${ok} 张卡密`)
+    }
     selectedRows.value = []
     await store.fetchCards(buildSearchParams())
     pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
@@ -596,10 +609,12 @@ const handleBatchDisable = async () => {
   try {
     await ElMessageBox.confirm(`确定要禁用选中的 ${selectedRows.value.length} 张卡密吗？`, '提示', { type: 'warning' })
     tableLoading.value = true
-    for (const row of selectedRows.value) {
-      await superCardService.update(row.id, { status: 'disabled' })
+    const { ok, failed } = await runBatch(selectedRows.value, row => superCardService.update(row.id, { status: 'disabled' }))
+    if (failed > 0) {
+      ElMessage.warning(`成功禁用 ${ok} 张，失败 ${failed} 张`)
+    } else {
+      ElMessage.success(`成功禁用 ${ok} 张卡密`)
     }
-    ElMessage.success(`成功禁用 ${selectedRows.value.length} 张卡密`)
     selectedRows.value = []
     await store.fetchCards(buildSearchParams())
     pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0
@@ -614,10 +629,12 @@ const handleBatchEnable = async () => {
   if (selectedRows.value.length === 0) return
   try {
     tableLoading.value = true
-    for (const row of selectedRows.value) {
-      await superCardService.update(row.id, { status: 'enabled' })
+    const { ok, failed } = await runBatch(selectedRows.value, row => superCardService.update(row.id, { status: 'enabled' }))
+    if (failed > 0) {
+      ElMessage.warning(`成功解禁 ${ok} 张，失败 ${failed} 张`)
+    } else {
+      ElMessage.success(`成功解禁 ${ok} 张卡密`)
     }
-    ElMessage.success(`成功解禁 ${selectedRows.value.length} 张卡密`)
     selectedRows.value = []
     await store.fetchCards(buildSearchParams())
     pagination.value.total_records = Number(cards.value.pagination?.total_records) || 0

@@ -261,10 +261,16 @@ const isAppFree = (app) => {
   return app.is_free == 1 || app.is_free === true
 }
 
+// 外链协议白名单：管理员填写的 URL 只允许 http(s) 或站内相对路径，拦截 javascript: 等注入
+const safeExternalUrl = (u) => {
+  const s = String(u || '').trim()
+  return (/^https?:\/\//i.test(s) || s.startsWith('/')) ? s : ''
+}
+
 // 可用的操作入口
-const downloadUrl = computed(() => currentApp.value?.download_url || '')
-const purchaseUrl = computed(() => currentApp.value?.purchase_url || '')
-const usageUrl = computed(() => currentApp.value?.usage_guide || '')
+const downloadUrl = computed(() => safeExternalUrl(currentApp.value?.download_url))
+const purchaseUrl = computed(() => safeExternalUrl(currentApp.value?.purchase_url))
+const usageUrl = computed(() => safeExternalUrl(currentApp.value?.usage_guide))
 const hasActions = computed(() => !!downloadUrl.value || !!purchaseUrl.value || !!usageUrl.value)
 
 const formatDate = (dateString) => {

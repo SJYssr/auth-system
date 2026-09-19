@@ -1,44 +1,80 @@
-# 卡密授权管理系统
+# 卡密授权管理系统 (auth-system)
 
-一套面向软件发行商的卡密授权管理平台，支持多应用管理、卡密生成与激活、版本控制、权限分级与额度套餐体系。
-## 架构图
+**软件发行商的卡密授权平台：卡密分发 · 设备绑定 · 版本控制 · 多管理员归属隔离 · 配额套餐体系**
 
-[auth-system-map](auth-system-architecture.html)
+[![CI](https://github.com/SJYssr/auth-system/actions/workflows/ci.yml/badge.svg)](https://github.com/SJYssr/auth-system/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/SJYssr/auth-system?color=046A82)](https://github.com/SJYssr/auth-system/releases/latest)
+[![Node](https://img.shields.io/badge/Node.js-%E2%89%A518-339933?logo=node.js&logoColor=fff)](https://nodejs.org/)
+[![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=fff)](https://www.mysql.com/)
+[![Docker](https://img.shields.io/badge/Docker-一键部署-2496ED?logo=docker&logoColor=fff)](#方式一docker-一键部署推荐)
+[![License](https://img.shields.io/github/license/SJYssr/auth-system?color=green)](LICENSE)
 
-## 功能概览
+[快速开始](#快速开始) · [文档导航](#文档导航) · [版本记录](CHANGELOG.md) · [架构说明](ARCHITECTURE.md)
 
-### 核心功能
-- **卡密管理** — 支持小时卡 / 天卡 / 周卡 / 月卡 / 年卡，批量生成、按卡点数自动计算到期时间
-- **应用管理** — 每个应用拥有独立 softid（18 位标识），支持公告、强制更新、版本号管理
-- **版本管理** — 按应用维护版本历史，客户端可查询最新版本号
-- **客户端认证** — 卡密 + 机器码绑定登录，支持登出释放设备、多设备并发控制
+---
 
-### 权限分级
-- **超级管理员** — 拥有全部权限，不受配额限制，可管理其他管理员账户
-- **普通管理员** — 默认配额 2 个应用 / 5 个卡密激活，可由超管调整或发放临时额度套餐
+## 这个项目能做什么
 
-### 额度套餐体系
-- 超管可为任意管理员调整基础配额（最大应用数、最大卡密激活数）和账号到期时间
-- 支持**临时额度套餐**（`admin_plans` 表）：设定增量、生效时间与过期时间，有效期内的增量自动叠加到基础配额上
-- 支持管理员**续期**操作，在当前到期时间基础上叠加延长
-- 卡密生成与客户端首次激活时均校验配额，超限返回错误码 `-1012`
+面向需要自己掌握卡密分发与授权链路的软件发行商：
 
-### 其他
-- **仪表盘** — 应用/卡密/在线数统计，应用分布图表
-- **操作日志** — 记录管理员关键操作，支持按模块筛选
-- **错误码管理** — 可视化维护客户端错误码字典
-- **API 文档** — 内置接口列表管理
-- **网站设置** — 公告、联系方式等站点信息配置
-- **图形验证码** — 登录接口集成 svg-captcha
+| 模块 | 解决的问题 | 代表能力 |
+|---|---|---|
+| 卡密客户端 API | 终端软件的授权校验 | 卡密 + 机器码绑定登录、24h 会话、登出释放、强制更新、到期查询 |
+| 后台管理 | 应用与卡密的全生命周期运营 | 应用/卡密/版本管理、批量生成、批量导出（防 CSV 公式注入） |
+| 权限与归属 | 多管理员协同不串数据 | 超管/普管分级、资源按创建者隔离、管理员账号到期与续期 |
+| 配额套餐体系 | 控制发放规模 | 基础配额 + 限时临时套餐叠加，生成与首激双重校验 |
+| 运营支撑 | 可审计、可解释 | 操作日志（脱敏）、错误码字典、内置 API 文档、网站配置 |
+| 一键部署 | 快速私有化 | Docker Compose 起 MySQL + 应用，schema 自动导入，健康检查 |
+
+## 快速开始
+
+### 方式一：Docker 一键部署（推荐）
+
+```bash
+git clone --depth 1 https://github.com/SJYssr/auth-system.git
+cd auth-system
+cp .env.docker.example .env   # 修改数据库密码与端口
+docker compose up -d --build
+
+curl --fail http://localhost:3000/health   # {"status":"ok"} 即就绪
+```
+
+打开 `http://localhost:3000`，使用默认超管 `admin` 登录（**首次部署后立即修改密码**）。详细的代理配置、备份恢复、升级与排障见 [docs/deployment.md](docs/deployment.md)。
+
+### 方式二：源码部署
+
+环境要求：Node.js ≥ 18、MySQL ≥ 8.0。
+
+```bash
+# 1. 初始化数据库（含表结构、默认超管、错误码字典等种子数据）
+mysql -h <DB_HOST> -u <DB_USER> -p < server/schema.sql
+
+# 2. 后端
+cd server && cp .env.example .env   # 按实际修改
+npm ci && npm start                 # 默认 3000
+
+# 3. 前端构建（产物由后端同源托管，无需单独部署）
+cd client && npm ci && npm run build
+```
+
+已有旧版库需增量升级时，参照 `server/schema.sql` 末尾的「增量升级」段落手动执行。
+
+## 文档导航
+
+- [部署与升级](docs/deployment.md)：Docker/源码部署、反向代理、备份恢复、升级迁移、排障。
+- [开发指南](docs/development.md)：本地启动、测试体系、代码不变量、新接口 Checklist。
+- [系统架构](ARCHITECTURE.md)：分层结构、数据模型、关键设计决策。
+- [版本变更记录](CHANGELOG.md)：已发布版本的变更清单。
+- [交互式架构图](auth-system-architecture.html)。
 
 ## 技术栈
 
 | 层 | 技术 |
 |---|---|
 | 前端 | Vue 3 + Element Plus + Pinia + Vue Router + ECharts + Vite |
-| 后端 | Node.js + Express + MySQL2 + Helmet + svg-captcha |
-| 测试 | Playwright (E2E) |
+| 后端 | Node.js + Express + MySQL2 + Helmet + svg-captcha + express-rate-limit |
 | 数据库 | MySQL 8.0 |
+| 测试/CI | Node test 脚本 + Playwright（UI 冒烟）+ GitHub Actions |
 
 ## 项目结构
 
@@ -46,139 +82,70 @@
 auth-system/
 ├── client/                # 前端 (Vue 3 + Vite)
 │   └── src/
-│       ├── admin/         # 后台管理界面
-│       │   ├── super/     # 超管专属页面 (Dashboard, Apps, Cards, Admins 等)
-│       │   ├── Admin.vue  # 管理后台布局
-│       │   ├── Header.vue
-│       │   └── Sidebar.vue
-│       ├── pages/         # 公开页面 (登录, 产品中心, 应用详情, 关于)
-│       ├── router/        # 路由配置
-│       ├── stores/        # Pinia 状态管理
-│       └── utils/         # Axios 请求封装、API 服务定义
-├── server/                # 后端 (Node.js + Express)
-│   ├── src/
-│   │   ├── config/        # 数据库连接池配置
-│   │   ├── middleware/    # 认证中间件
-│   │   ├── routes/        # API 路由 (admin / public / root)
-│   │   ├── services/      # 业务逻辑层
-│   │   └── utils/         # 统一响应工具
-│   ├── scripts/           # 运维辅助脚本
-│   ├── schema.sql         # 数据库初始化脚本 (MySQL 8.0+)
-└── e2e-test/              # Playwright E2E 测试
-    ├── admin-seed.js      # 测试数据初始化
-    ├── test-admin.js      # 管理端 API 测试
-    ├── test-admins-page.js# 管理员管理页面测试
-    ├── test-api.js        # 公开 API 测试
-    ├── test-permissions.js# 权限隔离测试
-    └── test-public.js     # 前台公开页面测试
+│       ├── admin/         # 管理后台（super/ 含全部管理页面）
+│       ├── pages/         # 公开页面（登录、产品中心、应用详情）
+│       ├── router/        # 路由与导航守卫（登录态 + 超管专属页）
+│       ├── stores/        # Pinia（app / business / tabs）
+│       └── utils/         # Axios 封装（Bearer 注入、401/403 处理）
+├── server/                # 后端 (Express)
+│   ├── src/routes/        # root(卡密客户端) / public(前台) / admin(后台)
+│   ├── src/services/      # 业务逻辑（事务、行锁、配额、审计日志）
+│   ├── src/middleware/    # Token 哈希校验 + 到期检查
+│   ├── schema.sql         # 建库建表 + 种子数据 + 增量升级段落
+│   └── scripts/           # check-db.js 结构核对脚本
+├── e2e-test/              # API/权限/UI 测试（test-card-flow.js 为核心链路）
+├── docs/                  # 部署与开发文档
+├── Dockerfile             # 多阶段构建（前端产物 + 后端运行时）
+└── docker-compose.yml     # MySQL 8 + 应用一键栈
 ```
 
-## 快速开始
+## 版本记录与升级
 
-### 环境要求
-- Node.js >= 18
-- MySQL >= 8.0
+- 当前版本 **v1.0.0**，变更清单见 [CHANGELOG.md](CHANGELOG.md)，历史发布见 [Releases](https://github.com/SJYssr/auth-system/releases)。
+- 升级流程（备份 → 拉取 → schema 增量段落 → 重建）见 [docs/deployment.md#升级流程](docs/deployment.md#升级流程)。
 
-### 1. 初始化数据库
+## 路线图
 
-```bash
-mysql -h <DB_HOST> -u <DB_USER> -p < server/schema.sql
-```
-
-已有旧版库需增量升级时，请参照 `schema.sql` 文件末尾的注释段落手动执行。
-
-### 2. 配置后端环境变量
-
-```bash
-cd server
-cp .env.example .env   # 按实际修改
-```
-
-`.env` 配置项：
-
-| 变量 | 说明 | 示例 |
-|---|---|---|
-| `PORT` | 服务端口 | `3000` |
-| `DB_HOST` | 数据库地址 | `127.0.0.1` |
-| `DB_PORT` | 数据库端口 | `3306` |
-| `DB_USER` | 数据库用户 | `auth_admin` |
-| `DB_PASSWORD` | 数据库密码 | `your_password` |
-| `DB_NAME` | 数据库名 | `auth-system` |
-
-### 3. 启动后端
-
-```bash
-cd server
-npm install
-npm run dev     # 开发模式 (--watch 热重载)
-# 或
-npm start       # 生产模式
-```
-
-### 4. 启动前端
-
-```bash
-cd client
-npm install
-npm run dev     # 开发模式，默认 http://localhost:5173
-```
-
-开发模式下，Vite 会将 `/api` 请求代理到 `http://localhost:3000`。
-
-### 5. 构建前端
-
-```bash
-cd client
-npm run build   # 产物输出至 client/dist/
-```
-
-构建产物可由 Nginx 等反向代理直接托管，`/api` 反向代理到后端服务即可。
-
-## E2E 测试
-
-```bash
-cd e2e-test
-npm install
-
-# 1. 初始化测试管理员账号
-node admin-seed.js create          # 创建超管
-node admin-seed.js create-normal   # 创建普通管理员
-
-# 2. 运行测试（需后端运行在 localhost:3001）
-node test-admin.js
-node test-admins-page.js
-node test-api.js
-node test-permissions.js
-node test-public.js
-
-# 3. 清理测试数据
-node admin-seed.js delete
-```
+- [ ] Playwright UI 冒烟套件纳入 CI
+- [ ] 前端代码分割与按需加载（当前主 chunk 偏大）
+- [ ] 客户端心跳保活接口（`/heartbeat` 会话续期）
+- [ ] 管理员账号到期邮件提醒
+- [ ] 卡密流 watermarked 导出与发卡对接
 
 ## 客户端 API（卡密终端调用）
 
-客户端通过 `POST` 请求与后端交互，字段名采用 Pascal 开头格式：
+客户端通过 `POST` 请求与后端交互，字段名采用大写开头格式（`Softid` / `Card` / `Mac` / `Token`）：
 
 | 接口 | 方法 | 说明 |
 |---|---|---|
-| `/api/root/announcement` | POST | 获取公告 |
-| `/api/root/version` | POST | 获取最新版本号 |
-| `/api/root/login` | POST | 卡密登录（卡密 + 机器码绑定） |
-| `/api/root/logout` | POST | 卡密登出（释放设备绑定） |
-| `/api/root/heartbeat` | POST | 心跳保活 |
+| `/announcement` | POST | 获取公告 |
+| `/version` | POST | 获取最新版本号 |
+| `/login` | POST | 卡密登录（卡密 + 机器码绑定，首次激活计算有效期） |
+| `/logout` | POST | 卡密登出（释放会话，设备绑定保留） |
+| `/download` | POST | 获取下载地址 |
+| `/usage` | POST | 获取使用说明地址 |
+| `/purchase` | POST | 获取购买地址 |
+| `/expiry` | POST | 获取到期时间（需携带登录返回的 Token） |
 
 ## 错误码
 
 | 错误码 | 含义 |
 |---|---|
 | `-1001` | 参数缺失或格式错误 |
-| `-1002` | 未授权 / Token 失效 |
+| `-1002` | 认证失败（Token 无效或已过期） |
 | `-1003` | 权限不足 |
+| `-1004` | 卡密不存在 |
+| `-1005` | 卡密已过期 |
+| `-1006` | 卡密已禁用 |
 | `-1007` | 应用不存在或已禁用 |
 | `-1008` | 版本不匹配，需强制更新 |
 | `-1009` | 服务器内部错误 |
+| `-1010` | 机器码不匹配 |
+| `-1011` | 卡密已在其他设备登录 |
 | `-1012` | 管理员激活配额已满 |
+
+错误码字典可在后台「错误码对照表」维护，公开接口 `/api/public/error-codes` 同步输出。
 
 ## License
 
-Private
+[MIT](LICENSE) — 决定开源，欢迎自由使用、修改与分发；如本项目对你有帮助，欢迎点个 Star。

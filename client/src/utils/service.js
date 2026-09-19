@@ -23,7 +23,9 @@ const superAppService = {
     getAll: (params = {}) => request.get('/admin/apps', { params }),
     create: (data) => request.post('/admin/apps', data),
     update: (id, data) => request.put(`/admin/apps/${id}`, data),
-    delete: (id) => request.delete(`/admin/apps/${id}`)
+    delete: (id) => request.delete(`/admin/apps/${id}`),
+    getDocs: (id) => request.get(`/admin/apps/${id}/docs`),
+    saveDocs: (id, data) => request.put(`/admin/apps/${id}/docs`, data)
 }
 
 const superDataService = {

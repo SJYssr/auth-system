@@ -114,6 +114,16 @@
             inactive-text="禁用"
           />
         </el-form-item>
+        <el-form-item label="强制更新" prop="force_update">
+          <el-switch
+            v-model="form.force_update"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="强制"
+            inactive-text="普通"
+          />
+          <span class="form-hint">启用中的最新版本会同步为应用的强制更新状态</span>
+        </el-form-item>
       </el-form>
       <template #footer>
         <div class="drawer-footer">
@@ -138,7 +148,8 @@ const route = useRoute()
 const store = useBusinessStore()
 const { versions } = storeToRefs(store)
 
-const appId = ref(route.query.app_id || '')
+// route.query 取回是字符串，转成数字才能与 el-option 的数值 id 匹配回显应用名
+const appId = ref(route.query.app_id ? (parseInt(route.query.app_id) || '') : '')
 const appName = ref('')
 const appOptions = ref([])
 
@@ -166,7 +177,8 @@ const form = ref({
   app_id: appId.value,
   version: '',
   version_name: '',
-  status: 'enabled'
+  status: 'enabled',
+  force_update: 0
 })
 
 const rules = {
@@ -260,7 +272,8 @@ const handleAdd = () => {
     app_id: searchForm.app_id || appId.value,
     version: '',
     version_name: '',
-    status: 'enabled'
+    status: 'enabled',
+    force_update: 0
   }
   drawerVisible.value = true
 }
@@ -271,7 +284,8 @@ const handleEdit = (row) => {
     app_id: row.app_id,
     version: row.version || '',
     version_name: row.version_name || '',
-    status: row.status || 'enabled'
+    status: row.status || 'enabled',
+    force_update: row.force_update || 0
   }
   drawerVisible.value = true
 }
@@ -346,6 +360,11 @@ onMounted(initData)
 }
 .drawer-form {
   padding: 20px;
+}
+.form-hint {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #909399;
 }
 .toolbar-section {
   margin-bottom: 12px;

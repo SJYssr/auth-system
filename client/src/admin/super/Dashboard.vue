@@ -174,7 +174,7 @@ const recentLogins = computed(() => {
 function formatTime(input) {
   if (!input) return ''
   try {
-    const normalized = String(input).replace(/-/g, '/').replace('T', ' ').replace(/\\.\d+Z?$/, '')
+    const normalized = String(input).replace(/-/g, '/').replace('T', ' ').replace(/\.\d+Z?$/, '')
     const date = new Date(normalized)
     if (isNaN(date.getTime())) return String(input)
     const y = date.getFullYear()
@@ -210,8 +210,8 @@ const initBarChart = () => {
   barChartInstance.setOption(option, true)
 }
 
-const cardTypes = ['小时卡', '天卡', '月卡', '年卡']
-const cardColors = ['#F59E0B', '#10B981', '#3B82F6', '#8B5CF6']
+const cardTypes = ['小时卡', '天卡', '周卡', '月卡', '年卡']
+const cardColors = ['#F59E0B', '#10B981', '#14B8A6', '#3B82F6', '#8B5CF6']
 
 const initLineChart = () => {
   if (!lineChart.value) return

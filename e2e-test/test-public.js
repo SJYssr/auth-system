@@ -1,7 +1,7 @@
 // 公开页面冒烟测试：前台首页/产品/关于/应用详情 + 登录页渲染与错误处理
 const { chromium } = require('playwright');
 
-const BASE = 'http://localhost:3000';
+const BASE = process.env.E2E_BASE || 'http://localhost:3001';
 const results = [];
 function record(name, ok, detail = '') {
   results.push({ name, ok, detail });

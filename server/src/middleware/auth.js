@@ -3,6 +3,7 @@
  * 仅从 Authorization header 验证管理员身份（不再支持 URL query 参数传递 token）
  */
 const pool = require('../config/db');
+const { hashToken } = require('../services/authService');
 
 const TOKEN_MAX_AGE = 24 * 60 * 60 * 1000; // 24小时过期
 
@@ -22,10 +23,10 @@ async function authMiddleware(req, res, next) {
       });
     }
 
-    // 查数据库验证 token
+    // 库中存的是 SHA-256 哈希，查询前先对原始 token 做同样哈希
     const [rows] = await pool.execute(
       'SELECT id, username, email, is_superuser, status, last_login, expires_at, max_apps, max_card_activations FROM admins WHERE token = ? AND status = ?',
-      [token, 'enabled']
+      [hashToken(token), 'enabled']
     );
 
     if (rows.length === 0) {

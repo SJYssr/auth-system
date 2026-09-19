@@ -73,15 +73,19 @@ async function cardLogin(softid, card, mac, version, ip) {
     if (cardData.is_activated === 0) {
       // 首次激活：校验生成者管理员的激活配额（含临时套餐，超管/历史数据不受限）
       if (cardData.owner_id) {
+        // FOR UPDATE 锁住 owner 行：并发首激同 owner 的多张卡时在此串行化，
+        // 避免「快照读 COUNT 后双双通过配额检查」的竞态
         const [owner] = await conn.execute(
           `SELECT a.is_superuser, a.max_card_activations,
            COALESCE((SELECT SUM(delta) FROM admin_plans p WHERE p.admin_id = a.id AND p.type = 'max_card_activations'
              AND p.effective_at <= NOW() AND (p.expires_at IS NULL OR p.expires_at > NOW())), 0) AS plan_delta
-           FROM admins a WHERE a.id = ?`,
+           FROM admins a WHERE a.id = ? FOR UPDATE`,
           [cardData.owner_id]
         );
         if (owner.length > 0 && owner[0].is_superuser !== 1 && owner[0].max_card_activations !== -1) {
-          const limit = owner[0].max_card_activations + owner[0].plan_delta;
+          // 注意：SUM/COALESCE 经 mysql2 返回的是字符串（DECIMAL），必须显式转数字，
+          // 否则 2 + '0' 会拼成 '20'，配额形同虚设
+          const limit = Number(owner[0].max_card_activations) + Number(owner[0].plan_delta || 0);
           const [cnt] = await conn.execute(
             'SELECT COUNT(*) as total FROM cards WHERE owner_id = ? AND is_activated = 1',
             [cardData.owner_id]

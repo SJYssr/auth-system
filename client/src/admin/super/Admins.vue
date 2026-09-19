@@ -51,7 +51,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="last_login" label="最后登录" width="170" />
-        <el-table-column label="操作" width="380" fixed="right">
+        <el-table-column label="操作" width="450" fixed="right">
           <template #default="{ row }">
             <el-button-group>
               <el-button type="primary" size="small" @click="handleEditLimits(row)"
@@ -62,6 +62,8 @@
                 :disabled="row.is_superuser === 1">记录</el-button>
               <el-button type="warning" size="small" @click="handleRenew(row)"
                 :disabled="row.is_superuser === 1">续期</el-button>
+              <el-button :type="row.status === 'enabled' ? 'danger' : 'success'" size="small" @click="handleToggleStatus(row)"
+                :disabled="row.id === currentUserId">{{ row.status === 'enabled' ? '禁用' : '启用' }}</el-button>
               <el-button type="danger" size="small" :icon="Delete" @click="handleDelete(row)"
                 :disabled="row.id === currentUserId">删除</el-button>
             </el-button-group>
@@ -539,8 +541,16 @@ const handleToggleStatus = async (row) => {
 }
 
 const handleDelete = async (row) => {
+  const apps = row.apps_used ?? 0
+  const activated = row.activated_used ?? 0
+  const resourceHint = (apps > 0 || activated > 0)
+    ? `其名下的 ${apps} 个应用与 ${activated} 张已激活卡密将转移给你，之后可再分配。`
+    : ''
   try {
-    await ElMessageBox.confirm(`确定要删除管理员「${row.username}」吗？此操作不可恢复。`, '警告', { type: 'warning' })
+    await ElMessageBox.confirm(
+      `确定要删除管理员「${row.username}」吗？此操作不可恢复。${resourceHint}`,
+      '警告', { type: 'warning' }
+    )
     const res = await request.delete(`/admin/admins/${row.id}`)
     ElMessage.success(res.message || '删除成功')
     await fetchList()

@@ -1,0 +1,47 @@
+# 一键部署：MySQL 8 + 后端（同源托管前端构建产物）
+# 首次启动时 schema.sql 由 MySQL 初始化机制自动导入（含默认数据与索引）
+#
+# 使用：
+#   cp .env.docker.example .env   # 按需修改密码/端口
+#   docker compose up -d --build
+#   curl http://localhost:3000/health   # 返回 {"status":"ok"} 即就绪
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_root_password}
+      MYSQL_DATABASE: ${DB_NAME:-auth-system}
+      MYSQL_USER: ${DB_USER:-auth_admin}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-change_db_password}
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./server/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    ports:
+      # 仅绑定本机回环，便于本地运行 e2e 测试直连数据库；生产如无需可删除
+      - "127.0.0.1:33061:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  app:
+    build: .
+    environment:
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-auth_admin}
+      DB_PASSWORD: ${DB_PASSWORD:-change_db_password}
+      DB_NAME: ${DB_NAME:-auth-system}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    ports:
+      - "${PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:

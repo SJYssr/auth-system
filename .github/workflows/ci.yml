@@ -1,0 +1,75 @@
+# 后端 API 测试：起 MySQL 服务 → 导 schema → 启动后端 → 跑纯 API 测试套件
+# 说明：UI 冒烟套件（test-admin/test-public 等）依赖 Playwright 浏览器，未纳入 CI，
+#       可在本地按 README 手动运行。两个套件用不同 job 隔离，避免共享 /login 限流窗口。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [test-card-flow.js, test-api.js]
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: e2e_test_root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -pe2e_test_root"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 导入数据库 schema
+        run: mysql -h 127.0.0.1 -uroot -pe2e_test_root < server/schema.sql
+
+      - name: 预置 test-api 数据
+        if: matrix.suite == 'test-api.js'
+        run: mysql -h 127.0.0.1 -uroot -pe2e_test_root auth-system < e2e-test/seed-api-test.sql
+
+      - name: 安装后端依赖
+        run: npm ci --prefix server
+
+      - name: 安装测试依赖
+        run: npm ci --prefix e2e-test
+
+      - name: 安装前端依赖并构建
+        run: |
+          npm ci --prefix client
+          npm run build --prefix client
+
+      - name: 启动后端
+        run: |
+          cd server
+          PORT=3100 DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=root \
+            DB_PASSWORD=e2e_test_root DB_NAME=auth-system \
+            nohup node src/index.js > /tmp/server.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3100/health && break
+            sleep 1
+          done
+          curl -sf http://localhost:3100/health > /dev/null || (cat /tmp/server.log && exit 1)
+
+      - name: 运行 ${{ matrix.suite }}
+        run: node e2e-test/${{ matrix.suite }}
+        env:
+          E2E_BASE: http://localhost:3100
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: e2e_test_root
+          DB_NAME: auth-system

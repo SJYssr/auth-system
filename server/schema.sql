@@ -172,6 +172,19 @@ CREATE TABLE IF NOT EXISTS error_codes (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 应用文档表（产品介绍/部署文档，前台应用详情页展示，内容为 HTML 由前端 DOMPurify 消毒）
+CREATE TABLE IF NOT EXISTS app_docs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    app_id INT NOT NULL,
+    doc_type VARCHAR(20) NOT NULL COMMENT 'intro=产品介绍 deploy=部署文档',
+    title VARCHAR(200) DEFAULT NULL,
+    content LONGTEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_app_doc (app_id, doc_type),
+    FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 额度套餐表（临时配额包，支持限时增加软件/激活配额）
 CREATE TABLE IF NOT EXISTS admin_plans (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -204,7 +217,7 @@ INSERT IGNORE INTO error_codes (id, code, message, description, solution) VALUES
 (5, '-1005', '卡密已过期', '卡密超过有效期', '续费或更换卡密'),
 (6, '-1006', '卡密已禁用', '卡密被管理员禁用', '联系管理员解禁'),
 (7, '-1007', '应用不存在', '应用未找到或已下架', '检查应用ID'),
-(8, '-1008', '版本号已存在', '该版本号已被使用', '使用不同版本号'),
+(8, '-1008', '版本不匹配，需强制更新', '客户端版本低于应用要求的最低版本', '下载并更新到最新版本'),
 (9, '-1009', '服务器内部错误', '服务器发生未知错误', '稍后重试'),
 (10, '-1010', '机器码不匹配', '卡密绑定的机器码与当前设备不匹配', '使用购买时绑定的设备登录'),
 (11, '-1011', '卡密已在其他设备登录', '该卡密已在其他设备上登录', '先在其他设备退出登录'),
@@ -253,6 +266,13 @@ INSERT IGNORE INTO apis (id, api_name, api_path, api_method, param_count, params
 -- INSERT IGNORE INTO error_codes (id, code, message, description, solution)
 --   VALUES (12, '-1012', '管理员激活配额已满', '生成该卡密的管理员已达最大激活卡密数量限制', '联系超级管理员提升配额');
 -- CREATE TABLE IF NOT EXISTS admin_plans ( ... );  -- 见上方建表语句
+-- ============================================================
+-- v2.3 应用文档增量升级（前台应用详情页「产品介绍/部署文档」）
+-- ============================================================
+-- CREATE TABLE IF NOT EXISTS app_docs ( ... );  -- 见上方建表语句
+-- -- 修正 -1008 错误码字典与实际含义不符（API 中 -1008 表示强制更新，而非版本号重复）：
+-- UPDATE error_codes SET message='版本不匹配，需强制更新', description='客户端版本低于应用要求的最低版本', solution='下载并更新到最新版本' WHERE code='-1008';
+-- ============================================================
 -- -- 将历史数据归属到默认超管 (id=1)，保证配额统计完整：
 -- UPDATE apps  SET owner_id = 1 WHERE owner_id IS NULL;
 -- UPDATE cards SET owner_id = 1 WHERE owner_id IS NULL;

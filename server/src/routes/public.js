@@ -100,22 +100,22 @@ router.get('/error-codes', async (req, res) => {
   }
 });
 
-/** 应用列表（前台） */
+/** 应用列表（前台）：仅启用应用 + 字段白名单，不回 SELECT * */
 router.get('/apps', async (req, res) => {
   try {
-    const result = await appService.getList(1, 100);
-    res.json(success(result.rows));
+    const rows = await appService.getPublicList(100);
+    res.json(success(rows));
   } catch (err) {
     console.error('前台应用列表:', err.message);
     res.json(error('获取应用列表失败'));
   }
 });
 
-/** 应用详情 */
+/** 应用详情（前台）：仅启用应用可见，附带 intro/deploy 文档 */
 router.get('/apps/:id', async (req, res) => {
   try {
-    const app = await appService.getById(req.params.id);
-    if (!app) return res.json(error('应用不存在'));
+    const app = await appService.getPublicDetail(req.params.id);
+    if (!app) return res.json(error('应用不存在或已下架'));
     res.json(success(app));
   } catch (err) {
     console.error('前台应用详情:', err.message);

@@ -4,6 +4,7 @@
  */
 const express = require('express');
 const router = express.Router();
+const pool = require('../config/db');
 const authMiddleware = require('../middleware/auth');
 const authService = require('../services/authService');
 const adminService = require('../services/adminService');
@@ -101,7 +102,8 @@ router.post('/admins', requireSuperuser, async (req, res) => {
   } catch (err) {
     console.error('创建管理员:', err.message);
     if (err.code === 'ER_DUP_ENTRY') return res.json(error('用户名或邮箱已存在'));
-    res.json(error('创建管理员失败'));
+    const known = ['软件上限必须为 >= -1 的整数', '激活上限必须为 >= -1 的整数'];
+    res.json(error(known.includes(err.message) ? err.message : '创建管理员失败'));
   }
 });
 
@@ -154,7 +156,8 @@ router.put('/admins/:id/limits', requireSuperuser, async (req, res) => {
     res.json(success(null, '配额更新成功'));
   } catch (err) {
     console.error('更新配额限制:', err.message);
-    res.json(error('更新配额限制失败'));
+    const known = ['软件上限必须为 >= -1 的整数', '激活上限必须为 >= -1 的整数'];
+    res.json(error(known.includes(err.message) ? err.message : '更新配额限制失败'));
   }
 });
 
@@ -269,18 +272,30 @@ router.get('/apps/:id', async (req, res) => {
 });
 
 router.post('/apps', async (req, res) => {
+  let created = null;
   try {
-    // 检查软件数量配额（超管不受限）
-    await adminService.checkAppLimit(req.currentUser.id);
-    const result = await appService.create(req.body, req.currentUser.id);
+    // 配额校验与创建放在同一事务：COUNT ... FOR UPDATE 锁住 owner 区间，
+    // 并发创建时第二个事务会等待，消除「同时通过校验双双超限」的竞态
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await adminService.checkAppLimit(req.currentUser.id, conn);
+      created = await appService.create(req.body, req.currentUser.id, conn);
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback().catch(() => { /* 回滚失败不掩盖原始错误 */ });
+      throw err;
+    } finally {
+      conn.release();
+    }
     await logService.log({
       user_id: req.currentUser.id,
       username: req.currentUser.username,
-      action: 'create', module: 'apps', target_type: 'app', target_id: result.id,
+      action: 'create', module: 'apps', target_type: 'app', target_id: created.id,
       target_name: req.body.app_name, ip_address: req.ip, user_agent: req.headers['user-agent'],
       request_data: JSON.stringify(req.body)
     });
-    res.json(success(result, '创建成功'));
+    res.json(success(created, '创建成功'));
   } catch (err) {
     console.error('创建应用:', err.message);
     if (err.code === 'ER_DUP_ENTRY') {
@@ -311,12 +326,58 @@ router.put('/apps/:id', async (req, res) => {
   }
 });
 
+/** ===== 应用文档（intro/deploy，归属校验同应用） ===== */
+router.get('/apps/:id/docs', async (req, res) => {
+  try {
+    const app = await appService.getById(req.params.id);
+    if (!app) return res.json(error('应用不存在'));
+    if (!ensureOwner(res, req.currentUser, app.owner_id, '应用')) return;
+    const docs = await appService.getDocs(app.id);
+    res.json(success(docs));
+  } catch (err) {
+    console.error('获取应用文档:', err.message);
+    res.json(error('获取应用文档失败'));
+  }
+});
+
+router.put('/apps/:id/docs', async (req, res) => {
+  try {
+    const app = await appService.getById(req.params.id);
+    if (!app) return res.json(error('应用不存在'));
+    if (!ensureOwner(res, req.currentUser, app.owner_id, '应用')) return;
+    const { intro, deploy } = req.body || {};
+    for (const doc of [intro, deploy]) {
+      if (doc && (typeof doc !== 'object' || Array.isArray(doc))) {
+        return res.json(error('文档格式不正确'));
+      }
+    }
+    if (intro) await appService.saveDoc(app.id, 'intro', intro.title, intro.content);
+    if (deploy) await appService.saveDoc(app.id, 'deploy', deploy.title, deploy.content);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'update', module: 'apps', target_type: 'app_doc', target_id: app.id,
+      target_name: app.app_name, description: '更新应用文档', ip_address: req.ip
+    });
+    res.json(success(null, '文档保存成功'));
+  } catch (err) {
+    console.error('保存应用文档:', err.message);
+    res.json(error('保存应用文档失败'));
+  }
+});
+
 router.delete('/apps/:id', async (req, res) => {
   try {
     const app = await appService.getById(req.params.id);
     if (!app) return res.json(error('应用不存在'));
     if (!ensureOwner(res, req.currentUser, app.owner_id, '应用')) return;
     await appService.remove(req.params.id);
+    // 高风险操作：FK 级联会一并删除该应用全部卡密，必须留痕
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'delete', module: 'apps', target_type: 'app', target_id: app.id,
+      target_name: app.app_name, description: `删除应用「${app.app_name}」（级联删除其名下全部卡密）`,
+      ip_address: req.ip
+    });
     res.json(success(null, '删除成功'));
   } catch (err) {
     console.error('删除应用:', err.message);
@@ -379,7 +440,11 @@ router.post('/cards/batch', async (req, res) => {
       action: 'batch_create', module: 'cards', target_type: 'card',
       description: `批量生成 ${cards.length} 张卡密`, ip_address: req.ip
     });
-    res.json(success({ count: cards.length, cards: cards.map(c => ({ card: c })) }, '生成成功'));
+    // 卡号唯一约束冲突重试耗尽时会少发，明确告知实际生成数量
+    const message = cards.length === batchCount
+      ? '生成成功'
+      : `生成成功（请求 ${batchCount} 张，实际生成 ${cards.length} 张，部分卡号生成冲突被跳过）`;
+    res.json(success({ count: cards.length, cards: cards.map(c => ({ card: c })) }, message));
   } catch (err) {
     console.error('批量生成卡密:', err.message);
     if (isBusinessError(err)) return res.json(error(err.message));
@@ -398,6 +463,11 @@ router.post('/cards', async (req, res) => {
     await adminService.checkCardActivationLimit(req.currentUser.id);
     const prefix = String(card_prefix || '').slice(0, 20);
     const cards = await cardService.createCards(app_id, 1, card_type || '天卡', price || 0, points || 1, '', prefix, req.currentUser.id);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'create', module: 'cards', target_type: 'card',
+      description: `为应用「${app.app_name}」生成 1 张${card_type || '天卡'}`, ip_address: req.ip
+    });
     res.json(success({ count: 1, cards: [{ card: cards[0] }] }, '创建成功'));
   } catch (err) {
     console.error('创建卡密:', err.message);
@@ -412,6 +482,12 @@ router.put('/cards/:id', async (req, res) => {
     if (!card) return res.json(error('卡密不存在'));
     if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
     await cardService.update(req.params.id, req.body);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'update', module: 'cards', target_type: 'card', target_id: card.id,
+      target_name: card.card, description: `更新卡密（字段: ${Object.keys(req.body || {}).join(', ') || '-'}）`,
+      ip_address: req.ip, request_data: JSON.stringify(req.body || {})
+    });
     res.json(success(null, '更新成功'));
   } catch (err) {
     console.error('更新卡密:', err.message);
@@ -425,6 +501,12 @@ router.delete('/cards/:id', async (req, res) => {
     if (!card) return res.json(error('卡密不存在'));
     if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
     await cardService.remove(req.params.id);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'delete', module: 'cards', target_type: 'card', target_id: card.id,
+      target_name: card.card, description: `删除卡密（${card.is_activated ? '已激活' : '未激活'}）`,
+      ip_address: req.ip
+    });
     res.json(success(null, '删除成功'));
   } catch (err) {
     console.error('删除卡密:', err.message);
@@ -524,6 +606,12 @@ router.get('/site-data', async (req, res) => {
 router.put('/site-data', requireSuperuser, async (req, res) => {
   try {
     await siteDataService.update(req.body);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'update', module: 'site_data', target_type: 'site_data', target_id: 1,
+      description: `更新网站配置（字段: ${Object.keys(req.body || {}).join(', ') || '-'}）`,
+      ip_address: req.ip
+    });
     res.json(success(null, '更新成功'));
   } catch (err) {
     console.error('更新网站配置:', err.message);
@@ -544,6 +632,12 @@ router.get('/datas', async (req, res) => {
 router.put('/datas', requireSuperuser, async (req, res) => {
   try {
     await siteDataService.update(req.body);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'update', module: 'site_data', target_type: 'site_data', target_id: 1,
+      description: `更新网站配置（字段: ${Object.keys(req.body || {}).join(', ') || '-'}）`,
+      ip_address: req.ip
+    });
     res.json(success(null, '更新成功'));
   } catch (err) {
     console.error('更新datas:', err.message);
@@ -571,6 +665,26 @@ router.get('/logs', requireSuperuser, async (req, res) => {
   } catch (err) {
     console.error('日志列表:', err.message);
     res.json(error('获取日志失败'));
+  }
+});
+
+/** ===== 清理操作日志（仅超管）。契约：{ all: true } 清空；{ days: N } 删 N 天前 ===== */
+router.delete('/logs', requireSuperuser, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const mode = body.all === true ? 'all' : 'days';
+    const days = body.days;
+    const deleted = await logService.cleanup({ mode, days });
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'cleanup', module: 'logs', target_type: 'log',
+      description: mode === 'all' ? '清空全部操作日志' : `清理 ${days} 天前的操作日志（删除 ${deleted} 条）`,
+      ip_address: req.ip
+    });
+    res.json(success({ deleted }, '清理成功'));
+  } catch (err) {
+    console.error('清理日志:', err.message);
+    res.json(error(err.message === '清理天数必须为正整数' ? err.message : '清理日志失败'));
   }
 });
 

@@ -14,6 +14,9 @@
           <span>{{ siteName }}</span>
         </div>
         <div class="header-actions">
+          <router-link to="/" class="nav-link">首页</router-link>
+          <router-link to="/products" class="nav-link">产品中心</router-link>
+          <router-link to="/about" class="nav-link">关于我们</router-link>
         </div>
       </div>
     </header>

@@ -38,38 +38,6 @@
       </el-button>
     </div>
     <div class="header-right">
-      <!-- 装饰性功能图标 -->
-      <div class="header-icons">
-        <!-- 搜索图标 -->
-        <div class="header-icon" title="搜索" @click="handleIconClick('search')">
-          <el-icon size="18px">
-            <Search />
-          </el-icon>
-        </div>
-        
-        <!-- 通知图标 -->
-        <div class="header-icon notification-icon" title="通知" @click="handleIconClick('notification')">
-          <el-icon size="18px">
-            <Bell />
-          </el-icon>
-          <span class="notification-badge">3</span>
-        </div>
-        
-        <!-- 帮助图标 -->
-        <div class="header-icon" title="帮助" @click="handleIconClick('help')">
-          <el-icon size="18px">
-            <QuestionFilled />
-          </el-icon>
-        </div>
-        
-        <!-- 设置图标 -->
-        <div class="header-icon" title="设置" @click="handleIconClick('settings')">
-          <el-icon size="18px">
-            <Setting />
-          </el-icon>
-        </div>
-      </div>
-      
       <!-- 分隔线 -->
       <div class="header-divider"></div>
       
@@ -130,10 +98,6 @@ import { storeToRefs } from 'pinia'
 import { useAppStore } from '@/stores/modules/app'
 import {
   Menu,
-  Setting,
-  Search,
-  Bell,
-  QuestionFilled,
   Refresh
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -173,30 +137,6 @@ const toggleDropdown = () => {
 // 关闭下拉菜单
 const closeDropdown = () => {
   isDropdownOpen.value = false
-}
-
-// 处理图标点击事件
-const handleIconClick = (iconType) => {
-  console.log(`点击了${iconType}图标，后期可扩展功能`)
-  
-  switch (iconType) {
-    case 'search':
-      // 后期可扩展：打开全局搜索
-      console.log('搜索功能待开发')
-      break
-    case 'notification':
-      // 后期可扩展：显示通知列表
-      console.log('通知功能待开发')
-      break
-    case 'help':
-      // 后期可扩展：打开帮助文档
-      console.log('帮助功能待开发')
-      break
-    case 'settings':
-      // 后期可扩展：快速设置面板
-      router.push('/admin/datas')
-      break
-  }
 }
 
 // 刷新当前路由
@@ -251,53 +191,6 @@ onUnmounted(() => {
   gap: 20px;
 }
 
-.header-icons {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.header-icon {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  color: var(--el-text-color-regular);
-}
-
-.header-icon:hover {
-  background: var(--el-fill-color-light);
-  color: var(--el-color-primary);
-  transform: translateY(-1px);
-}
-
-.notification-icon {
-  position: relative;
-}
-
-.notification-badge {
-  position: absolute;
-  top: -2px;
-  right: -2px;
-  background: #f56565;
-  color: white;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 5px;
-  border-radius: 8px;
-  min-width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
 .header-divider {
   width: 1px;
   height: 24px;
@@ -307,20 +200,6 @@ onUnmounted(() => {
 
 /* 移动端响应式 */
 @media (max-width: 768px) {
-  .header-icons {
-    gap: 8px;
-  }
-  
-  .header-icon {
-    width: 32px;
-    height: 32px;
-  }
-  
-  .header-icon:nth-child(3),
-  .header-icon:nth-child(4) {
-    display: none; /* 在移动端隐藏帮助和设置图标 */
-  }
-  
   .header-divider {
     margin: 0 4px;
   }
