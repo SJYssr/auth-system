@@ -1,28 +1,18 @@
 /**
- * 图形验证码服务（内存版）
+ * 图形验证码服务（MySQL 存储）。
+ * 计数/验证码落库后多实例部署共享状态，进程重启也不再丢失。
  */
 const svgCaptcha = require('svg-captcha');
 const crypto = require('crypto');
+const pool = require('../config/db');
 
-// 内存存储
-const captchaStore = new Map();
-const TTL = 2 * 60 * 1000; // 2分钟过期
-
-// 每分钟清理一次过期验证码
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of captchaStore) {
-    if (now > value.expiresAt) {
-      captchaStore.delete(key);
-    }
-  }
-}, 60 * 1000);
+const TTL_MINUTES = 2;
 
 /**
  * 生成验证码
- * @returns {{ key: string, image: string }} key用于校验，image是SVG base64
+ * @returns {Promise<{ key: string, image: string }>} key用于校验，image是SVG base64
  */
-function generate() {
+async function generate() {
   const captcha = svgCaptcha.create({
     size: 5,
     ignoreChars: '0o1il',
@@ -34,10 +24,10 @@ function generate() {
   });
 
   const key = crypto.randomUUID();
-  captchaStore.set(key, {
-    text: captcha.text.toLowerCase(),
-    expiresAt: Date.now() + TTL
-  });
+  await pool.execute(
+    'INSERT INTO captchas (captcha_key, captcha_code, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))',
+    [key, captcha.text.toLowerCase(), TTL_MINUTES]
+  );
 
   return {
     key,
@@ -46,22 +36,25 @@ function generate() {
 }
 
 /**
- * 校验验证码
+ * 校验验证码（一次性：无论对错，校验后即销毁，防重放/爆破）
  * @param {string} key
  * @param {string} code
- * @returns {boolean}
+ * @returns {Promise<boolean>}
  */
-function verify(key, code) {
+async function verify(key, code) {
   if (!key || !code) return false;
-  const record = captchaStore.get(key);
-  if (!record) return false;
-  if (Date.now() > record.expiresAt) {
-    captchaStore.delete(key);
-    return false;
-  }
-  const result = record.text === code.toLowerCase();
-  captchaStore.delete(key); // 一次性
-  return result;
+  const [rows] = await pool.execute(
+    'SELECT captcha_code FROM captchas WHERE captcha_key = ? AND expires_at > NOW()',
+    [String(key)]
+  );
+  await pool.execute('DELETE FROM captchas WHERE captcha_key = ?', [String(key)]);
+  if (rows.length === 0) return false;
+  return rows[0].captcha_code === String(code).toLowerCase();
 }
 
-module.exports = { generate, verify };
+/** 清理过期验证码（由入口的定时任务周期调用） */
+async function cleanup() {
+  await pool.execute('DELETE FROM captchas WHERE expires_at < NOW() - INTERVAL 1 HOUR');
+}
+
+module.exports = { generate, verify, cleanup };

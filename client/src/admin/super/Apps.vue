@@ -22,6 +22,15 @@
           <el-option label="启用" value="enabled" />
           <el-option label="禁用" value="disabled" />
         </el-select>
+        <el-select
+          v-model="searchForm.category_id"
+          placeholder="产品分类"
+          style="width: 140px; margin-right: 10px;"
+          clearable
+          @change="handleSearch"
+        >
+          <el-option v-for="cat in categoryOptions" :key="cat.id" :label="cat.name" :value="cat.id" />
+        </el-select>
         <el-button type="primary" @click="handleSearch">
           <el-icon><Search /></el-icon>
           搜索
@@ -57,6 +66,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="app_name" label="应用名称" min-width="120" />
+        <el-table-column prop="category_name" label="分类" width="100">
+          <template #default="{ row }">
+            <el-tag v-if="row.category_name" size="small">{{ row.category_name }}</el-tag>
+            <span v-else class="text-muted">未分类</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="version" label="版本号" width="100" />
         <el-table-column prop="developer" label="开发者" width="100" />
         <el-table-column prop="created_at" label="创建时间" width="160" />
@@ -124,6 +139,11 @@
         </el-form-item>
         <el-form-item label="开发者" prop="developer">
           <el-input v-model="form.developer" placeholder="请输入开发者名称" />
+        </el-form-item>
+        <el-form-item label="产品分类" prop="category_id">
+          <el-select v-model="form.category_id" placeholder="未分类（可留空）" clearable style="width: 100%">
+            <el-option v-for="cat in categoryOptions" :key="cat.id" :label="cat.name" :value="cat.id" />
+          </el-select>
         </el-form-item>
         <el-form-item label="图标URL" prop="icon_url">
           <el-input v-model="form.icon_url" placeholder="请输入图标URL" />
@@ -213,13 +233,14 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Edit, Delete, Refresh } from '@element-plus/icons-vue'
 
 import { useBusinessStore } from '@/stores/modules/business'
-import { superAppService } from '@/utils/service'
+import { superAppService, superCategoryService } from '@/utils/service'
 import { useListPage } from '@/composables/useListPage'
 
 const store = useBusinessStore()
 
 const router = useRouter()
 const selectedRows = ref([])
+const categoryOptions = ref([])
 const announceVisible = ref(false)
 const announceSaving = ref(false)
 const announceForm = ref({ softid: '', app_name: '', announcement: '', id: null })
@@ -233,7 +254,7 @@ const {
   fetchData, handleSearch, handleCurrentChange, handleSizeChange
 } = useListPage({
   fetcher: (params) => store.fetchSuperApps(params),
-  filters: { app_name: '', status: '', start_date: '', end_date: '' }
+  filters: { app_name: '', status: '', category_id: '', start_date: '', end_date: '' }
 })
 
 const handleSelectionChange = (rows) => {
@@ -243,6 +264,7 @@ const handleSelectionChange = (rows) => {
 const clearSearch = async () => {
   searchForm.app_name = ''
   searchForm.status = ''
+  searchForm.category_id = ''
   searchForm.start_date = ''
   searchForm.end_date = ''
   await handleSearch()
@@ -314,6 +336,7 @@ const form = ref({
   version: '1.0.0',
   version_name: '',
   developer: '',
+  category_id: null,
   icon_url: '',
   download_url: '',
   usage_guide: '',
@@ -331,6 +354,7 @@ const handleAdd = () => {
     version: '1.0.0',
     version_name: '',
     developer: '',
+    category_id: null,
     icon_url: '',
     download_url: '',
     usage_guide: '',
@@ -350,6 +374,7 @@ const handleEdit = (row) => {
     version: row.version || '1.0.0',
     version_name: row.version_name || '',
     developer: row.developer || '',
+    category_id: row.category_id ?? null,
     icon_url: row.icon_url || '',
     download_url: row.download_url || '',
     usage_guide: row.usage_guide || '',
@@ -479,7 +504,18 @@ const handleDelete = async (row) => {
 
 
 
-onMounted(fetchData)
+/** 拉取分类下拉选项（失败不阻塞页面） */
+const fetchCategoryOptions = async () => {
+  try {
+    const res = await superCategoryService.getAll()
+    categoryOptions.value = res.data || []
+  } catch { /* 下拉加载失败不阻塞 */ }
+}
+
+onMounted(() => {
+  fetchData()
+  fetchCategoryOptions()
+})
 
 
 </script>

@@ -14,11 +14,13 @@ process.env.DB_NAME ??= 'auth_system_unit_test';
 
 const { effectiveLimit } = require('../src/utils/quota');
 const { parsePagination, escapeLike } = require('../src/utils/response');
-const { generateToken, expireTime, hashCardToken, cardTokenMatches } = require('../src/services/clientAuthService');
+const { generateToken, expireTime, hashCardToken } = require('../src/services/clientAuthService');
 const { hashToken } = require('../src/services/authService');
 const { generateSoftid } = require('../src/services/appService');
 const { generateCardCode } = require('../src/services/cardService');
 const { sanitizeRequestData } = require('../src/services/logService');
+const { retryDelaySeconds, MAX_ATTEMPTS } = require('../src/services/webhookService');
+const { shouldRemind, buildReminderMail, REMIND_DAYS } = require('../src/services/expiryReminderService');
 
 const DAY = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
@@ -73,15 +75,19 @@ test('hashCardToken 与 hashToken 均为 SHA-256 十六进制', () => {
   assert.strictEqual(hashToken('abc'), expected);
 });
 
-test('cardTokenMatches 命中哈希与历史明文，拒绝不匹配/空值', () => {
-  const raw = generateToken();
-  const stored = hashCardToken(raw);
-  assert.strictEqual(cardTokenMatches(stored, raw), true);
-  assert.strictEqual(cardTokenMatches('legacy_plain_token', 'legacy_plain_token'), true);
-  assert.strictEqual(cardTokenMatches(stored, 'wrong'), false);
-  assert.strictEqual(cardTokenMatches('legacy_plain_token', 'other'), false);
-  assert.strictEqual(cardTokenMatches(null, 'x'), false);
-  assert.strictEqual(cardTokenMatches(stored, null), false);
+// ===== Webhook 重试退避 =====
+test('retryDelaySeconds 按指数退避并在耗尽后封顶', () => {
+  assert.strictEqual(retryDelaySeconds(1), 30);
+  assert.strictEqual(retryDelaySeconds(2), 60);
+  assert.strictEqual(retryDelaySeconds(3), 300);
+  assert.strictEqual(retryDelaySeconds(4), 1800);
+  assert.strictEqual(retryDelaySeconds(5), 3600);
+  // 越界入参收敛到合法区间
+  assert.strictEqual(retryDelaySeconds(0), 30);
+  assert.strictEqual(retryDelaySeconds(-3), 30);
+  assert.strictEqual(retryDelaySeconds(99), 3600);
+  assert.strictEqual(typeof MAX_ATTEMPTS, 'number');
+  assert.ok(MAX_ATTEMPTS >= 2);
 });
 
 // ===== 卡密到期时间 =====
@@ -120,4 +126,41 @@ test('sanitizeRequestData 掩盖敏感字段、透传非JSON字符串', () => {
   assert.strictEqual(out.note, 'keep');
   assert.strictEqual(sanitizeRequestData('not json'), 'not json');
   assert.strictEqual(sanitizeRequestData(null), null);
+});
+
+// ===== 管理员到期邮件提醒 =====
+test('shouldRemind 提醒窗口与排除条件', () => {
+  const now = new Date('2026-09-20T00:00:00Z');
+  const daysAgo = (n) => new Date(now.getTime() - n * DAY);
+  const daysLater = (n) => new Date(now.getTime() + n * DAY);
+  const base = { is_superuser: 0, status: 'enabled', expires_at: daysLater(3), expiry_reminded_at: null };
+
+  // 窗口内（默认 7 天）应提醒
+  assert.strictEqual(shouldRemind(base, now), true);
+  // 窗口外不提醒
+  assert.strictEqual(shouldRemind({ ...base, expires_at: daysLater(30) }, now), false);
+  // 已到期不提醒
+  assert.strictEqual(shouldRemind({ ...base, expires_at: daysAgo(1) }, now), false);
+  // 超管/禁用账号/无到期时间不提醒
+  assert.strictEqual(shouldRemind({ ...base, is_superuser: 1 }, now), false);
+  assert.strictEqual(shouldRemind({ ...base, status: 'disabled' }, now), false);
+  assert.strictEqual(shouldRemind({ ...base, expires_at: null }, now), false);
+  assert.strictEqual(shouldRemind(null, now), false);
+  // 24 小时内已提醒过则跳过；超过 24 小时可再次提醒
+  assert.strictEqual(shouldRemind({ ...base, expiry_reminded_at: daysAgo(0.5) }, now), false);
+  assert.strictEqual(shouldRemind({ ...base, expiry_reminded_at: daysAgo(2) }, now), true);
+  // 自定义窗口
+  assert.strictEqual(shouldRemind({ ...base, expires_at: daysLater(10) }, now, 14), true);
+  assert.ok(REMIND_DAYS >= 1);
+});
+
+test('buildReminderMail 包含用户名/到期时间/收件人', () => {
+  const mail = buildReminderMail({
+    username: 'alice', email: 'alice@test.dev', expires_at: new Date('2026-09-25T08:30:00Z')
+  });
+  assert.strictEqual(mail.to, 'alice@test.dev');
+  assert.ok(mail.subject.includes('alice'));
+  assert.ok(mail.subject.includes('到期'));
+  assert.ok(mail.text.includes('alice'));
+  assert.ok(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(mail.text));
 });

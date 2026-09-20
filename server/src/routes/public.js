@@ -8,6 +8,7 @@ const authService = require('../services/authService');
 const initService = require('../services/initService');
 const captchaService = require('../services/captchaService');
 const appService = require('../services/appService');
+const categoryService = require('../services/categoryService');
 const apiManageService = require('../services/apiManageService');
 const errorCodeService = require('../services/errorCodeService');
 const logService = require('../services/logService');
@@ -27,10 +28,15 @@ router.get('/init', async (req, res) => {
   }
 });
 
-/** 获取验证码 */
-router.get('/captcha', (req, res) => {
-  const captcha = captchaService.generate();
-  res.json(success(captcha));
+/** 获取验证码（MySQL 共享存储，多实例部署可用） */
+router.get('/captcha', async (req, res) => {
+  try {
+    const captcha = await captchaService.generate();
+    res.json(success(captcha));
+  } catch (err) {
+    console.error('生成验证码:', err.message);
+    res.json(error('获取验证码失败'));
+  }
 });
 
 /** 管理员登录 */
@@ -39,8 +45,8 @@ router.post('/login', async (req, res) => {
     const { username, password, captcha_key, captcha_code } = req.body;
     if (!username || !password) return res.json(error('请输入用户名和密码'));
 
-    // 验证码校验
-    if (!captchaService.verify(captcha_key, captcha_code)) {
+    // 验证码校验（一次性，校验后即销毁）
+    if (!await captchaService.verify(captcha_key, captcha_code)) {
       await logService.log({
         username: username || '未知',
         action: 'login', module: 'auth', target_type: 'admin',
@@ -108,6 +114,17 @@ router.get('/apps', async (req, res) => {
   } catch (err) {
     console.error('前台应用列表:', err.message);
     res.json(error('获取应用列表失败'));
+  }
+});
+
+/** 产品分类列表（前台产品中心过滤用，仅启用分类） */
+router.get('/categories', async (req, res) => {
+  try {
+    const rows = await categoryService.getPublicList();
+    res.json(success(rows));
+  } catch (err) {
+    console.error('公开分类列表:', err.message);
+    res.json(error('获取分类列表失败'));
   }
 });
 

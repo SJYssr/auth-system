@@ -30,9 +30,10 @@
         <el-table-column prop="created_at" label="创建时间" width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="290" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="handleTest(row)">测试</el-button>
+            <el-button size="small" @click="openDeliveries(row)">投递记录</el-button>
             <el-button size="small" @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" size="small" @click="handleDelete(row)">删除</el-button>
           </template>
@@ -80,6 +81,46 @@
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 投递记录弹窗：每次推送的投递结果与自动重试状态 -->
+    <el-dialog v-model="deliveriesVisible" :title="`投递记录 — ${deliveriesHookName}`" width="860px">
+      <el-alert type="info" :closable="false" style="margin-bottom:12px"
+        title="投递失败会按 30s/1m/5m/30m/1h 自动重试，重试耗尽后标记为失败，可手动重试。" />
+      <el-table :data="deliveries" v-loading="deliveriesLoading" size="small" style="width: 100%"
+        :cell-style="{ borderColor: '#e8e8e8' }" :header-cell-style="{ borderColor: '#e8e8e8' }">
+        <el-table-column prop="event" label="事件" width="140" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="deliveryStatusType(row.status)" size="small">{{ deliveryStatusText(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="attempts" label="尝试次数" width="90" />
+        <el-table-column prop="last_status_code" label="响应码" width="80">
+          <template #default="{ row }">{{ row.last_status_code ?? '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="last_error" label="最后错误" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.last_error || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="创建时间" width="160">
+          <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="成功时间" width="160">
+          <template #default="{ row }">{{ row.delivered_at ? formatTime(row.delivered_at) : '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="90" fixed="right">
+          <template #default="{ row }">
+            <el-button v-if="row.status !== 'success'" size="small" type="primary" link @click="handleRetryDelivery(row)">重试</el-button>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty description="暂无投递记录（触发一次卡密事件或点击「测试」后出现）" />
+        </template>
+      </el-table>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px" v-if="deliveryPagination.total_records > 0">
+        <el-pagination v-model:current-page="deliveryPagination.page" v-model:page-size="deliveryPagination.per_page"
+          :total="deliveryPagination.total_records" layout="total, prev, pager, next" @current-change="fetchDeliveries" />
+      </div>
     </el-dialog>
   </el-main>
 </template>
@@ -188,6 +229,53 @@ const handleTest = async (row) => {
     ElMessage.success(response.message || '测试事件投递成功')
   } catch (error) {
     ElMessage.error(error.message || '测试事件发送失败')
+  }
+}
+
+// ===== 投递记录 =====
+const deliveriesVisible = ref(false)
+const deliveriesLoading = ref(false)
+const deliveries = ref([])
+const deliveriesHookId = ref(null)
+const deliveriesHookName = ref('')
+const deliveryPagination = ref({ page: 1, per_page: 10, total_records: 0 })
+
+const deliveryStatusText = (status) => ({ pending: '重试中', success: '成功', failed: '失败' }[status] || status)
+const deliveryStatusType = (status) => ({ pending: 'warning', success: 'success', failed: 'danger' }[status] || 'info')
+
+const fetchDeliveries = async () => {
+  if (!deliveriesHookId.value) return
+  try {
+    deliveriesLoading.value = true
+    const response = await superWebhookService.getDeliveries(deliveriesHookId.value, {
+      page: deliveryPagination.value.page,
+      per_page: deliveryPagination.value.per_page
+    })
+    deliveries.value = response.data || []
+    deliveryPagination.value.total_records = Number(response.pagination?.total_records) || 0
+  } catch (error) {
+    ElMessage.error(error.message || '获取投递记录失败')
+  } finally {
+    deliveriesLoading.value = false
+  }
+}
+
+const openDeliveries = (row) => {
+  deliveriesHookId.value = row.id
+  deliveriesHookName.value = `${row.app_name || ''} #${row.id}`.trim()
+  deliveries.value = []
+  deliveryPagination.value.page = 1
+  deliveriesVisible.value = true
+  fetchDeliveries()
+}
+
+const handleRetryDelivery = async (row) => {
+  try {
+    await superWebhookService.retryDelivery(deliveriesHookId.value, row.id)
+    ElMessage.success('已加入重试队列（约 30 秒内发出）')
+    fetchDeliveries()
+  } catch (error) {
+    ElMessage.error(error.message || '重试失败')
   }
 }
 

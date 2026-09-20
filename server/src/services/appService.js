@@ -72,12 +72,15 @@ async function getPurchaseUrl(softid) {
 
 /** 公开接口字段白名单：前台列表/详情只暴露这些列，不回 SELECT * */
 const PUBLIC_APP_FIELDS = 'a.id, a.app_name, a.description, a.icon_url, a.version, a.version_name, ' +
-  'a.developer, a.is_free, a.download_url, a.usage_guide, a.purchase_url, a.announcement, a.status, a.created_at';
+  'a.developer, a.is_free, a.download_url, a.usage_guide, a.purchase_url, a.announcement, a.status, ' +
+  'a.category_id, c.name AS category_name, a.created_at';
+
+const PUBLIC_APP_FROM = ' FROM apps a LEFT JOIN categories c ON a.category_id = c.id';
 
 /** 公开应用列表（仅启用，字段白名单） */
 async function getPublicList(limit = 100) {
   const [rows] = await pool.execute(
-    `SELECT ${PUBLIC_APP_FIELDS} FROM apps a WHERE a.status = 'enabled' ORDER BY a.created_at DESC LIMIT ?`,
+    `SELECT ${PUBLIC_APP_FIELDS}${PUBLIC_APP_FROM} WHERE a.status = 'enabled' ORDER BY a.created_at DESC LIMIT ?`,
     [String(limit)]
   );
   return rows;
@@ -86,7 +89,7 @@ async function getPublicList(limit = 100) {
 /** 公开应用详情（仅启用，字段白名单，附带 intro/deploy 文档） */
 async function getPublicDetail(id) {
   const [rows] = await pool.execute(
-    `SELECT ${PUBLIC_APP_FIELDS} FROM apps a WHERE a.id = ? AND a.status = 'enabled'`,
+    `SELECT ${PUBLIC_APP_FIELDS}${PUBLIC_APP_FROM} WHERE a.id = ? AND a.status = 'enabled'`,
     [id]
   );
   if (rows.length === 0) return null;
@@ -141,14 +144,15 @@ async function getList(page = 1, pageSize = 20, filters = {}) {
   const values = [];
   if (filters.app_name) { conds.push('a.app_name LIKE ?'); values.push(`%${escapeLike(filters.app_name)}%`); }
   if (filters.status) { conds.push('a.status = ?'); values.push(filters.status); }
+  if (filters.category_id) { conds.push('a.category_id = ?'); values.push(filters.category_id); }
   if (filters.owner_id) { conds.push('a.owner_id = ?'); values.push(filters.owner_id); }
   const whereSql = conds.length ? ` WHERE ${conds.join(' AND ')}` : '';
   const offset = (page - 1) * pageSize;
   const [rows] = await pool.execute(
-    'SELECT a.*, ' +
-    'COALESCE((SELECT COUNT(*) FROM cards c WHERE c.app_id = a.id), 0) as total_cards, ' +
-    'COALESCE((SELECT COUNT(*) FROM cards c WHERE c.app_id = a.id AND c.is_activated = 1), 0) as activated_cards ' +
-    `FROM apps a${whereSql} ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
+    'SELECT a.*, c.name AS category_name, ' +
+    'COALESCE((SELECT COUNT(*) FROM cards c2 WHERE c2.app_id = a.id), 0) as total_cards, ' +
+    'COALESCE((SELECT COUNT(*) FROM cards c2 WHERE c2.app_id = a.id AND c2.is_activated = 1), 0) as activated_cards ' +
+    `FROM apps a LEFT JOIN categories c ON a.category_id = c.id${whereSql} ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
     [...values, String(pageSize), String(offset)]
   );
   const [countResult] = await pool.execute(`SELECT COUNT(*) as total FROM apps a${whereSql}`, values);
@@ -164,18 +168,21 @@ async function getById(id) {
   return rows[0] || null;
 }
 
-/** 创建应用（conn 可传入外部连接，与配额校验组成同一事务） */
+/** 创建应用（conn 可传入外部连接，与配额校验组成同一事务）。category_id 须先经 categoryService.ensureExists 校验 */
 async function create(data, ownerId = null, conn = pool) {
   const softid = generateSoftid();
+  const categoryId = data.category_id === null || data.category_id === undefined || data.category_id === ''
+    ? null : parseInt(data.category_id, 10);
   const [result] = await conn.execute(
     'INSERT INTO apps (softid, app_name, description, version, version_name, developer, ' +
-    'is_free, icon_url, download_url, usage_guide, purchase_url, announcement, force_update, status, owner_id) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'is_free, icon_url, download_url, usage_guide, purchase_url, announcement, force_update, status, owner_id, category_id) ' +
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [softid, data.app_name, data.description || null, data.version || '1.0.0',
      data.version_name || null, data.developer || null, data.is_free !== undefined ? data.is_free : 1,
      data.icon_url || null, data.download_url || null, data.usage_guide || null,
      data.purchase_url || null, data.announcement || null,
-     data.force_update !== undefined ? data.force_update : 0, data.status || 'enabled', ownerId]
+     data.force_update !== undefined ? data.force_update : 0, data.status || 'enabled', ownerId,
+     Number.isInteger(categoryId) ? categoryId : null]
   );
   return { id: result.insertId, softid };
 }
@@ -187,6 +194,10 @@ async function update(id, data) {
   const allowedFields = ['app_name', 'description', 'version', 'version_name', 'developer',
     'is_free', 'icon_url', 'download_url', 'usage_guide', 'purchase_url', 'announcement',
     'force_update', 'status'];
+  if (data.category_id !== undefined) {
+    fields.push('category_id = ?');
+    values.push(data.category_id === null || data.category_id === '' ? null : parseInt(data.category_id, 10));
+  }
   for (const key of allowedFields) {
     if (data[key] !== undefined) {
       fields.push(`${key} = ?`);

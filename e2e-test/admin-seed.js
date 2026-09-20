@@ -6,9 +6,9 @@ const fs = require('fs');
 const crypto = require('crypto');
 const envLocal = path.join(__dirname, '.env');
 const envFallback = path.join(__dirname, '../server/.env');
-require('../server/node_modules/dotenv').config({ path: fs.existsSync(envLocal) ? envLocal : envFallback });
-const mysql = require('../server/node_modules/mysql2/promise');
-const bcrypt = require('../server/node_modules/bcryptjs');
+require('dotenv').config({ path: fs.existsSync(envLocal) ? envLocal : envFallback });
+const mysql = require('mysql2/promise');
+const bcrypt = require('bcryptjs');
 
 const NAME = 'e2e_test_admin';
 const NAME_NORMAL = 'e2e_normal_admin';
@@ -25,6 +25,8 @@ const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
     user: process.env.DB_USER, password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME, charset: 'utf8mb4', connectTimeout: 10000,
   });
+  // 显式回显目标库：环境变量未传时会回退读 server/.env（可能指向远程库），避免静默写错库
+  console.log(`[admin-seed] 目标数据库 ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
   if (mode === 'create') {
     await conn.execute('DELETE FROM admins WHERE username = ?', [NAME]);
     await conn.execute(

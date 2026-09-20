@@ -2,6 +2,32 @@
 
 所有对外可见的变更都记录在本文件。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.2.0] - 2026-09-20
+
+### 新增
+
+- **产品分类体系**：新增 `categories` 表与 `apps.category_id`（FK，删分类自动回到未分类）；后台「网站设置 → 产品分类」维护（超管）、应用创建/编辑/列表支持分类字段与过滤；前台新增 `GET /api/public/categories`，公开应用列表/详情携带 `category_name`，「产品中心」侧栏按分类过滤。
+- **管理员账号到期邮件提醒**：配置 SMTP（`SMTP_HOST`/`SMTP_USER`/`SMTP_PASS` 等，Docker 部署同样透传）后，普通管理员账号进入到期前窗口（`ADMIN_EXPIRY_REMIND_DAYS`，默认 7 天）即自动发送提醒邮件，同一账号 24 小时内最多一次（`admins.expiry_reminded_at` 原子认领，多实例不重复发送）；未配置 SMTP 时功能自动关闭。
+- **Webhook 投递记录与自动重试**：每次推送写入 `webhook_deliveries`（状态/尝试次数/响应码/最后错误）；失败按 30s→1m→5m→30m→1h 指数退避自动重试，最多 6 次尝试；重试 worker 以 `FOR UPDATE ... SKIP LOCKED` 认领任务，多实例部署不会重复投递；新增 `GET /api/admin/webhooks/:id/deliveries` 与手动重试接口，后台 Webhook 页新增「投递记录」弹窗；投递记录保留 14 天自动清理。
+- **多实例部署支撑**：接口限流（`rate_limits` 表，按限流器前缀隔离计数）与图形验证码（`captchas` 表）改为 MySQL 共享存储，多副本部署共享状态、计数不再随重启清零；存储故障时限流 fail-open 放行。
+- Webhook `ping` 测试事件同样落投递记录，测试结果可追溯。
+
+### 安全
+
+- **移除卡密会话 token 的历史明文兼容比对**（`cardTokenMatches`）：所有校验点只认 SHA-256 哈希。v1.1.0 升级前签发的存量明文会话将失效，客户端重新登录即可（与 v1.0.0 管理员 token 哈希化的升级语义一致）。
+
+### 修复
+
+- CI 头部注释与 `docs/development.md` 中「UI 冒烟套件未纳入 CI」的过时表述（ui-smoke job 早已运行全部 4 个套件）。
+- `docs/openapi.json` 的 `info.version` 停留在 1.0.0，现与项目版本对齐。
+- SDK：Python `announcement()` 中恒真的冗余条件表达式；Java/C# SDK 对 HTTP 429（限流）未特判——现统一映射为 `-1009`，与 Python 行为一致。
+
+### 优化
+
+- e2e 测试工程自洽：`e2e-test/package.json` 补齐 dotenv/mysql2/bcryptjs 依赖声明（不再借用 server 的 node_modules），全部套件默认端口统一为 3100（与 CI 一致），admin-seed.js 执行时回显目标数据库地址（环境变量未传时会回退读 server/.env，可能指向远程库），新增 11 条产品分类断言（test-card-flow 56 条、test-api 19 条）。
+- `.gitignore` 覆盖 `__pycache__/`、`*.pyc`。
+- 单元测试新增 webhook 退避曲线与管理员到期提醒判定（`shouldRemind`/`buildReminderMail`）用例，共 13 项。
+
 ## [1.1.0] - 2026-09-19
 
 > 本版本起打 `v*` tag 即自动发布 Docker 镜像（GHCR）与 GitHub Release。自 1.0.0 以来的安全加固、平台化功能与工程化改进见下。
@@ -108,4 +134,5 @@
 - 配额入参校验（≥ -1 整数）；给不存在管理员发放套餐被拒。
 - 403 不再清除登录态（仅 401）；优雅停机与进程级异常兜底。
 
+[1.2.0]: https://github.com/SJYssr/auth-system/releases/tag/v1.2.0
 [1.0.0]: https://github.com/SJYssr/auth-system/releases/tag/v1.0.0

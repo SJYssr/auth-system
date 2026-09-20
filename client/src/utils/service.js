@@ -15,6 +15,10 @@ const publicAppsService = {
     getDetail: (id) => request.get(`/public/apps/${id}`)
 }
 
+const publicCategoryService = {
+    getAll: () => request.get('/public/categories')
+}
+
 const superDashboardService = {
     getData: () => request.get('/admin/dashboard')
 }
@@ -48,7 +52,9 @@ const superWebhookService = {
     create: (data) => request.post('/admin/webhooks', data),
     update: (id, data) => request.put(`/admin/webhooks/${id}`, data),
     delete: (id) => request.delete(`/admin/webhooks/${id}`),
-    test: (id) => request.post(`/admin/webhooks/${id}/test`)
+    test: (id) => request.post(`/admin/webhooks/${id}/test`),
+    getDeliveries: (id, params = {}) => request.get(`/admin/webhooks/${id}/deliveries`, { params }),
+    retryDelivery: (id, deliveryId) => request.post(`/admin/webhooks/${id}/deliveries/${deliveryId}/retry`)
 }
 
 const superAdminService = {
@@ -91,10 +97,18 @@ const superVersionService = {
     delete: (id) => request.delete(`/admin/versions/${id}`)
 }
 
+const superCategoryService = {
+    getAll: () => request.get('/admin/categories'),
+    create: (data) => request.post('/admin/categories', data),
+    update: (id, data) => request.put(`/admin/categories/${id}`, data),
+    delete: (id) => request.delete(`/admin/categories/${id}`)
+}
+
 export {
   publicLoginService,
   publicInitService,
   publicAppsService,
+  publicCategoryService,
   superAppService,
   superDashboardService,
   superDataService,
@@ -106,4 +120,5 @@ export {
   superVersionService,
   superApiService,
   superErrorCodeService,
+  superCategoryService,
 }

@@ -1,6 +1,5 @@
-# 后端 API 测试：起 MySQL 服务 → 导 schema → 启动后端 → 跑纯 API 测试套件
-# 说明：UI 冒烟套件（test-admin/test-public 等）依赖 Playwright 浏览器，未纳入 CI，
-#       可在本地按 README 手动运行。两个套件用不同 job 隔离，避免共享 /login 限流窗口。
+# 后端/前端 lint 与单元测试 + 两个纯 API 套件 + 四个 Playwright UI 冒烟套件。
+# API 套件与 UI 套件用不同 job 隔离：避免共享 /login 限流窗口（5 次/分钟/IP）互相挤占。
 name: CI
 
 on:

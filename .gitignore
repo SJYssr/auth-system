@@ -14,6 +14,10 @@ client/dist/
 # Playwright UI 测试截图产物
 shots/
 
+# Python 缓存（sdk 本地试用产物）
+__pycache__/
+*.pyc
+
 # unplugin 自动生成
 client/auto-imports.d.ts
 client/components.d.ts

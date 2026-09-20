@@ -60,6 +60,40 @@
               </el-form-item>
             </div>
           </el-tab-pane>
+
+          <el-tab-pane label="产品分类" name="categories">
+            <div class="tab-content">
+              <div class="category-toolbar">
+                <span class="category-hint">前台「产品中心」按分类过滤；删除分类后引用它的应用自动回到未分类</span>
+                <el-button type="primary" @click="openCategoryForm()">
+                  <el-icon><Plus /></el-icon>
+                  新增分类
+                </el-button>
+              </div>
+              <el-table :data="categories" v-loading="categoriesLoading" style="width: 100%"
+                :cell-style="{ borderColor: '#e8e8e8' }" :header-cell-style="{ borderColor: '#e8e8e8' }">
+                <el-table-column prop="name" label="分类名称" min-width="140" />
+                <el-table-column prop="sort_order" label="排序" width="80" />
+                <el-table-column label="状态" width="90">
+                  <template #default="{ row }">
+                    <el-tag :type="row.status === 'enabled' ? 'success' : 'info'" size="small">
+                      {{ row.status === 'enabled' ? '启用' : '停用' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="created_at" label="创建时间" width="170" />
+                <el-table-column label="操作" width="150" fixed="right">
+                  <template #default="{ row }">
+                    <el-button size="small" @click="openCategoryForm(row)">编辑</el-button>
+                    <el-button type="danger" size="small" @click="handleCategoryDelete(row)">删除</el-button>
+                  </template>
+                </el-table-column>
+                <template #empty>
+                  <el-empty description="暂无分类，点击「新增分类」创建" />
+                </template>
+              </el-table>
+            </div>
+          </el-tab-pane>
         </el-tabs>
 
         <div class="form-actions">
@@ -73,14 +107,36 @@
         <img :src="previewUrl" alt="预览图片" class="preview-image" />
       </div>
     </el-dialog>
+
+    <el-dialog v-model="categoryDialogVisible" :title="categoryForm.id ? '编辑分类' : '新增分类'" width="440px">
+      <el-form :model="categoryForm" label-width="80px">
+        <el-form-item label="分类名称" required>
+          <el-input v-model="categoryForm.name" placeholder="如：工具软件" maxlength="64" />
+        </el-form-item>
+        <el-form-item label="排序">
+          <el-input-number v-model="categoryForm.sort_order" :min="0" :max="9999" />
+          <span class="category-hint" style="margin-left:8px">数字越小越靠前</span>
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-switch v-model="categoryForm.status" active-value="enabled" inactive-value="disabled"
+            active-text="启用" inactive-text="停用" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="categoryDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="categorySaving" @click="handleCategorySave">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
 import { useBusinessStore } from '@/stores/modules/business'
+import { superCategoryService } from '@/utils/service'
 
 const store = useBusinessStore()
 const { websiteInfo } = storeToRefs(store)
@@ -135,6 +191,76 @@ const previewImage = (url) => {
   previewVisible.value = true
 }
 
+// ===== 产品分类管理 =====
+const categories = ref([])
+const categoriesLoading = ref(false)
+const categoryDialogVisible = ref(false)
+const categorySaving = ref(false)
+const categoryForm = ref({ id: null, name: '', sort_order: 0, status: 'enabled' })
+
+const fetchCategories = async () => {
+  try {
+    categoriesLoading.value = true
+    const res = await superCategoryService.getAll()
+    categories.value = res.data || []
+  } catch (error) {
+    ElMessage.error(error.message || '获取分类失败')
+  } finally {
+    categoriesLoading.value = false
+  }
+}
+
+const openCategoryForm = (row = null) => {
+  categoryForm.value = row
+    ? { id: row.id, name: row.name, sort_order: row.sort_order ?? 0, status: row.status }
+    : { id: null, name: '', sort_order: 0, status: 'enabled' }
+  categoryDialogVisible.value = true
+}
+
+const handleCategorySave = async () => {
+  if (!categoryForm.value.name || !categoryForm.value.name.trim()) {
+    ElMessage.warning('请输入分类名称')
+    return
+  }
+  try {
+    categorySaving.value = true
+    if (categoryForm.value.id) {
+      await superCategoryService.update(categoryForm.value.id, {
+        name: categoryForm.value.name, sort_order: categoryForm.value.sort_order, status: categoryForm.value.status
+      })
+      ElMessage.success('更新成功')
+    } else {
+      await superCategoryService.create({
+        name: categoryForm.value.name, sort_order: categoryForm.value.sort_order, status: categoryForm.value.status
+      })
+      ElMessage.success('创建成功')
+    }
+    categoryDialogVisible.value = false
+    fetchCategories()
+  } catch (error) {
+    ElMessage.error(error.message || '保存失败')
+  } finally {
+    categorySaving.value = false
+  }
+}
+
+const handleCategoryDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除分类「${row.name}」吗？引用它的应用将回到未分类。`,
+      '删除确认',
+      { type: 'warning' }
+    )
+  } catch { return }
+  try {
+    await superCategoryService.delete(row.id)
+    ElMessage.success('删除成功')
+    fetchCategories()
+  } catch (error) {
+    ElMessage.error(error.message || '删除失败')
+  }
+}
+
 onMounted(async () => {
   await store.getWebsiteInfo()
   form.value = {
@@ -152,6 +278,7 @@ onMounted(async () => {
     contact_phone: websiteInfo.value?.contact_phone || '',
     contact_address: websiteInfo.value?.contact_address || ''
   }
+  fetchCategories()
 })
 </script>
 
@@ -162,6 +289,8 @@ onMounted(async () => {
 .image-input { display: flex; gap: 8px; align-items: center; }
 .image-input .el-input { flex: 1; }
 .form-actions { text-align: center; padding-top: 20px; border-top: 1px solid #eee; margin-top: 20px; }
+.category-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; }
+.category-hint { color: #6b7280; font-size: 13px; }
 .preview-container { display: flex; justify-content: center; align-items: center; padding: 20px; }
 .preview-image { max-width: 100%; max-height: 300px; border-radius: 4px; }
 @media (max-width: 768px) {

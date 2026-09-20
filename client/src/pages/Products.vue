@@ -29,6 +29,21 @@
             </el-input>
           </div>
 
+          <!-- 分类筛选 -->
+          <div class="category-filter" v-if="categories.length > 0">
+            <div class="filter-title">分类</div>
+            <div class="category-options">
+              <div class="category-option" :class="{ active: searchForm.category_id === null }"
+                @click="selectCategory(null)">
+                全部
+              </div>
+              <div v-for="cat in categories" :key="cat.id" class="category-option"
+                :class="{ active: searchForm.category_id === cat.id }" @click="selectCategory(cat.id)">
+                {{ cat.name }}
+              </div>
+            </div>
+          </div>
+
           <!-- 价格筛选 -->
           <div class="price-filter">
             <div class="filter-title">价格</div>
@@ -122,7 +137,7 @@ import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { useAppStore } from '@/stores/modules/app'
 import { useBusinessStore } from '@/stores/modules/business'
-import { publicAppsService } from '@/utils/service'
+import { publicAppsService, publicCategoryService } from '@/utils/service'
 
 const router = useRouter()
 const appStore = useAppStore()
@@ -131,9 +146,11 @@ const businessStore = useBusinessStore()
 // 产品数据
 const products = ref([])
 const productsLoading = ref(false)
+const categories = ref([])
 const searchForm = reactive({
   keyword: '',
-  price_type: ''
+  price_type: '',
+  category_id: null
 })
 
 // 分页
@@ -194,6 +211,11 @@ const applyFiltersAndPaginate = () => {
     filtered = filtered.filter(p => p.is_free != 1)
   }
 
+  // 分类过滤（category_id 与后端 apps.category_id 对应）
+  if (searchForm.category_id !== null) {
+    filtered = filtered.filter(p => p.category_id === searchForm.category_id)
+  }
+
   // 分页
   pagination.total = filtered.length
   const start = (pagination.page - 1) * pagination.per_page
@@ -210,6 +232,20 @@ const handleSearch = () => {
 const selectPriceType = (priceType) => {
   searchForm.price_type = priceType
   handleSearch()
+}
+
+// 分类选择
+const selectCategory = (categoryId) => {
+  searchForm.category_id = categoryId
+  handleSearch()
+}
+
+// 获取分类列表（失败不阻塞产品列表展示）
+const fetchCategories = async () => {
+  try {
+    const response = await publicCategoryService.getAll()
+    categories.value = response.data || []
+  } catch { /* 分类加载失败不阻塞 */ }
 }
 
 // 分页处理
@@ -277,6 +313,7 @@ const handleIconError = (event) => {
 
 onMounted(() => {
   fetchProducts()
+  fetchCategories()
 })
 </script>
 
@@ -393,6 +430,42 @@ onMounted(() => {
 
 .price-filter {
   padding: 24px 20px;
+}
+
+.category-filter {
+  padding: 24px 20px 0;
+}
+
+.category-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 0 0 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.category-option {
+  padding: 10px 12px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  border-radius: 8px;
+  font-weight: 400;
+}
+
+.category-option:hover {
+  background: #f8fafc;
+  color: #374151;
+  transform: translateX(2px);
+}
+
+.category-option.active {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  color: #1d4ed8;
+  font-weight: 500;
+  border: 1px solid #bfdbfe;
 }
 
 .filter-title {

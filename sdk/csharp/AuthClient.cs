@@ -68,6 +68,9 @@ namespace AuthSystem
         {
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
             using var resp = await _http.PostAsync(path, content);
+            // 限流（429）与服务端错误统一按 -1009 抛出/返回，与 Python SDK 行为一致
+            if (resp.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                throw new AuthException("-1009");
             var body = await resp.Content.ReadAsStringAsync();
             return SimpleJson.Parse(body);
         }

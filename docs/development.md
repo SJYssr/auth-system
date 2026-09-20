@@ -22,18 +22,19 @@ cp .env.docker.example .env && docker compose up -d --build
 
 ## 测试体系
 
-纯 API 套件（无需浏览器，CI 中自动运行）：
+全部套件均纳入 CI（`.github/workflows/ci.yml`）：
 
 | 文件 | 覆盖 |
 |---|---|
-| `e2e-test/test-card-flow.js` | 卡密全链路 28 断言：首激→复登→异设备 -1011→登出→机器码绑定 -1010→到期查询→配额 -1012→归属隔离→文档读写→公开字段白名单→配额校验→日志清理→删管理员资源转移 |
-| `e2e-test/test-api.js` | 公开 API、鉴权拦截、404、限流窗口等 18 断言 |
-| `e2e-test/test-permissions.js` 等 | Playwright UI 冒烟（需 `npx playwright install`，未纳入 CI） |
+| `e2e-test/test-card-flow.js` | 卡密全链路 56 断言：首激→复登→异设备 -1011→登出→机器码绑定 -1010→到期查询→会话/踢下线→Webhook 投递与 HMAC 验签→配额 -1012→归属隔离→文档读写→公开字段白名单→产品分类→配额校验→日志清理→删管理员资源转移 |
+| `e2e-test/test-api.js` | 公开 API、鉴权拦截、404、限流窗口、公开分类等 19 断言 |
+| `e2e-test/test-public.js` 等 | Playwright UI 冒烟 4 套件（CI 的 ui-smoke job 自动运行；本地运行需先 `npx playwright install chromium`） |
 
 UI 套件运行前需初始化测试账号（直连测试库，勿指向生产库）：
 
 ```bash
 cd e2e-test
+npm ci                # 安装测试依赖（playwright/dotenv/mysql2/bcryptjs）
 node admin-seed.js create          # 创建测试超管
 node admin-seed.js create-normal   # 创建测试普通管理员
 # ... 运行 UI 测试 ...
@@ -42,7 +43,7 @@ node admin-seed.js delete          # 清理
 
 ```bash
 cd e2e-test
-E2E_BASE=http://localhost:3000 \
+E2E_BASE=http://localhost:3100 \
 DB_HOST=127.0.0.1 DB_PORT=33061 DB_USER=auth_admin DB_PASSWORD=... \
 node test-card-flow.js
 ```
@@ -53,7 +54,7 @@ node test-card-flow.js
 - 没有现成数据库时：`docker compose up -d db` 即可在 `127.0.0.1:33061` 起一个带完整 schema 的 MySQL（compose 默认绑定回环）。
 - `test-api.js` 需要 `e2e-test/seed-api-test.sql` 预置数据（CI 中自动执行）。
 
-CI（GitHub Actions，`.github/workflows/ci.yml`）：每次 push/PR 自动起 MySQL 8 服务容器、导 schema、构建前端、启动后端并运行两个 API 套件。
+CI（GitHub Actions，`.github/workflows/ci.yml`）：每次 push/PR 自动起 MySQL 8 服务容器、导 schema、构建前端、启动后端并运行两个 API 套件与四个 UI 冒烟套件。
 
 ## 目录结构
 

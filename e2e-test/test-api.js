@@ -1,5 +1,5 @@
 // API 层功能测试：客户端卡密 API + 公开 API + 后台管理 API（真实登录获取 token）
-const BASE = process.env.E2E_BASE || 'http://localhost:3001';
+const BASE = process.env.E2E_BASE || 'http://localhost:3100';
 const results = [];
 function record(name, ok, detail = '') {
   results.push({ name, ok, detail });
@@ -40,6 +40,9 @@ async function j(method, path, body, headers = {}) {
   r = await j('GET', '/api/public/error-codes');
   record('GET /api/public/error-codes', r.data?.success === true && Array.isArray(r.data?.data), `${(r.data?.data || []).length} 条错误码`);
 
+  r = await j('GET', '/api/public/categories');
+  record('GET /api/public/categories', r.data?.success === true && Array.isArray(r.data?.data), `${(r.data?.data || []).length} 个分类`);
+
   r = await j('GET', '/api/public/captcha');
   record('GET /api/public/captcha', r.data?.success === true && !!r.data.data?.key && !!r.data.data?.image, 'key+svg image');
 
@@ -63,7 +66,7 @@ async function j(method, path, body, headers = {}) {
   record('POST /announcement', r.data !== null, JSON.stringify(r.data).slice(0, 80));
 
   // ===== 后台管理 API =====
-  // 登录需验证码，验证码在服务端内存中无法逆向。改为检查未授权访问被正确拦截。
+  // 登录需图形验证码（一次性，无法逆向）。改为检查未授权访问被正确拦截。
   r = await j('GET', '/api/admin/dashboard');
   record('后台未授权→401', r.status === 401 && r.data?.errcode === '-1002', JSON.stringify(r.data));
 

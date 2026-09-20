@@ -3,19 +3,38 @@
   "info": {
     "title": "卡密授权系统 - 客户端 API",
     "description": "终端软件集成用的卡密验证 API。字段名采用大写开头（Softid/Card/Mac/Token）。所有接口均为 POST，返回 JSON；除 /announcement 返回 text/plain 外，业务失败以 errcode 字段返回错误码（含义见 /api/public/error-codes 或 README 错误码表）。",
-    "version": "1.0.0"
+    "version": "1.2.0"
   },
-  "servers": [{ "url": "/" }],
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
   "paths": {
     "/announcement": {
       "post": {
         "summary": "获取公告",
         "operationId": "getAnnouncement",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SoftidRequest" } } } },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SoftidRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "公告内容（text/plain，无公告为空字符串；应用不存在返回 -1007）",
-            "content": { "text/plain": { "schema": { "type": "string" } } }
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -24,7 +43,16 @@
       "post": {
         "summary": "获取最新版本号",
         "operationId": "getVersion",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SoftidRequest" } } } },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SoftidRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "最新版本号",
@@ -32,7 +60,16 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": { "version": { "type": "string", "example": "1.2.0" }, "errcode": { "type": "string", "description": "失败时返回错误码" } }
+                  "properties": {
+                    "version": {
+                      "type": "string",
+                      "example": "1.2.0"
+                    },
+                    "errcode": {
+                      "type": "string",
+                      "description": "失败时返回错误码"
+                    }
+                  }
                 }
               }
             }
@@ -51,12 +88,30 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["Softid", "Card", "Mac"],
+                "required": [
+                  "Softid",
+                  "Card",
+                  "Mac"
+                ],
                 "properties": {
-                  "Softid": { "$ref": "#/components/schemas/Softid" },
-                  "Card": { "type": "string", "description": "卡密", "example": "Ab3xK9mPq2Rt5W" },
-                  "Mac": { "type": "string", "description": "机器码（任意设备唯一标识，大小写不敏感）", "example": "AA-BB-CC-DD-EE-FF" },
-                  "Version": { "type": "string", "description": "客户端版本号（应用开启强制更新时校验）", "example": "1.0.0" }
+                  "Softid": {
+                    "$ref": "#/components/schemas/Softid"
+                  },
+                  "Card": {
+                    "type": "string",
+                    "description": "卡密",
+                    "example": "Ab3xK9mPq2Rt5W"
+                  },
+                  "Mac": {
+                    "type": "string",
+                    "description": "机器码（任意设备唯一标识，大小写不敏感）",
+                    "example": "AA-BB-CC-DD-EE-FF"
+                  },
+                  "Version": {
+                    "type": "string",
+                    "description": "客户端版本号（应用开启强制更新时校验）",
+                    "example": "1.0.0"
+                  }
                 }
               }
             }
@@ -70,8 +125,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "token": { "type": "string", "maxLength": 16, "example": "SNTmfDNVC-Aa2F0l" },
-                    "errcode": { "$ref": "#/components/schemas/Errcode" }
+                    "token": {
+                      "type": "string",
+                      "maxLength": 16,
+                      "example": "SNTmfDNVC-Aa2F0l"
+                    },
+                    "errcode": {
+                      "$ref": "#/components/schemas/Errcode"
+                    }
                   }
                 }
               }
@@ -85,11 +146,26 @@
         "summary": "卡密登出",
         "description": "释放会话（token 置空），机器码绑定保留。",
         "operationId": "cardLogout",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenRequest" } } } },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "成功 result=1；失败返回 errcode",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ResultResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -99,11 +175,26 @@
         "summary": "心跳保活",
         "description": "校验有效会话并将 token 有效期延长 24 小时。返回 -1002 表示会话已失效，客户端应重新走 /login；返回 -1005 表示卡密已到期。",
         "operationId": "heartbeat",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenRequest" } } } },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "成功 result=1；失败返回 errcode",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ResultResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -112,11 +203,34 @@
       "post": {
         "summary": "获取下载地址",
         "operationId": "getDownloadUrl",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SoftidRequest" } } } },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SoftidRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "下载地址（可为空字符串）",
-            "content": { "application/json": { "schema": { "type": "object", "properties": { "url": { "type": "string" }, "errcode": { "$ref": "#/components/schemas/Errcode" } } } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    },
+                    "errcode": {
+                      "$ref": "#/components/schemas/Errcode"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -125,11 +239,34 @@
       "post": {
         "summary": "获取使用说明地址",
         "operationId": "getUsageUrl",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SoftidRequest" } } } },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SoftidRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "使用说明地址",
-            "content": { "application/json": { "schema": { "type": "object", "properties": { "url": { "type": "string" }, "errcode": { "$ref": "#/components/schemas/Errcode" } } } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    },
+                    "errcode": {
+                      "$ref": "#/components/schemas/Errcode"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -138,11 +275,34 @@
       "post": {
         "summary": "获取购买地址",
         "operationId": "getPurchaseUrl",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SoftidRequest" } } } },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SoftidRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "购买地址",
-            "content": { "application/json": { "schema": { "type": "object", "properties": { "url": { "type": "string" }, "errcode": { "$ref": "#/components/schemas/Errcode" } } } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    },
+                    "errcode": {
+                      "$ref": "#/components/schemas/Errcode"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -151,7 +311,16 @@
       "post": {
         "summary": "获取到期时间（需登录）",
         "operationId": "getExpiry",
-        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenRequest" } } } },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "成功返回 expires_at（本地时间 YYYY-MM-DD HH:mm:ss）；失败返回 errcode",
@@ -160,8 +329,13 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "expires_at": { "type": "string", "example": "2026-09-20 13:58:20" },
-                    "errcode": { "$ref": "#/components/schemas/Errcode" }
+                    "expires_at": {
+                      "type": "string",
+                      "example": "2026-09-20 13:58:20"
+                    },
+                    "errcode": {
+                      "$ref": "#/components/schemas/Errcode"
+                    }
                   }
                 }
               }
@@ -175,37 +349,93 @@
         "summary": "健康检查（含数据库探测）",
         "operationId": "health",
         "responses": {
-          "200": { "description": "正常", "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string" }, "db": { "type": "string" }, "time": { "type": "string" } } } } } },
-          "503": { "description": "数据库不可达" }
+          "200": {
+            "description": "正常",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "db": {
+                      "type": "string"
+                    },
+                    "time": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "数据库不可达"
+          }
         }
       }
     }
   },
   "components": {
     "schemas": {
-      "Softid": { "type": "string", "pattern": "^[A-Za-z0-9]{18}$", "description": "18 位软件标识（后台创建应用时生成）", "example": "1460MREWAFMB3XQFEP" },
+      "Softid": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9]{18}$",
+        "description": "18 位软件标识（后台创建应用时生成）",
+        "example": "1460MREWAFMB3XQFEP"
+      },
       "SoftidRequest": {
         "type": "object",
-        "required": ["Softid"],
-        "properties": { "Softid": { "$ref": "#/components/schemas/Softid" } }
+        "required": [
+          "Softid"
+        ],
+        "properties": {
+          "Softid": {
+            "$ref": "#/components/schemas/Softid"
+          }
+        }
       },
       "TokenRequest": {
         "type": "object",
-        "required": ["Softid", "Card", "Token"],
+        "required": [
+          "Softid",
+          "Card",
+          "Token"
+        ],
         "properties": {
-          "Softid": { "$ref": "#/components/schemas/Softid" },
-          "Card": { "type": "string", "description": "卡密" },
-          "Token": { "type": "string", "description": "登录成功返回的会话 token" }
+          "Softid": {
+            "$ref": "#/components/schemas/Softid"
+          },
+          "Card": {
+            "type": "string",
+            "description": "卡密"
+          },
+          "Token": {
+            "type": "string",
+            "description": "登录成功返回的会话 token"
+          }
         }
       },
       "ResultResponse": {
         "type": "object",
         "properties": {
-          "result": { "type": "string", "enum": ["1"], "description": "成功固定为 1" },
-          "errcode": { "$ref": "#/components/schemas/Errcode" }
+          "result": {
+            "type": "string",
+            "enum": [
+              "1"
+            ],
+            "description": "成功固定为 1"
+          },
+          "errcode": {
+            "$ref": "#/components/schemas/Errcode"
+          }
         }
       },
-      "Errcode": { "type": "string", "description": "错误码，含义：-1001 参数错误 / -1002 认证失败 / -1004 卡密不存在 / -1005 卡密已过期 / -1006 卡密已禁用 / -1007 应用不存在 / -1008 需强制更新 / -1009 服务器内部错误 / -1010 机器码不匹配 / -1011 已在其他设备登录 / -1012 管理员激活配额已满" }
+      "Errcode": {
+        "type": "string",
+        "description": "错误码，含义：-1001 参数错误 / -1002 认证失败 / -1004 卡密不存在 / -1005 卡密已过期 / -1006 卡密已禁用 / -1007 应用不存在 / -1008 需强制更新 / -1009 服务器内部错误 / -1010 机器码不匹配 / -1011 已在其他设备登录 / -1012 管理员激活配额已满"
+      }
     }
   }
 }

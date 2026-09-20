@@ -117,7 +117,9 @@ class AuthClient:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 return resp.read().decode("utf-8")
         except urllib.error.HTTPError as e:
-            raise AuthError(e.code == 429 and "-1009" or "-1009") from e
+            if e.code == 429:
+                raise AuthError("-1009", "请求过于频繁，请稍后再试") from e
+            raise AuthError("-1009") from e
 
     def latest_version(self) -> str:
         """获取最新版本号。"""

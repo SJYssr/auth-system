@@ -17,6 +17,7 @@ const logService = require('../services/logService');
 const apiManageService = require('../services/apiManageService');
 const errorCodeService = require('../services/errorCodeService');
 const webhookService = require('../services/webhookService');
+const categoryService = require('../services/categoryService');
 const { success, error, paginated, parsePagination } = require('../utils/response');
 
 // 所有路由都需要认证
@@ -250,6 +251,7 @@ router.get('/apps', async (req, res) => {
     const filters = {};
     if (req.query.app_name) filters.app_name = req.query.app_name;
     if (req.query.status) filters.status = req.query.status;
+    if (req.query.category_id) filters.category_id = parseInt(req.query.category_id);
     // 非超管只看到自己创建的应用
     if (!req.isSuperuser) filters.owner_id = req.currentUser.id;
     const result = await appService.getList(page, pageSize, filters);
@@ -275,13 +277,15 @@ router.get('/apps/:id', async (req, res) => {
 router.post('/apps', async (req, res) => {
   let created;
   try {
+    // 产品分类校验（可空 = 未分类）
+    const body = { ...req.body, category_id: await categoryService.ensureExists(req.body.category_id) };
     // 配额校验与创建放在同一事务：COUNT ... FOR UPDATE 锁住 owner 区间，
     // 并发创建时第二个事务会等待，消除「同时通过校验双双超限」的竞态
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
       await adminService.checkAppLimit(req.currentUser.id, conn);
-      created = await appService.create(req.body, req.currentUser.id, conn);
+      created = await appService.create(body, req.currentUser.id, conn);
       await conn.commit();
     } catch (err) {
       await conn.rollback().catch(() => { /* 回滚失败不掩盖原始错误 */ });
@@ -313,7 +317,11 @@ router.put('/apps/:id', async (req, res) => {
     const app = await appService.getById(req.params.id);
     if (!app) return res.json(error('应用不存在'));
     if (!ensureOwner(res, req.currentUser, app.owner_id, '应用')) return;
-    await appService.update(req.params.id, req.body);
+    const body = { ...req.body };
+    if (body.category_id !== undefined) {
+      body.category_id = await categoryService.ensureExists(body.category_id);
+    }
+    await appService.update(req.params.id, body);
     await logService.log({
       user_id: req.currentUser.id, username: req.currentUser.username,
       action: 'update', module: 'apps', target_type: 'app', target_id: parseInt(req.params.id),
@@ -630,6 +638,94 @@ router.post('/webhooks/:id/test', async (req, res) => {
     console.error('webhook测试:', err.message);
     const known = ['webhook不存在', '无权操作该webhook', '测试事件投递失败（检查 URL 可达性）'];
     res.json(error(known.includes(err.message) ? err.message : '测试事件发送失败'));
+  }
+});
+
+/** ===== Webhook 投递记录（owner 隔离）：含自动重试队列状态 ===== */
+router.get('/webhooks/:id/deliveries', async (req, res) => {
+  try {
+    const { page, pageSize } = parsePagination(req.query);
+    const operator = { is_superuser: req.isSuperuser, id: req.currentUser.id };
+    const result = await webhookService.getDeliveries(parseInt(req.params.id), operator, page, pageSize);
+    res.json(paginated(result.rows, result.pagination));
+  } catch (err) {
+    console.error('webhook投递记录:', err.message);
+    res.json(error(err.message === 'webhook不存在' || err.message === '无权操作该webhook' ? err.message : '获取投递记录失败'));
+  }
+});
+
+/** 手动重试一条失败的投递（重置为待投递，重试 worker 下个扫描周期发出） */
+router.post('/webhooks/:id/deliveries/:deliveryId/retry', async (req, res) => {
+  try {
+    const operator = { is_superuser: req.isSuperuser, id: req.currentUser.id };
+    await webhookService.retryDelivery(parseInt(req.params.id), parseInt(req.params.deliveryId), operator);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'retry', module: 'webhooks', target_type: 'webhook', target_id: parseInt(req.params.id),
+      description: `手动重试投递记录 #${req.params.deliveryId}`, ip_address: req.ip
+    });
+    res.json(success(null, '已加入重试队列'));
+  } catch (err) {
+    console.error('webhook重试:', err.message);
+    const known = ['webhook不存在', '无权操作该webhook', '投递记录不存在或已成功'];
+    res.json(error(known.includes(err.message) ? err.message : '重试失败'));
+  }
+});
+
+/** ===== 产品分类（所有管理员可查，仅超管可编辑；应用表单与前台产品中心共用） ===== */
+router.get('/categories', async (req, res) => {
+  try {
+    res.json(success(await categoryService.getList()));
+  } catch (err) {
+    console.error('分类列表:', err.message);
+    res.json(error('获取分类列表失败'));
+  }
+});
+
+router.post('/categories', requireSuperuser, async (req, res) => {
+  try {
+    const result = await categoryService.create(req.body);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'create', module: 'categories', target_type: 'category', target_id: result.id,
+      target_name: req.body.name, ip_address: req.ip
+    });
+    res.json(success(result, '创建成功'));
+  } catch (err) {
+    console.error('创建分类:', err.message);
+    const known = ['分类名称必填', '分类名称最长 64 个字符', '分类名称已存在'];
+    res.json(error(known.includes(err.message) ? err.message : '创建分类失败'));
+  }
+});
+
+router.put('/categories/:id', requireSuperuser, async (req, res) => {
+  try {
+    await categoryService.update(parseInt(req.params.id), req.body);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'update', module: 'categories', target_type: 'category', target_id: parseInt(req.params.id),
+      description: `更新分类（字段: ${Object.keys(req.body || {}).join(', ') || '-'}）`, ip_address: req.ip
+    });
+    res.json(success(null, '更新成功'));
+  } catch (err) {
+    console.error('更新分类:', err.message);
+    const known = ['分类名称必填', '分类名称最长 64 个字符', '分类名称已存在', '排序值必须为整数', '状态不合法'];
+    res.json(error(known.includes(err.message) ? err.message : '更新分类失败'));
+  }
+});
+
+router.delete('/categories/:id', requireSuperuser, async (req, res) => {
+  try {
+    await categoryService.remove(parseInt(req.params.id));
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'delete', module: 'categories', target_type: 'category', target_id: parseInt(req.params.id),
+      description: '删除分类（引用它的应用自动回到未分类）', ip_address: req.ip
+    });
+    res.json(success(null, '删除成功'));
+  } catch (err) {
+    console.error('删除分类:', err.message);
+    res.json(error('删除分类失败'));
   }
 });
 

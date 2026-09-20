@@ -17,12 +17,6 @@ function hashCardToken(token) {
   return crypto.createHash('sha256').update(String(token)).digest('hex');
 }
 
-/** 兼容历史明文 token 的比对（哈希不中再比原文）。迁移过渡期使用，存量会话全部轮换后可移除 */
-function cardTokenMatches(stored, raw) {
-  if (!stored || !raw) return false;
-  return stored === hashCardToken(raw) || stored === String(raw);
-}
-
 /** 计算到期时间 */
 function expireTime(cardType, points, startTime) {
   const start = startTime || new Date();
@@ -197,7 +191,7 @@ async function heartbeat(softid, card, token) {
   );
   if (upd.affectedRows === 1) return;
 
-  // 慢路径：定位失败原因（兼容历史明文 token 的比对也在这里）
+  // 慢路径：定位失败原因
   const [rows] = await pool.execute(
     'SELECT c.id, c.token, c.token_expires_at, c.expires_at, c.status FROM cards c JOIN apps a ON c.app_id = a.id ' +
     'WHERE a.softid = ? AND c.card = ?',
@@ -206,7 +200,7 @@ async function heartbeat(softid, card, token) {
   if (rows.length === 0) throw new Error('-1004');
   const row = rows[0];
   if (row.status !== 'enabled') throw new Error('-1006');
-  if (!cardTokenMatches(row.token, token)) throw new Error('-1002');
+  if (!row.token || row.token !== hashCardToken(token)) throw new Error('-1002');
   if (!row.token_expires_at || new Date(row.token_expires_at) < new Date()) throw new Error('-1002');
   if (row.expires_at && new Date(row.expires_at) < new Date()) throw new Error('-1005');
   await pool.execute(
@@ -225,7 +219,7 @@ async function cardLogout(softid, card, token) {
     [softid, card]
   );
   if (rows.length === 0) throw new Error('-1004');
-  if (!cardTokenMatches(rows[0].token, token)) throw new Error('-1002');
+  if (!rows[0].token || rows[0].token !== hashCardToken(token)) throw new Error('-1002');
   await pool.execute('UPDATE cards SET token = NULL, token_expires_at = NULL WHERE id = ?', [rows[0].id]);
 }
 
@@ -239,10 +233,10 @@ async function getExpiry(softid, card, token) {
     [softid, card]
   );
   if (rows.length === 0) throw new Error('-1004');
-  if (!cardTokenMatches(rows[0].token, token)) throw new Error('-1002'); // 未登录/Token无效
+  if (!rows[0].token || rows[0].token !== hashCardToken(token)) throw new Error('-1002'); // 未登录/Token无效
   const expiresAt = rows[0].expires_at;
   if (!expiresAt) throw new Error('-1004');
   return expiresAt;
 }
 
-module.exports = { cardLogin, cardLogout, heartbeat, getExpiry, generateToken, expireTime, hashCardToken, cardTokenMatches };
+module.exports = { cardLogin, cardLogout, heartbeat, getExpiry, generateToken, expireTime, hashCardToken };

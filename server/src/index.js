@@ -158,10 +158,15 @@ morgan.token('safe-url', (req) => {
 });
 app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
 
-  // 全局限流（仅 API 路径：静态资源不占配额；多实例部署需换共享存储如 rate-limit-redis）
+  // 限流统一走 MySQL 共享存储（rate_limits 表）：多实例部署共享计数，
+  // 单实例下计数也不再随重启清零；存储故障时 fail-open 放行（见 utils/rateLimitStore.js）
+  const MySQLStore = require('./utils/rateLimitStore');
+
+  // 全局限流（仅 API 路径：静态资源不占配额）
   app.use('/api', rateLimit({
     windowMs: 60 * 1000,
     max: 200,
+    store: new MySQLStore('api'),
     message: { success: false, message: '请求过于频繁，请稍后再试' }
   }));
 
@@ -169,6 +174,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
   app.use('/api/public/login', rateLimit({
     windowMs: 60 * 1000,
     max: 5,
+    store: new MySQLStore('pub-login'),
     message: { success: false, message: '登录尝试过于频繁，请1分钟后再试' },
     keyGenerator: (req) => req.ip
   }));
@@ -177,6 +183,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
   app.use('/api/public/captcha', rateLimit({
     windowMs: 60 * 1000,
     max: 30,
+    store: new MySQLStore('captcha'),
     message: { success: false, message: '请求过于频繁，请稍后再试' },
     keyGenerator: (req) => req.ip
   }));
@@ -185,6 +192,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
   app.use('/api/public', rateLimit({
     windowMs: 60 * 1000,
     max: 60,
+    store: new MySQLStore('pub'),
     message: { success: false, message: '请求过于频繁，请稍后再试' },
     keyGenerator: (req) => req.ip
   }));
@@ -220,6 +228,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     rateLimit({
       windowMs: 60 * 1000,
       max: 60,
+      store: new MySQLStore('root'),
       keyGenerator: (req) => req.ip,
       handler: (req, res) => res.status(429).json({ errcode: '-1009' })
     })
@@ -228,6 +237,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
   app.post('/login', rateLimit({
     windowMs: 60 * 1000,
     max: 10,
+    store: new MySQLStore('root-login'),
     keyGenerator: (req) => req.ip,
     handler: (req, res) => res.status(429).json({ errcode: '-1009' })
   }));
@@ -280,6 +290,24 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     console.log(`前台API:   http://localhost:${PORT}/api/public/`);
     console.log(`后台API:   http://localhost:${PORT}/api/admin/`);
   });
+
+  // ===== 后台定时任务 =====
+  const webhookService = require('./services/webhookService');
+  const captchaService = require('./services/captchaService');
+  const expiryReminderService = require('./services/expiryReminderService');
+
+  // 每分钟：清理过期限流计数 / 过期验证码 / 过期 webhook 投递记录
+  const maintenanceTimer = setInterval(() => {
+    MySQLStore.cleanup().catch(err => console.error('限流计数清理失败:', err.message));
+    captchaService.cleanup().catch(err => console.error('验证码清理失败:', err.message));
+    webhookService.cleanupDeliveries().catch(err => console.error('投递记录清理失败:', err.message));
+  }, 60 * 1000);
+  maintenanceTimer.unref();
+
+  // webhook 投递失败重试扫描（SKIP LOCKED 认领，多实例安全）
+  webhookService.startRetryWorker();
+  // 管理员账号到期邮件提醒（未配置 SMTP 时任务自动空转）
+  expiryReminderService.startReminderJob();
 
   // 优雅停机：先停止接新连接，等待存量请求收尾，再关闭数据库连接池
   let shuttingDown = false;

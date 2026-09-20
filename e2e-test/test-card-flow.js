@@ -1,7 +1,7 @@
 // 卡密客户端全链路 + 配额 e2e（纯 API，验证码不参与）
 // 覆盖：首激发放 token → 同设备复登 → 异设备 -1011 → 登出释放 → 换设备再登 →
 //       到期查询 → 公告/版本接口 → 激活配额 -1012
-// 依赖：后端运行在 E2E_BASE（默认 http://localhost:3001），且 admin-seed 同款测试库配置
+// 依赖：后端运行在 E2E_BASE（默认 http://localhost:3100），且 admin-seed 同款测试库配置
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -9,10 +9,10 @@ const http = require('http');
 
 const envLocal = path.join(__dirname, '.env');
 const envFallback = path.join(__dirname, '../server/.env');
-require('../server/node_modules/dotenv').config({ path: fs.existsSync(envLocal) ? envLocal : envFallback });
+require('dotenv').config({ path: fs.existsSync(envLocal) ? envLocal : envFallback });
 
-const mysql = require('../server/node_modules/mysql2/promise');
-const BASE = process.env.E2E_BASE || 'http://localhost:3001';
+const mysql = require('mysql2/promise');
+const BASE = process.env.E2E_BASE || 'http://localhost:3100';
 
 const results = [];
 function record(name, ok, detail = '') {
@@ -53,6 +53,7 @@ async function seedAdmin(username, token, isSuper) {
 
 async function cleanup() {
   await db.execute("DELETE FROM apps WHERE app_name LIKE 'e2e_flow_%'");
+  await db.execute("DELETE FROM categories WHERE name LIKE 'e2e_flow_%'");
   await db.execute('DELETE FROM admins WHERE username IN (?, ?)', [SUPER, NORMAL]);
 }
 
@@ -237,6 +238,28 @@ async function cleanup() {
     r = await j('GET', `/api/public/apps/${appId}`);
     record('公开详情返回docs且无敏感字段', Array.isArray(r.data?.data?.docs) && r.data.data.docs.length === 1
       && !('owner_id' in r.data.data) && !('softid' in r.data.data));
+
+    // ===== 产品分类：创建 → 绑定应用 → 公开回显 → 过滤 → 删除回退未分类 =====
+    const CAT = `e2e_flow_cat_${RUN}`;
+    r = await j('POST', '/api/admin/categories', { name: CAT, sort_order: 1 }, superAuth);
+    const catId = r.data?.data?.id;
+    record('超管创建产品分类', r.data?.success === true && !!catId, JSON.stringify(r.data).slice(0, 60));
+    r = await j('POST', '/api/admin/categories', { name: 'x' }, normalAuth);
+    record('普通管理员建分类被拒-1003', r.status === 403 && r.data?.errcode === '-1003', `status=${r.status}`);
+    r = await j('PUT', `/api/admin/apps/${appId}`, { category_id: catId }, superAuth);
+    record('应用绑定分类', r.data?.success === true, JSON.stringify(r.data).slice(0, 60));
+    r = await j('GET', `/api/admin/apps/${appId}`, null, superAuth);
+    record('应用详情回显category_id', r.data?.data?.category_id === catId);
+    r = await j('GET', '/api/public/apps');
+    record('公开列表返回分类名', (r.data?.data || []).some(a => a.id === appId && a.category_name === CAT));
+    r = await j('GET', '/api/public/categories');
+    record('公开分类列表含新分类', (r.data?.data || []).some(c => c.id === catId));
+    r = await j('GET', `/api/admin/apps?category_id=${catId}`, null, superAuth);
+    record('按分类过滤应用列表', (r.data?.data || []).some(a => a.id === appId));
+    r = await j('DELETE', `/api/admin/categories/${catId}`, null, superAuth);
+    record('删除分类', r.data?.success === true, JSON.stringify(r.data).slice(0, 60));
+    r = await j('GET', `/api/admin/apps/${appId}`, null, superAuth);
+    record('删除分类后应用回到未分类', r.data?.data?.category_id === null);
 
     // ===== 配额入参校验与有效额度类型 =====
     r = await j('GET', '/api/admin/admins', null, superAuth);

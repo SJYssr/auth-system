@@ -20,12 +20,12 @@
 | 模块 | 解决的问题 | 代表能力 |
 |---|---|---|
 | 卡密客户端 API | 终端软件的授权校验 | 卡密 + 机器码绑定登录、24h 会话、登出释放、强制更新、到期查询、**在线会话管理/远程踢下线** |
-| 后台管理 | 应用与卡密的全生命周期运营 | 应用/卡密/版本管理、批量生成、批量导出（防 CSV 公式注入）、**Webhook 事件推送** |
+| 后台管理 | 应用与卡密的全生命周期运营 | 应用/卡密/版本管理、批量生成、批量导出（防 CSV 公式注入）、**Webhook 事件推送（投递记录 + 自动重试）**、**产品分类管理** |
 | 开发者生态 | 低成本接入 | **OpenAPI 3.0 契约（`/openapi.json`）+ Python/C#/Java 零依赖 SDK** |
-| 权限与归属 | 多管理员协同不串数据 | 超管/普管分级、资源按创建者隔离、管理员账号到期与续期 |
+| 权限与归属 | 多管理员协同不串数据 | 超管/普管分级、资源按创建者隔离、管理员账号到期与续期、**到期邮件提醒** |
 | 配额套餐体系 | 控制发放规模 | 基础配额 + 限时临时套餐叠加，生成与首激双重校验 |
 | 运营支撑 | 可审计、可解释 | 操作日志（脱敏）、错误码字典、内置 API 文档、网站配置 |
-| 一键部署 | 快速私有化 | Docker Compose 起 MySQL + 应用，schema 自动导入，健康检查 |
+| 一键部署 | 快速私有化 | Docker Compose 起 MySQL + 应用，schema 自动导入，健康检查；限流/验证码落库支持多实例 |
 
 ## 快速开始
 
@@ -83,7 +83,7 @@ cd client && npm ci && npm run build
 | 层 | 技术 |
 |---|---|
 | 前端 | Vue 3 + Element Plus + Pinia + Vue Router + ECharts + Vite |
-| 后端 | Node.js + Express + MySQL2 + Helmet + svg-captcha + express-rate-limit |
+| 后端 | Node.js + Express + MySQL2 + Helmet + svg-captcha + express-rate-limit + nodemailer |
 | 数据库 | MySQL 8.0 |
 | 测试/CI | Node test 脚本 + Playwright（UI 冒烟）+ GitHub Actions |
 
@@ -105,6 +105,7 @@ auth-system/
 │   ├── schema.sql         # 建库建表 + 种子数据 + 增量升级段落
 │   └── scripts/           # check-db.js 结构核对脚本
 ├── e2e-test/              # API/权限/UI 测试（test-card-flow.js 为核心链路）
+├── sdk/                   # Python/C#/Java 客户端 SDK
 ├── docs/                  # 部署与开发文档
 ├── Dockerfile             # 多阶段构建（前端产物 + 后端运行时）
 └── docker-compose.yml     # MySQL 8 + 应用一键栈
@@ -112,7 +113,7 @@ auth-system/
 
 ## 版本记录与升级
 
-- 当前版本 **v1.1.0**，变更清单见 [CHANGELOG.md](CHANGELOG.md)，历史发布见 [Releases](https://github.com/SJYssr/auth-system/releases)。
+- 当前版本 **v1.2.0**，变更清单见 [CHANGELOG.md](CHANGELOG.md)，历史发布见 [Releases](https://github.com/SJYssr/auth-system/releases)。
 - 升级流程（备份 → 拉取 → schema 增量段落 → 重建）见 [docs/deployment.md#升级流程](docs/deployment.md#升级流程)。
 
 ## 路线图
@@ -120,8 +121,8 @@ auth-system/
 - [x] 客户端心跳保活接口（`/heartbeat` 会话续期）
 - [x] Playwright UI 冒烟套件纳入 CI（token 注入登录，四套件真实退出码）
 - [x] Element Plus 按需自动引入（JS gzip 产物 580KB → 431KB）
-- [ ] 管理员账号到期邮件提醒
-- [ ] 产品分类体系（后台维护 + 前台产品中心过滤）
+- [x] 管理员账号到期邮件提醒（配置 SMTP 后自动提醒，每 24 小时至多一次）
+- [x] 产品分类体系（后台「网站设置 → 产品分类」维护 + 前台产品中心过滤）
 
 ## 客户端 API（卡密终端调用）
 

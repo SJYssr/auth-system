@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS admins (
     expires_at DATETIME NULL COMMENT '账号到期时间，NULL表示永不到期',
     max_apps INT NOT NULL DEFAULT -1 COMMENT '最大软件数量，-1表示不限',
     max_card_activations INT NOT NULL DEFAULT -1 COMMENT '最大卡密激活数量，-1表示不限',
+    expiry_reminded_at DATETIME NULL COMMENT '最近一次到期邮件提醒时间（防重复提醒）',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_admins_token (token),
@@ -33,8 +34,19 @@ CREATE TABLE IF NOT EXISTS admins (
     INDEX idx_admins_expires_at (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- 产品分类表（前台产品中心过滤 + 后台「网站设置-产品分类」维护）
+CREATE TABLE IF NOT EXISTS categories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(64) NOT NULL UNIQUE,
+    sort_order INT NOT NULL DEFAULT 0 COMMENT '越小越靠前',
+    status VARCHAR(20) NOT NULL DEFAULT 'enabled',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 应用表
 CREATE TABLE IF NOT EXISTS apps (
+    category_id INT NULL COMMENT '产品分类，NULL表示未分类',
     id INT AUTO_INCREMENT PRIMARY KEY,
     softid VARCHAR(18) UNIQUE,
     app_name VARCHAR(100) NOT NULL UNIQUE,
@@ -55,7 +67,9 @@ CREATE TABLE IF NOT EXISTS apps (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_apps_softid (softid),
     INDEX idx_apps_status (status),
-    INDEX idx_apps_owner_id (owner_id)
+    INDEX idx_apps_owner_id (owner_id),
+    INDEX idx_apps_category (category_id),
+    CONSTRAINT fk_apps_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 卡密表
@@ -206,6 +220,42 @@ CREATE TABLE IF NOT EXISTS webhooks (
     INDEX idx_webhooks_app (app_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Webhook 投递记录表（含自动重试队列；worker 以 SKIP LOCKED 认领，多实例部署安全）
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    webhook_id INT NOT NULL,
+    event VARCHAR(64) NOT NULL,
+    payload TEXT NOT NULL COMMENT '完整请求体 JSON（签名基于该原文）',
+    status VARCHAR(16) NOT NULL DEFAULT 'pending' COMMENT 'pending=待投递/重试中 success=成功 failed=重试耗尽',
+    attempts INT NOT NULL DEFAULT 0,
+    last_status_code INT NULL,
+    last_error VARCHAR(512) NULL,
+    next_retry_at DATETIME NULL COMMENT 'pending 时表示下次重试时间（被 worker 认领后为租约到期时间）',
+    delivered_at DATETIME NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (webhook_id) REFERENCES webhooks(id) ON DELETE CASCADE,
+    INDEX idx_wd_hook (webhook_id, id),
+    INDEX idx_wd_retry (status, next_retry_at),
+    INDEX idx_wd_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 分布式限流存储（多实例部署共享计数；单实例同样适用，重启不再清零）
+CREATE TABLE IF NOT EXISTS rate_limits (
+    rl_key VARCHAR(255) PRIMARY KEY,
+    rl_count INT UNSIGNED NOT NULL DEFAULT 0,
+    rl_reset_at DATETIME NOT NULL,
+    INDEX idx_rl_reset (rl_reset_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 图形验证码存储（多实例部署共享，替代进程内存）
+CREATE TABLE IF NOT EXISTS captchas (
+    captcha_key CHAR(36) PRIMARY KEY,
+    captcha_code VARCHAR(16) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    INDEX idx_captcha_expiry (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 额度套餐表（临时配额包，支持限时增加软件/激活配额）
 CREATE TABLE IF NOT EXISTS admin_plans (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -311,3 +361,14 @@ INSERT IGNORE INTO apis (id, api_name, api_path, api_method, param_count, params
 -- v2.4 Webhook 事件推送增量升级
 -- ============================================================
 -- CREATE TABLE IF NOT EXISTS webhooks ( ... );  -- 见上方建表语句
+-- ============================================================
+-- v2.5（v1.2.0）产品分类 / 多实例支撑 / 到期邮件提醒增量升级
+-- ============================================================
+-- CREATE TABLE IF NOT EXISTS categories ( ... );            -- 见上方建表语句
+-- ALTER TABLE apps ADD COLUMN category_id INT NULL COMMENT '产品分类，NULL表示未分类';
+-- ALTER TABLE apps ADD INDEX idx_apps_category (category_id);
+-- ALTER TABLE apps ADD CONSTRAINT fk_apps_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL;
+-- CREATE TABLE IF NOT EXISTS webhook_deliveries ( ... );    -- 见上方建表语句
+-- CREATE TABLE IF NOT EXISTS rate_limits ( ... );           -- 见上方建表语句
+-- CREATE TABLE IF NOT EXISTS captchas ( ... );              -- 见上方建表语句
+-- ALTER TABLE admins ADD COLUMN expiry_reminded_at DATETIME NULL COMMENT '最近一次到期邮件提醒时间（防重复提醒）';

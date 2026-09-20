@@ -120,6 +120,10 @@ public class AuthClient {
         } catch (IOException | InterruptedException e) {
             throw new AuthException("-1009");
         }
+        // 限流（429）与服务端错误统一映射为 -1009，与 Python SDK 行为一致
+        if (response.statusCode() == 429) {
+            throw new AuthException("-1009");
+        }
         return SimpleJson.parse(response.body());
     }
 
