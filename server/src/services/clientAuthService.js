@@ -8,6 +8,7 @@ const { effectiveLimit } = require('../utils/quota');
 const semver = require('../utils/semver');
 const webhookService = require('./webhookService');
 const cardCrypto = require('../utils/cardCrypto');
+const offlineAuthService = require('./offlineAuthService');
 
 /** 生成16位加密安全随机Token */
 function generateToken() {
@@ -142,7 +143,7 @@ async function cardLogin(softid, card, mac, version, ip) {
             [hashCardToken(token), now, ip, cardData.id]
           );
           await conn.commit();
-          return token;
+          return { token, license: null };
         } else {
           throw new Error('-1011'); // 卡密已在其他设备登录
         }
@@ -171,7 +172,24 @@ async function cardLogin(softid, card, mac, version, ip) {
     if (activatedPayload) {
       webhookService.emit('card.activated', activatedPayload);
     }
-    return token;
+
+    // 签发离线授权凭证（Ed25519 签名），客户端可离线验证授权有效性
+    let licenseCredential = null;
+    try {
+      licenseCredential = offlineAuthService.signLicense({
+        license_id: String(cardData.id),
+        app_id: app.id,
+        device_id: mac,
+        features: [],
+        issued_at: new Date().toISOString(),
+        expires_at: cardData.expires_at ? new Date(cardData.expires_at).toISOString() : null
+      });
+    } catch (e) {
+      // 签名密钥未初始化时不阻断登录（开发环境可能未配置）
+      console.error('离线授权签名失败:', e.message);
+    }
+
+    return { token, license: licenseCredential };
 
   } catch (err) {
     await conn.rollback().catch(() => { /* 回滚失败不掩盖原始错误 */ });
