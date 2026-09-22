@@ -124,6 +124,10 @@ function buildAllowedOrigins(publicIp) {
   const { ensurePepper } = require('./utils/cardCrypto');
   ensurePepper();
 
+  // 离线授权签名密钥初始化（Ed25519）
+  const offlineAuthService = require('./services/offlineAuthService');
+  offlineAuthService.initSigningKey();
+
   // 数据库迁移
   const { runMigrations } = require('./utils/migrationRunner');
   await runMigrations();
