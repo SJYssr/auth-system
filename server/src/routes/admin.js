@@ -1398,4 +1398,21 @@ router.get('/license-public-key', async (req, res) => {
   }
 });
 
+/** ===== SDK 自动生成（超管触发，从 OpenAPI 规范生成多语言客户端 SDK） ===== */
+router.post('/sdk/generate', requireSuperuser, async (req, res) => {
+  try {
+    const { generateAll } = require('../scripts/generate-sdk');
+    const results = generateAll();
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'sdk_generate', module: 'system', target_type: 'sdk',
+      description: `生成 ${results.length} 个 SDK`, ip_address: req.ip
+    });
+    res.json(success(results, `成功生成 ${results.length} 个 SDK`));
+  } catch (err) {
+    console.error('SDK 生成:', err.message);
+    res.json(error('SDK 生成失败: ' + err.message));
+  }
+});
+
 module.exports = router;
