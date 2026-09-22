@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
 const authMiddleware = require('../middleware/auth');
+const { requirePermission } = require('../middleware/rbac');
 const authService = require('../services/authService');
 const adminService = require('../services/adminService');
 const dashboardService = require('../services/dashboardService');
@@ -18,6 +19,12 @@ const apiManageService = require('../services/apiManageService');
 const errorCodeService = require('../services/errorCodeService');
 const webhookService = require('../services/webhookService');
 const categoryService = require('../services/categoryService');
+const rbacService = require('../services/rbacService');
+const orderService = require('../services/orderService');
+const channelService = require('../services/channelService');
+const offlineAuthService = require('../services/offlineAuthService');
+const licensePlanService = require('../services/licensePlanService');
+const licenseService = require('../services/licenseService');
 const { success, error, paginated, parsePagination } = require('../utils/response');
 
 // 所有路由都需要认证
@@ -1041,8 +1048,6 @@ router.delete('/sessions/all', async (req, res) => {
 });
 
 /** ===== License 授权方案管理 ===== */
-const licensePlanService = require('../services/licensePlanService');
-const licenseService = require('../services/licenseService');
 
 // 授权方案列表
 router.get('/license-plans', async (req, res) => {
@@ -1204,6 +1209,192 @@ router.get('/licenses/:id/bindings', async (req, res) => {
     res.json(success(rows));
   } catch (err) {
     res.json(error('获取绑定列表失败'));
+  }
+});
+
+/** ===== RBAC 权限管理（仅超管） ===== */
+
+// 角色列表
+router.get('/rbac/roles', requireSuperuser, async (req, res) => {
+  try {
+    const rows = await rbacService.getRoles();
+    res.json(success(rows));
+  } catch (err) {
+    console.error('角色列表:', err.message);
+    res.json(error('获取角色列表失败'));
+  }
+});
+
+// 权限列表
+router.get('/rbac/permissions', requireSuperuser, async (req, res) => {
+  try {
+    const rows = await rbacService.getPermissionsList();
+    res.json(success(rows));
+  } catch (err) {
+    console.error('权限列表:', err.message);
+    res.json(error('获取权限列表失败'));
+  }
+});
+
+// 角色的权限列表
+router.get('/rbac/roles/:id/permissions', requireSuperuser, async (req, res) => {
+  try {
+    const rows = await rbacService.getRolePermissions(parseInt(req.params.id));
+    res.json(success(rows));
+  } catch (err) {
+    console.error('角色权限:', err.message);
+    res.json(error('获取角色权限失败'));
+  }
+});
+
+// 设置角色权限（全量替换）
+router.put('/rbac/roles/:id/permissions', requireSuperuser, async (req, res) => {
+  try {
+    await rbacService.setRolePermissions(parseInt(req.params.id), req.body.permission_ids || []);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'update', module: 'rbac', target_type: 'role', target_id: parseInt(req.params.id),
+      description: '更新角色权限', ip_address: req.ip
+    });
+    res.json(success(null, '权限更新成功'));
+  } catch (err) {
+    console.error('设置角色权限:', err.message);
+    res.json(error('设置角色权限失败'));
+  }
+});
+
+// 管理员的角色列表
+router.get('/rbac/admins/:id/roles', requireSuperuser, async (req, res) => {
+  try {
+    const rows = await rbacService.getAdminRoles(parseInt(req.params.id));
+    res.json(success(rows));
+  } catch (err) {
+    console.error('管理员角色:', err.message);
+    res.json(error('获取管理员角色失败'));
+  }
+});
+
+// 设置管理员角色（全量替换）
+router.put('/rbac/admins/:id/roles', requireSuperuser, async (req, res) => {
+  try {
+    await rbacService.setAdminRoles(parseInt(req.params.id), req.body.role_ids || []);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'update_roles', module: 'rbac', target_type: 'admin', target_id: parseInt(req.params.id),
+      description: '更新管理员角色', ip_address: req.ip
+    });
+    res.json(success(null, '角色更新成功'));
+  } catch (err) {
+    console.error('设置管理员角色:', err.message);
+    res.json(error('设置管理员角色失败'));
+  }
+});
+
+/** ===== 订单/产品管理 ===== */
+
+// 产品列表
+router.get('/products', async (req, res) => {
+  try {
+    const { page, pageSize } = parsePagination(req.query);
+    const result = await orderService.getProducts({ app_id: req.query.app_id ? parseInt(req.query.app_id) : null }, page, pageSize);
+    res.json(paginated(result.rows, result.pagination));
+  } catch (err) {
+    console.error('产品列表:', err.message);
+    res.json(error('获取产品列表失败'));
+  }
+});
+
+// 订单列表
+router.get('/orders', async (req, res) => {
+  try {
+    const { page, pageSize } = parsePagination(req.query);
+    const filters = {};
+    if (req.query.status) filters.status = req.query.status;
+    if (req.query.order_no) filters.order_no = req.query.order_no;
+    const result = await orderService.getList(filters, page, pageSize);
+    res.json(paginated(result.rows, result.pagination));
+  } catch (err) {
+    console.error('订单列表:', err.message);
+    res.json(error('获取订单列表失败'));
+  }
+});
+
+// 订单详情
+router.get('/orders/:id', async (req, res) => {
+  try {
+    const order = await orderService.getById(parseInt(req.params.id));
+    if (!order) return res.json(error('订单不存在'));
+    res.json(success(order));
+  } catch (err) {
+    console.error('订单详情:', err.message);
+    res.json(error('获取订单详情失败'));
+  }
+});
+
+// 手动确认支付并自动发卡
+router.post('/orders/:id/fulfill', async (req, res) => {
+  try {
+    const { pay_method, transaction_id } = req.body;
+    const result = await orderService.fulfillOrder(parseInt(req.params.id), pay_method || 'manual', transaction_id || null);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'fulfill_order', module: 'orders', target_type: 'order', target_id: parseInt(req.params.id),
+      description: `手动确认支付并发卡（${result.cards.length}张）`, ip_address: req.ip
+    });
+    res.json(success(result, '发卡成功'));
+  } catch (err) {
+    console.error('发卡:', err.message);
+    res.json(error(err.message || '发卡失败'));
+  }
+});
+
+/** ===== 渠道商管理（仅超管） ===== */
+
+router.get('/channels', requireSuperuser, async (req, res) => {
+  try {
+    const { page, pageSize } = parsePagination(req.query);
+    const result = await channelService.getList({ status: req.query.status }, page, pageSize);
+    res.json(paginated(result.rows, result.pagination));
+  } catch (err) {
+    console.error('渠道商列表:', err.message);
+    res.json(error('获取渠道商列表失败'));
+  }
+});
+
+router.post('/channels', requireSuperuser, async (req, res) => {
+  try {
+    const result = await channelService.create(req.body);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'create', module: 'channels', target_type: 'channel', target_id: result.id,
+      target_name: req.body.name, ip_address: req.ip
+    });
+    res.json(success(result, '创建成功（请妥善保存 API 密钥）'));
+  } catch (err) {
+    console.error('创建渠道商:', err.message);
+    if (err.code === 'ER_DUP_ENTRY') return res.json(error('渠道编码已存在'));
+    res.json(error('创建渠道商失败'));
+  }
+});
+
+router.put('/channels/:id/products', requireSuperuser, async (req, res) => {
+  try {
+    await channelService.setChannelProducts(parseInt(req.params.id), req.body.products || []);
+    res.json(success(null, '渠道产品更新成功'));
+  } catch (err) {
+    console.error('渠道产品:', err.message);
+    res.json(error('更新渠道产品失败'));
+  }
+});
+
+/** ===== 离线授权公钥（供客户端 SDK 获取） ===== */
+router.get('/license-public-key', async (req, res) => {
+  try {
+    const key = offlineAuthService.getPublicKeyBase64();
+    if (!key) return res.json(error('签名密钥未初始化'));
+    res.json(success({ public_key: key }));
+  } catch (err) {
+    res.json(error('获取公钥失败'));
   }
 });
 
