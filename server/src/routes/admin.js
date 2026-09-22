@@ -589,7 +589,7 @@ router.post('/webhooks', async (req, res) => {
     res.json(success(result, '创建成功（请妥善保存签名密钥）'));
   } catch (err) {
     console.error('创建webhook:', err.message);
-    const known = ['应用与 URL 均为必填', 'URL 必须以 http(s):// 开头'];
+    const known = ['应用与 URL 均为必填'];
     res.json(error(known.includes(err.message) ? err.message : '创建webhook失败'));
   }
 });
@@ -606,7 +606,7 @@ router.put('/webhooks/:id', async (req, res) => {
     res.json(success(null, '更新成功'));
   } catch (err) {
     console.error('更新webhook:', err.message);
-    const known = ['webhook不存在', '无权操作该webhook', 'URL 必须以 http(s):// 开头', '状态不合法'];
+    const known = ['webhook不存在', '无权操作该webhook', '状态不合法'];
     res.json(error(known.includes(err.message) ? err.message : '更新webhook失败'));
   }
 });

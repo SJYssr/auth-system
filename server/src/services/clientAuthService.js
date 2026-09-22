@@ -5,7 +5,9 @@
 const pool = require('../config/db');
 const crypto = require('crypto');
 const { effectiveLimit } = require('../utils/quota');
+const semver = require('../utils/semver');
 const webhookService = require('./webhookService');
+const cardCrypto = require('../utils/cardCrypto');
 
 /** 生成16位加密安全随机Token */
 function generateToken() {
@@ -43,16 +45,21 @@ function expireTime(cardType, points, startTime) {
 async function cardLogin(softid, card, mac, version, ip) {
   // 1. 查应用
   const [apps] = await pool.execute(
-    'SELECT id, app_name, force_update, version, status FROM apps WHERE softid = ?',
+    'SELECT id, app_name, force_update, min_supported_version, version, status FROM apps WHERE softid = ?',
     [softid]
   );
   if (apps.length === 0) throw new Error('-1007'); // 应用不存在
   const app = apps[0];
   if (app.status !== 'enabled') throw new Error('-1007');
 
-  // 2. 强制更新检查
-  if (app.force_update === 1 && version && version !== app.version) {
-    throw new Error('-1008'); // 版本不匹配，需强制更新
+  // 2. 强制更新检查（SemVer 数值比较，替代字符串 !== 判断）
+  //    min_supported_version 优先；未设置时回退到 apps.version 作为最低版本。
+  //    客户端版本 >= 最低版本即放行，低于则 -1008 强制更新。
+  if (app.force_update === 1 && version) {
+    const minVersion = app.min_supported_version || app.version;
+    if (semver.lt(version, minVersion)) {
+      throw new Error('-1008'); // 客户端版本低于最低支持版本，需强制更新
+    }
   }
 
   // 3. 用事务+行锁处理卡密验证
@@ -63,11 +70,11 @@ async function cardLogin(softid, card, mac, version, ip) {
   try {
     await conn.beginTransaction();
 
-    // 行锁查卡密
+    // 行锁查卡密（通过 HMAC 哈希查询，不明文查找）
     const [cards] = await conn.execute(
       'SELECT id, app_id, card, status, is_activated, points, card_type, mac, expires_at, token_expires_at, login_count, token, version, owner_id ' +
-      'FROM cards WHERE card = ? AND app_id = ? FOR UPDATE',
-      [card, app.id]
+      'FROM cards WHERE card_hash = ? AND app_id = ? FOR UPDATE',
+      [cardCrypto.hashCard(card), app.id]
     );
     if (cards.length === 0) throw new Error('-1004'); // 卡密不存在
     const cardData = cards[0];
@@ -181,21 +188,22 @@ async function cardLogin(softid, card, mac, version, ip) {
  */
 async function heartbeat(softid, card, token) {
   if (!token) throw new Error('-1002');
+  const cardHash = cardCrypto.hashCard(card);
   const [upd] = await pool.execute(
     'UPDATE cards c JOIN apps a ON c.app_id = a.id ' +
     'SET c.token_expires_at = NOW() + INTERVAL 24 HOUR ' +
-    'WHERE a.softid = ? AND c.card = ? AND c.token = ? AND c.token_expires_at IS NOT NULL ' +
+    'WHERE a.softid = ? AND c.card_hash = ? AND c.token = ? AND c.token_expires_at IS NOT NULL ' +
     "AND c.token_expires_at > NOW() AND c.status = 'enabled' " +
     'AND (c.expires_at IS NULL OR c.expires_at > NOW())',
-    [softid, card, hashCardToken(token)]
+    [softid, cardHash, hashCardToken(token)]
   );
   if (upd.affectedRows === 1) return;
 
   // 慢路径：定位失败原因
   const [rows] = await pool.execute(
     'SELECT c.id, c.token, c.token_expires_at, c.expires_at, c.status FROM cards c JOIN apps a ON c.app_id = a.id ' +
-    'WHERE a.softid = ? AND c.card = ?',
-    [softid, card]
+    'WHERE a.softid = ? AND c.card_hash = ?',
+    [softid, cardHash]
   );
   if (rows.length === 0) throw new Error('-1004');
   const row = rows[0];
@@ -213,10 +221,11 @@ async function heartbeat(softid, card, token) {
  * 卡密登出
  */
 async function cardLogout(softid, card, token) {
+  const cardHash = cardCrypto.hashCard(card);
   const [rows] = await pool.execute(
     'SELECT c.id, c.token FROM cards c JOIN apps a ON c.app_id = a.id ' +
-    'WHERE a.softid = ? AND c.card = ?',
-    [softid, card]
+    'WHERE a.softid = ? AND c.card_hash = ?',
+    [softid, cardHash]
   );
   if (rows.length === 0) throw new Error('-1004');
   if (!rows[0].token || rows[0].token !== hashCardToken(token)) throw new Error('-1002');
@@ -227,10 +236,11 @@ async function cardLogout(softid, card, token) {
  * 获取卡密到期时间（需登录时返回的 Token，防止无凭据枚举卡密状态）
  */
 async function getExpiry(softid, card, token) {
+  const cardHash = cardCrypto.hashCard(card);
   const [rows] = await pool.execute(
     'SELECT c.expires_at, c.token FROM cards c JOIN apps a ON c.app_id = a.id ' +
-    'WHERE a.softid = ? AND c.card = ? AND c.is_activated = 1',
-    [softid, card]
+    'WHERE a.softid = ? AND c.card_hash = ? AND c.is_activated = 1',
+    [softid, cardHash]
   );
   if (rows.length === 0) throw new Error('-1004');
   if (!rows[0].token || rows[0].token !== hashCardToken(token)) throw new Error('-1002'); // 未登录/Token无效

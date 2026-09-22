@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const http = require('http');
 const https = require('https');
 const pool = require('../config/db');
+const { validateUrl, validateForDelivery } = require('../utils/webhookUrlValidator');
 
 const EVENTS = ['card.activated', 'card.disabled', 'card.enabled', 'card.deleted'];
 const TIMEOUT_MS = 3000;
@@ -41,7 +42,7 @@ function retryDelaySeconds(attempts) {
 /** 创建 webhook */
 async function create(data, ownerId) {
   if (!data.app_id || !data.url) throw new Error('应用与 URL 均为必填');
-  if (!/^https?:\/\//i.test(String(data.url))) throw new Error('URL 必须以 http(s):// 开头');
+  await validateUrl(data.url);
   const events = normalizeEvents(data.events);
   const secret = data.secret ? String(data.secret).slice(0, 128) : generateSecret();
   const [result] = await pool.execute(
@@ -59,7 +60,7 @@ async function update(id, data, operator) {
   const fields = [];
   const values = [];
   if (data.url !== undefined) {
-    if (!/^https?:\/\//i.test(String(data.url))) throw new Error('URL 必须以 http(s):// 开头');
+    await validateUrl(data.url);
     fields.push('url = ?'); values.push(data.url);
   }
   if (data.secret !== undefined && data.secret !== '') {
@@ -138,12 +139,19 @@ function postJson(url, body, headers) {
 
 /** 执行一次投递并把结果写回投递记录；失败按退避计划下次重试，重试耗尽标记 failed */
 async function attemptDelivery(deliveryId, hook, body, event) {
-  const result = await postJson(hook.url, body, {
-    'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(body),
-    'X-Webhook-Event': event,
-    'X-Webhook-Signature': sign(hook.secret, body)
-  });
+  // 投递前实时校验 DNS（防 DNS rebinding）
+  const ssrfError = await validateForDelivery(hook.url);
+  let result;
+  if (ssrfError) {
+    result = { ok: false, statusCode: null, error: `SSRF 防护拦截: ${ssrfError}` };
+  } else {
+    result = await postJson(hook.url, body, {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(body),
+      'X-Webhook-Event': event,
+      'X-Webhook-Signature': sign(hook.secret, body)
+    });
+  }
   const [rows] = await pool.execute('SELECT attempts FROM webhook_deliveries WHERE id = ?', [deliveryId]);
   const attempts = Number(rows[0]?.attempts || 0) + 1;
   if (result.ok) {

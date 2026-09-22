@@ -176,12 +176,12 @@ async function create(data, ownerId = null, conn = pool) {
   const [result] = await conn.execute(
     'INSERT INTO apps (softid, app_name, description, version, version_name, developer, ' +
     'is_free, icon_url, download_url, usage_guide, purchase_url, announcement, force_update, status, owner_id, category_id) ' +
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [softid, data.app_name, data.description || null, data.version || '1.0.0',
      data.version_name || null, data.developer || null, data.is_free !== undefined ? data.is_free : 1,
      data.icon_url || null, data.download_url || null, data.usage_guide || null,
      data.purchase_url || null, data.announcement || null,
-     data.force_update !== undefined ? data.force_update : 0, data.status || 'enabled', ownerId,
+     data.force_update !== undefined ? data.force_update : 0, data.min_supported_version || null, data.status || 'enabled', ownerId,
      Number.isInteger(categoryId) ? categoryId : null]
   );
   return { id: result.insertId, softid };
@@ -193,7 +193,7 @@ async function update(id, data) {
   const values = [];
   const allowedFields = ['app_name', 'description', 'version', 'version_name', 'developer',
     'is_free', 'icon_url', 'download_url', 'usage_guide', 'purchase_url', 'announcement',
-    'force_update', 'status'];
+    'force_update', 'min_supported_version', 'status'];
   if (data.category_id !== undefined) {
     fields.push('category_id = ?');
     values.push(data.category_id === null || data.category_id === '' ? null : parseInt(data.category_id, 10));

@@ -21,6 +21,7 @@ const { generateCardCode } = require('../src/services/cardService');
 const { sanitizeRequestData } = require('../src/services/logService');
 const { retryDelaySeconds, MAX_ATTEMPTS } = require('../src/services/webhookService');
 const { shouldRemind, buildReminderMail, REMIND_DAYS } = require('../src/services/expiryReminderService');
+const semver = require('../src/utils/semver');
 
 const DAY = 24 * 60 * 60 * 1000;
 const HOUR = 60 * 60 * 1000;
@@ -163,4 +164,79 @@ test('buildReminderMail 包含用户名/到期时间/收件人', () => {
   assert.ok(mail.subject.includes('到期'));
   assert.ok(mail.text.includes('alice'));
   assert.ok(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(mail.text));
+});
+
+// ===== SemVer 比较 =====
+test('semver.compare 基本大小比较', () => {
+  assert.strictEqual(semver.compare('2.1.0', '2.2.0'), -1);
+  assert.strictEqual(semver.compare('2.2.0', '2.2.0'), 0);
+  assert.strictEqual(semver.compare('2.3.0', '2.2.0'), 1);
+  assert.strictEqual(semver.compare('1.9.9', '2.0.0'), -1);
+  assert.strictEqual(semver.compare('2.0.0', '1.9.9'), 1);
+});
+
+test('semver.lt / lte / gt / gte / eq 语义正确', () => {
+  assert.ok(semver.lt('2.1.0', '2.2.0'));
+  assert.ok(!semver.lt('2.2.0', '2.2.0'));
+  assert.ok(semver.lte('2.2.0', '2.2.0'));
+  assert.ok(semver.gt('2.3.0', '2.2.0'));
+  assert.ok(semver.gte('2.2.0', '2.2.0'));
+  assert.ok(semver.eq('2.2.0', '2.2.0'));
+});
+
+test('semver.compare 非法/空版本安全兜底返回 0', () => {
+  assert.strictEqual(semver.compare('', '2.0.0'), 0);
+  assert.strictEqual(semver.compare(null, '2.0.0'), 0);
+  assert.strictEqual(semver.compare('2.0', '2.0.0'), 0);
+  assert.strictEqual(semver.compare('abc', '2.0.0'), 0);
+});
+
+test('semver.compare 处理 pre-release 后缀（截断比较）', () => {
+  assert.strictEqual(semver.compare('2.0.0-beta', '2.0.0'), 0);
+  assert.strictEqual(semver.compare('2.0.0', '2.0.0-alpha'), 0);
+});
+
+// ===== 卡密加密 =====
+const cardCrypto = require('../src/utils/cardCrypto');
+
+test('hashCard 确定且一致（同一 Pepper 同一结果）', () => {
+  const orig = process.env.CARD_PEPPER;
+  process.env.CARD_PEPPER = 'test_pepper_for_unit_testing_only';
+  try {
+    const h1 = cardCrypto.hashCard('ABCD-EFGH-IJKL-MNOP');
+    const h2 = cardCrypto.hashCard('ABCD-EFGH-IJKL-MNOP');
+    assert.strictEqual(h1, h2);
+    assert.strictEqual(h1.length, 64); // HMAC-SHA256 hex
+    const h3 = cardCrypto.hashCard('DIFFERENT-CARD-CODE');
+    assert.notStrictEqual(h1, h3);
+  } finally {
+    process.env.CARD_PEPPER = orig;
+  }
+});
+
+test('encryptCard / decryptCard 可逆', () => {
+  const orig = process.env.CARD_PEPPER;
+  process.env.CARD_PEPPER = 'test_pepper_for_unit_testing_only';
+  try {
+    const card = 'ABCD-EFGH-IJKL-MNOP';
+    const encrypted = cardCrypto.encryptCard(card);
+    const decrypted = cardCrypto.decryptCard(encrypted);
+    assert.strictEqual(decrypted, card);
+    // 每次加密产生不同密文（随机 IV）
+    const encrypted2 = cardCrypto.encryptCard(card);
+    assert.notStrictEqual(encrypted, encrypted2);
+    assert.strictEqual(cardCrypto.decryptCard(encrypted2), card);
+  } finally {
+    process.env.CARD_PEPPER = orig;
+  }
+});
+
+test('cardSuffix / maskCard 正确', () => {
+  assert.strictEqual(cardCrypto.cardSuffix('ABCD-EFGH-IJKL-MNOP'), 'MNOP');
+  // ABCD-EFGH-IJKL-MNOP = 19 chars → 15 asterisks + 4 suffix
+  assert.strictEqual(cardCrypto.maskCard('ABCD-EFGH-IJKL-MNOP').length, 19);
+  assert.ok(cardCrypto.maskCard('ABCD-EFGH-IJKL-MNOP').endsWith('MNOP'));
+  assert.ok(cardCrypto.maskCard('ABCD-EFGH-IJKL-MNOP').startsWith('*'));
+  assert.strictEqual(cardCrypto.cardSuffix(''), '');
+  assert.strictEqual(cardCrypto.maskCard(null), '');
 });

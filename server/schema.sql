@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS apps (
     purchase_url VARCHAR(255),
     announcement TEXT,
     force_update TINYINT NOT NULL DEFAULT 0,
+    min_supported_version VARCHAR(20) NULL COMMENT '最低支持版本，低于此版本强制更新（SemVer 比较）',
     status VARCHAR(20) NOT NULL DEFAULT 'enabled',
     owner_id INT NULL COMMENT '创建者管理员ID，NULL表示历史数据/系统创建',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -76,7 +77,10 @@ CREATE TABLE IF NOT EXISTS apps (
 CREATE TABLE IF NOT EXISTS cards (
     id INT AUTO_INCREMENT PRIMARY KEY,
     app_id INT NOT NULL,
-    card VARCHAR(128) NOT NULL UNIQUE,
+    card VARCHAR(128) NULL COMMENT '卡密明文（存量兼容，迁移后逐步废弃）',
+    card_hash CHAR(64) NULL COMMENT 'HMAC-SHA256(pepper, card)，用于登录查询',
+    card_ciphertext TEXT NULL COMMENT 'AES-256-GCM 密文，用于后台可逆展示',
+    card_suffix VARCHAR(8) NULL COMMENT '后4位，用于列表显示 ****MNOP',
     card_type VARCHAR(50) DEFAULT '天卡',
     price DECIMAL(10,2) DEFAULT 0.00,
     points INT DEFAULT 0,
@@ -99,6 +103,7 @@ CREATE TABLE IF NOT EXISTS cards (
     CONSTRAINT chk_cards_points CHECK (points >= 0),
     CONSTRAINT chk_cards_price  CHECK (price >= 0),
     FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE,
+    INDEX idx_cards_card_hash (card_hash),
     INDEX idx_cards_status (status),
     INDEX idx_cards_token (token),
     INDEX idx_cards_expires_at (expires_at),
@@ -162,6 +167,7 @@ CREATE TABLE IF NOT EXISTS datas (
     copyright TEXT,
     copyright_since VARCHAR(10),
     status VARCHAR(20) DEFAULT 'enabled',
+    setup_token VARCHAR(64) NULL COMMENT '首次启动引导的一次性 token，创建超管后置 NULL',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -273,11 +279,10 @@ CREATE TABLE IF NOT EXISTS admin_plans (
 
 -- ========== 默认数据 ==========
 
--- 默认超级管理员：admin / Admin@123456（首次登录后立即在「修改密码」中更改！）
--- 如需自定义初始密码，先用项目内 bcryptjs 生成哈希替换：
---   node -e "console.log(require('bcryptjs').hashSync('你的密码', 10))"
-INSERT IGNORE INTO admins (id, username, email, password, is_superuser, status)
-VALUES (1, 'admin', 'admin@example.com', '$2a$10$Mp4MInXiooCUnPuiLY4A/ebkkKHKWaW2WdWIPEcLXx6qbHlNo5vDK', 1, 'enabled');
+-- 不再在 schema.sql 中创建默认管理员账号。
+-- 首次启动时通过 INITIAL_ADMIN_USERNAME / INITIAL_ADMIN_PASSWORD / INITIAL_ADMIN_EMAIL
+-- 环境变量注入，或通过 /api/setup 引导页创建第一个超级管理员。
+-- 参见 src/utils/bootstrap.js
 
 INSERT IGNORE INTO datas (id, site_name, site_title, keywords, description, logo_url, favicon_url, icp_number, contact_email, contact_phone, contact_address, copyright, copyright_since, status)
 VALUES (1, '应用卡密管理系统', '应用卡密管理与授权平台', '卡密管理,应用管理,版本管理', '基于卡密的现代化应用授权管理系统', '', '', '', 'admin@example.com', '', '', 'Auth System', '2025', 'enabled');

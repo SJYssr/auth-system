@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const pool = require('../config/db');
 const { escapeLike } = require('../utils/response');
 const webhookService = require('./webhookService');
+const cardCrypto = require('../utils/cardCrypto');
 
 /** 生成卡密：可选前缀 + 14位随机段（无模偏差） */
 function generateCardCode(prefix = '') {
@@ -30,16 +31,19 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
   const CHUNK = 50; // 单条语句批量插入的行数
   let attempts = 0;
   const maxAttempts = count * 3 + 3;
-  const INSERT_COLUMNS = 'app_id, card, card_type, price, points, card_remark, owner_id';
+  const INSERT_COLUMNS = 'app_id, card, card_hash, card_ciphertext, card_suffix, card_type, price, points, card_remark, owner_id';
 
   while (cards.length < count && attempts < maxAttempts) {
     attempts++;
     const codes = Array.from({ length: Math.min(count - cards.length, CHUNK) }, () => generateCardCode(prefix));
-    const values = codes.flatMap(code => [appId, code, cardType, price, points, remark || null, ownerId]);
+    const values = codes.flatMap(code => [
+      appId, code, cardCrypto.hashCard(code), cardCrypto.encryptCard(code), cardCrypto.cardSuffix(code),
+      cardType, price, points, remark || null, ownerId
+    ]);
     try {
       // 多行 INSERT：100 张卡从 100 次往返降为 2 次
       await pool.execute(
-        `INSERT INTO cards (${INSERT_COLUMNS}) VALUES ${codes.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+        `INSERT INTO cards (${INSERT_COLUMNS}) VALUES ${codes.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
         values
       );
       cards.push(...codes);
@@ -49,8 +53,9 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
       for (const code of codes) {
         try {
           await pool.execute(
-            `INSERT INTO cards (${INSERT_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [appId, code, cardType, price, points, remark || null, ownerId]
+            `INSERT INTO cards (${INSERT_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [appId, code, cardCrypto.hashCard(code), cardCrypto.encryptCard(code), cardCrypto.cardSuffix(code),
+             cardType, price, points, remark || null, ownerId]
           );
           cards.push(code);
         } catch (e) {
@@ -64,7 +69,7 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
 
 /** 卡密列表/详情返回的字段：不回 SELECT *，剔除会话凭据 token / token_expires_at，
  *  避免后台接口把客户端的活跃会话凭据下发到前端 */
-const CARD_FIELDS = 'c.id, c.app_id, c.card, c.card_type, c.price, c.points, c.card_remark, c.status, ' +
+const CARD_FIELDS = 'c.id, c.app_id, c.card, c.card_hash, c.card_ciphertext, c.card_suffix, c.card_type, c.price, c.points, c.card_remark, c.status, ' +
   'c.is_activated, c.activated_at, c.expires_at, c.mac, c.login_count, c.activation_ip, ' +
   'c.last_login_time, c.last_login_ip, c.version, c.owner_id, c.created_at, c.updated_at';
 

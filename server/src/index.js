@@ -9,6 +9,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const http = require('http');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -113,6 +114,18 @@ function buildAllowedOrigins(publicIp) {
 
 (async () => {
   const pool = require('./config/db');
+
+  // 首次启动引导：从环境变量创建初始超管（admins 为空时）
+  const { bootstrapFromEnv } = require('./utils/bootstrap');
+  await bootstrapFromEnv();
+
+  // 卡密加密 Pepper 检查
+  const { ensurePepper } = require('./utils/cardCrypto');
+  ensurePepper();
+
+  // 数据库迁移
+  const { runMigrations } = require('./utils/migrationRunner');
+  await runMigrations();
 
   // CORS 允许源：环境变量与本地开发源即刻生效；公网 IP 探测改为后台执行，
   // 不再阻塞启动（离线/内网环境最多拖慢 12s），探测完成后追加进同一数组
@@ -241,6 +254,32 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     keyGenerator: (req) => req.ip,
     handler: (req, res) => res.status(429).json({ errcode: '-1009' })
   }));
+
+  // 引导页 API：检查是否需要初始化（无需认证）
+  app.get('/api/setup', async (req, res) => {
+    try {
+      const { getSetupToken } = require('./utils/bootstrap');
+      const result = await getSetupToken();
+      if (!result) return res.json({ success: false, message: '系统已初始化' });
+      res.json({ success: true, ...result });
+    } catch (err) {
+      console.error('引导页检查:', err.message);
+      res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+  });
+
+  app.post('/api/setup', async (req, res) => {
+    try {
+      const { createFirstAdmin } = require('./utils/bootstrap');
+      const { setup_token, username, email, password } = req.body;
+      await createFirstAdmin(setup_token, username, email, password);
+      res.json({ success: true, message: '超级管理员创建成功，请使用新账号登录' });
+    } catch (err) {
+      console.error('引导页创建管理员:', err.message);
+      const known = ['参数不完整', '密码长度至少 8 位', '邮箱格式不正确', '引导 token 无效或已过期', '系统已存在管理员，引导页不可用'];
+      res.json({ success: false, message: known.includes(err.message) ? err.message : '创建失败' });
+    }
+  });
 
   // 路由
   app.use('/', require('./routes/root'));
