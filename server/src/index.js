@@ -334,12 +334,14 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
   const webhookService = require('./services/webhookService');
   const captchaService = require('./services/captchaService');
   const expiryReminderService = require('./services/expiryReminderService');
+  const adminSessionService = require('./services/adminSessionService');
 
-  // 每分钟：清理过期限流计数 / 过期验证码 / 过期 webhook 投递记录
+  // 每分钟：清理过期限流计数 / 过期验证码 / 过期 webhook 投递记录 / 过期管理员会话
   const maintenanceTimer = setInterval(() => {
     MySQLStore.cleanup().catch(err => console.error('限流计数清理失败:', err.message));
     captchaService.cleanup().catch(err => console.error('验证码清理失败:', err.message));
     webhookService.cleanupDeliveries().catch(err => console.error('投递记录清理失败:', err.message));
+    adminSessionService.cleanupSessions().catch(err => console.error('会话清理失败:', err.message));
   }, 60 * 1000);
   maintenanceTimer.unref();
 

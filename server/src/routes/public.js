@@ -56,7 +56,7 @@ router.post('/login', async (req, res) => {
       return res.json(error('验证码错误'));
     }
 
-    const result = await authService.login(username, password);
+    const result = await authService.login(username, password, req.ip, req.headers['user-agent']);
 
     // 记录登录日志
     await logService.log({

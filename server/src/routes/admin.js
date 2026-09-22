@@ -987,4 +987,57 @@ router.delete('/error-codes/:id', requireSuperuser, async (req, res) => {
   }
 });
 
+/** ===== 管理员会话管理（安全中心：设备列表 / 踢下线 / 退出全部） ===== */
+const adminSessionService = require('../services/adminSessionService');
+
+/** 当前管理员活跃会话列表 */
+router.get('/sessions/me', async (req, res) => {
+  try {
+    const rows = await adminSessionService.listSessions(req.currentUser.id);
+    res.json(success(rows));
+  } catch (err) {
+    console.error('会话列表:', err.message);
+    res.json(error('获取会话列表失败'));
+  }
+});
+
+/** 踢下线指定会话 */
+router.delete('/sessions/:id', async (req, res) => {
+  try {
+    const ok = await adminSessionService.revokeSession(
+      parseInt(req.params.id),
+      req.currentUser.id
+    );
+    if (!ok) return res.json(error('会话不存在或已过期'));
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'revoke_session', module: 'admin_sessions', target_type: 'admin_session', target_id: parseInt(req.params.id),
+      description: '踢下线设备会话', ip_address: req.ip
+    });
+    res.json(success(null, '已踢下线'));
+  } catch (err) {
+    console.error('踢下线会话:', err.message);
+    res.json(error('踢下线失败'));
+  }
+});
+
+/** 退出全部设备（保留当前会话） */
+router.delete('/sessions/all', async (req, res) => {
+  try {
+    const count = await adminSessionService.revokeAllSessions(
+      req.currentUser.id,
+      req.currentUser.session_id
+    );
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'revoke_all_sessions', module: 'admin_sessions',
+      description: `退出全部其他设备（${count}个）`, ip_address: req.ip
+    });
+    res.json(success({ count }, `已退出 ${count} 个其他设备`));
+  } catch (err) {
+    console.error('退出全部设备:', err.message);
+    res.json(error('退出全部设备失败'));
+  }
+});
+
 module.exports = router;

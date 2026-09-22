@@ -1,8 +1,9 @@
 /**
  * 前台初始化数据服务
+ * 会话校验通过 adminSessionService（admin_sessions 表）。
  */
 const pool = require('../config/db');
-const { hashToken } = require('./authService');
+const adminSessionService = require('./adminSessionService');
 const { effectiveLimit } = require('../utils/quota');
 
 /**
@@ -10,24 +11,39 @@ const { effectiveLimit } = require('../utils/quota');
  * @param {string|null} token - 请求头中的 Bearer token
  */
 async function getInitData(token) {
-  // 验证登录状态
+  // 验证登录状态（通过 admin_sessions 表）
   let isLoggedIn = false;
   let user = null;
   if (token) {
-    const [admins] = await pool.execute(
-      `SELECT a.id, a.username, a.email, a.is_superuser, a.expires_at, a.max_apps, a.max_card_activations,
-        COALESCE((SELECT SUM(delta) FROM admin_plans p WHERE p.admin_id = a.id AND p.type = 'max_apps'
-          AND p.effective_at <= NOW() AND (p.expires_at IS NULL OR p.expires_at > NOW())), 0) AS apps_plan_delta,
-        COALESCE((SELECT SUM(delta) FROM admin_plans p WHERE p.admin_id = a.id AND p.type = 'max_card_activations'
-          AND p.effective_at <= NOW() AND (p.expires_at IS NULL OR p.expires_at > NOW())), 0) AS activations_plan_delta
-       FROM admins a WHERE a.token = ? AND a.status = ?`,
-      [hashToken(token), 'enabled']
-    );
-    if (admins.length > 0) {
+    const admin = await adminSessionService.validateSession(token);
+    if (admin) {
       isLoggedIn = true;
-      user = admins[0];
-      user.effective_max_apps = user.max_apps === -1 ? -1 : effectiveLimit(user.max_apps, user.apps_plan_delta);
-      user.effective_max_card_activations = user.max_card_activations === -1 ? -1 : effectiveLimit(user.max_card_activations, user.activations_plan_delta);
+      user = {
+        id: admin.id,
+        username: admin.username,
+        email: admin.email,
+        is_superuser: admin.is_superuser,
+        expires_at: admin.expires_at,
+        max_apps: admin.max_apps,
+        max_card_activations: admin.max_card_activations
+      };
+      // 计算有效额度
+      if (admin.is_superuser !== 1) {
+        const [planRows] = await pool.execute(
+          `SELECT
+             COALESCE(SUM(CASE WHEN type = 'max_apps' THEN delta END), 0) AS apps_plan_delta,
+             COALESCE(SUM(CASE WHEN type = 'max_card_activations' THEN delta END), 0) AS activations_plan_delta
+           FROM admin_plans
+           WHERE admin_id = ? AND effective_at <= NOW()
+             AND (expires_at IS NULL OR expires_at > NOW())`,
+          [admin.id]
+        );
+        user.effective_max_apps = user.max_apps === -1 ? -1 : effectiveLimit(user.max_apps, planRows[0].apps_plan_delta);
+        user.effective_max_card_activations = user.max_card_activations === -1 ? -1 : effectiveLimit(user.max_card_activations, planRows[0].activations_plan_delta);
+      } else {
+        user.effective_max_apps = -1;
+        user.effective_max_card_activations = -1;
+      }
     }
   }
 

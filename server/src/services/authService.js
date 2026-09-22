@@ -1,12 +1,14 @@
 /**
  * 管理员认证服务
+ * 登录/登出通过 adminSessionService 管理 admin_sessions 表。
  */
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { effectiveLimit } = require('../utils/quota');
+const adminSessionService = require('./adminSessionService');
 
-/** token 入库前统一做 SHA-256 哈希：库泄露不再等于会话泄露 */
+/** token 入库前统一做 SHA-256 哈希（保留导出供旧代码兼容） */
 function hashToken(token) {
   return crypto.createHash('sha256').update(String(token)).digest('hex');
 }
@@ -15,9 +17,11 @@ function hashToken(token) {
  * 管理员登录
  * @param {string} username
  * @param {string} password
+ * @param {string} [ip] - 客户端IP
+ * @param {string} [userAgent] - 浏览器UA
  * @returns {Promise<{token: string, admin: object}>}
  */
-async function login(username, password) {
+async function login(username, password, ip, userAgent) {
   const [rows] = await pool.execute(
     'SELECT * FROM admins WHERE username = ? AND status = ?',
     [username, 'enabled']
@@ -40,14 +44,8 @@ async function login(username, password) {
     }
   }
 
-  // 生成加密安全随机 token（返回给客户端原文，库中只存 SHA-256 哈希）
-  const token = crypto.randomBytes(32).toString('hex');
-
-  const now = new Date();
-  await pool.execute(
-    'UPDATE admins SET token = ?, last_login = ? WHERE id = ?',
-    [hashToken(token), now, admin.id]
-  );
+  // 通过 adminSessionService 创建会话（支持多设备登录）
+  const { token } = await adminSessionService.createSession(admin.id, ip, userAgent);
 
   // 计算有效额度（基础 + 临时套餐）
   let effectiveMaxApps = admin.max_apps;
@@ -88,10 +86,13 @@ async function login(username, password) {
 }
 
 /**
- * 登出 - 清空 token
+ * 登出 - 撤销当前会话
  */
 async function logout(token) {
-  await pool.execute('UPDATE admins SET token = NULL WHERE token = ?', [hashToken(token)]);
+  const admin = await adminSessionService.validateSession(token);
+  if (admin) {
+    await adminSessionService.revokeSession(admin.session_id, admin.id);
+  }
 }
 
 module.exports = { login, logout, hashToken };
