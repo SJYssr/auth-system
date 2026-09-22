@@ -1040,4 +1040,171 @@ router.delete('/sessions/all', async (req, res) => {
   }
 });
 
+/** ===== License 授权方案管理 ===== */
+const licensePlanService = require('../services/licensePlanService');
+const licenseService = require('../services/licenseService');
+
+// 授权方案列表
+router.get('/license-plans', async (req, res) => {
+  try {
+    const { page, pageSize } = parsePagination(req.query);
+    const filters = { app_id: parseInt(req.query.app_id) };
+    if (req.query.status) filters.status = req.query.status;
+    const result = await licensePlanService.getList(filters, page, pageSize);
+    res.json(paginated(result.rows, result.pagination));
+  } catch (err) {
+    console.error('授权方案列表:', err.message);
+    res.json(error('获取授权方案列表失败'));
+  }
+});
+
+// 创建授权方案
+router.post('/license-plans', async (req, res) => {
+  try {
+    const { app_id, name, duration_type, duration_value, device_limit, concurrent_limit, offline_days, features, renewable, transfer_limit, status, sort_order } = req.body;
+    if (!app_id || !name) return res.json(error('应用ID和方案名必填'));
+    const app = await getOwnApp(req, res, app_id);
+    if (!app) return;
+    const result = await licensePlanService.create({ app_id, name, duration_type, duration_value, device_limit, concurrent_limit, offline_days, features, renewable, transfer_limit, status, sort_order });
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'create', module: 'license_plans', target_type: 'license_plan', target_id: result.id,
+      target_name: name, ip_address: req.ip
+    });
+    res.json(success(result, '创建成功'));
+  } catch (err) {
+    console.error('创建授权方案:', err.message);
+    res.json(error('创建授权方案失败'));
+  }
+});
+
+// 更新授权方案
+router.put('/license-plans/:id', async (req, res) => {
+  try {
+    const plan = await licensePlanService.getById(parseInt(req.params.id));
+    if (!plan) return res.json(error('授权方案不存在'));
+    const app = await getOwnApp(req, res, plan.app_id);
+    if (!app) return;
+    await licensePlanService.update(parseInt(req.params.id), req.body);
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'update', module: 'license_plans', target_type: 'license_plan', target_id: parseInt(req.params.id),
+      ip_address: req.ip
+    });
+    res.json(success(null, '更新成功'));
+  } catch (err) {
+    console.error('更新授权方案:', err.message);
+    res.json(error('更新授权方案失败'));
+  }
+});
+
+// 删除授权方案
+router.delete('/license-plans/:id', async (req, res) => {
+  try {
+    const plan = await licensePlanService.getById(parseInt(req.params.id));
+    if (!plan) return res.json(error('授权方案不存在'));
+    const app = await getOwnApp(req, res, plan.app_id);
+    if (!app) return;
+    await licensePlanService.remove(parseInt(req.params.id));
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'delete', module: 'license_plans', target_type: 'license_plan', target_id: parseInt(req.params.id),
+      ip_address: req.ip
+    });
+    res.json(success(null, '删除成功'));
+  } catch (err) {
+    console.error('删除授权方案:', err.message);
+    res.json(error(err.message || '删除授权方案失败'));
+  }
+});
+
+/** ===== 设备绑定管理 ===== */
+
+// 卡密详情页：获取设备绑定历史
+router.get('/cards/:id/device-history', async (req, res) => {
+  try {
+    const card = await cardService.getById(req.params.id);
+    if (!card) return res.json(error('卡密不存在'));
+    if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
+    const [licenseRows] = await pool.execute('SELECT id FROM licenses WHERE card_id = ?', [card.id]);
+    if (licenseRows.length === 0) return res.json(success([]));
+    const licenseId = licenseRows[0].id;
+    const [history] = await pool.execute(
+      'SELECT * FROM device_binding_history WHERE license_id = ? ORDER BY created_at DESC',
+      [licenseId]
+    );
+    res.json(success(history));
+  } catch (err) {
+    console.error('设备绑定历史:', err.message);
+    res.json(error('获取设备历史失败'));
+  }
+});
+
+// 换绑设备
+router.post('/cards/:id/rebind', async (req, res) => {
+  try {
+    const card = await cardService.getById(req.params.id);
+    if (!card) return res.json(error('卡密不存在'));
+    if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
+    const { old_device_id, new_device_id } = req.body;
+    if (!old_device_id || !new_device_id) return res.json(error('需提供旧设备ID和新设备ID'));
+    const [licenseRows] = await pool.execute('SELECT id FROM licenses WHERE card_id = ?', [card.id]);
+    if (licenseRows.length === 0) return res.json(error('卡密未关联授权'));
+    const operator = { type: 'admin', id: req.currentUser.id };
+    const result = await licenseService.rebindDevice(licenseRows[0].id, old_device_id, new_device_id, operator);
+    if (!result.ok) {
+      const messages = { not_found: '授权不存在', transfer_limit_reached: '换绑次数已达上限' };
+      return res.json(error(messages[result.reason] || '换绑失败'));
+    }
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'rebind', module: 'licenses', target_type: 'card', target_id: card.id,
+      description: `换绑设备: ${old_device_id} → ${new_device_id}`, ip_address: req.ip
+    });
+    res.json(success(null, '换绑成功'));
+  } catch (err) {
+    console.error('换绑设备:', err.message);
+    res.json(error('换绑失败'));
+  }
+});
+
+// 封禁/解封卡密
+router.put('/cards/:id/ban', async (req, res) => {
+  try {
+    const { banned, reason } = req.body;
+    const card = await cardService.getById(req.params.id);
+    if (!card) return res.json(error('卡密不存在'));
+    if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
+    // 通过 card 的关联 license 设置状态
+    const [licenseRows] = await pool.execute('SELECT id FROM licenses WHERE card_id = ?', [card.id]);
+    if (licenseRows.length > 0) {
+      await pool.execute('UPDATE licenses SET status = ? WHERE id = ?', [banned ? 'banned' : 'active', licenseRows[0].id]);
+    }
+    // 同时更新卡密自身状态
+    await cardService.update(req.params.id, { status: banned ? 'disabled' : 'enabled' });
+    await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: banned ? 'ban' : 'unban', module: 'cards', target_type: 'card', target_id: card.id,
+      description: banned ? `封禁卡密（原因: ${reason || '-'}）` : '解封卡密', ip_address: req.ip
+    });
+    res.json(success(null, banned ? '已封禁' : '已解封'));
+  } catch (err) {
+    console.error('封禁/解封卡密:', err.message);
+    res.json(error('操作失败'));
+  }
+});
+
+// License 设备绑定列表
+router.get('/licenses/:id/bindings', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT * FROM license_device_bindings WHERE license_id = ? ORDER BY bound_at DESC',
+      [req.params.id]
+    );
+    res.json(success(rows));
+  } catch (err) {
+    res.json(error('获取绑定列表失败'));
+  }
+});
+
 module.exports = router;
