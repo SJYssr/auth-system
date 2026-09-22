@@ -345,13 +345,19 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
   const captchaService = require('./services/captchaService');
   const expiryReminderService = require('./services/expiryReminderService');
   const adminSessionService = require('./services/adminSessionService');
+  const cacheStore = require('./utils/cacheStore');
+  const backupService = require('./services/backupService');
 
-  // 每分钟：清理过期限流计数 / 过期验证码 / 过期 webhook 投递记录 / 过期管理员会话
+  // Redis 缓存层初始化（失败不阻断启动，自动回退 MySQL）
+  await cacheStore.initRedis();
+
+  // 每分钟：清理过期限流计数 / 过期验证码 / 过期 webhook 投递记录 / 过期管理员会话 / 过期缓存
   const maintenanceTimer = setInterval(() => {
     MySQLStore.cleanup().catch(err => console.error('限流计数清理失败:', err.message));
     captchaService.cleanup().catch(err => console.error('验证码清理失败:', err.message));
     webhookService.cleanupDeliveries().catch(err => console.error('投递记录清理失败:', err.message));
     adminSessionService.cleanupSessions().catch(err => console.error('会话清理失败:', err.message));
+    cacheStore.cleanup().catch(err => console.error('缓存清理失败:', err.message));
   }, 60 * 1000);
   maintenanceTimer.unref();
 
@@ -359,6 +365,8 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
   webhookService.startRetryWorker();
   // 管理员账号到期邮件提醒（未配置 SMTP 时任务自动空转）
   expiryReminderService.startReminderJob();
+  // 自动数据库备份（未配置 BACKUP_ENABLED 时自动空转）
+  backupService.startBackupJob();
 
   // 优雅停机：先停止接新连接，等待存量请求收尾，再关闭数据库连接池
   let shuttingDown = false;
@@ -369,6 +377,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     const forceTimer = setTimeout(() => process.exit(1), 10000);
     server.close(async () => {
       clearTimeout(forceTimer);
+      try { await cacheStore.closeRedis(); } catch { /* Redis 已关闭 */ }
       try { await pool.end(); } catch { /* 连接池已关闭 */ }
       process.exit(0);
     });
