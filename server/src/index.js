@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
+const observability = require('./utils/observability');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -171,6 +172,10 @@ morgan.token('safe-url', (req) => {
 });
 app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
 
+  // 可观测性：request_id + 结构化日志 + metrics 收集
+  app.use(observability.requestIdMiddleware);
+  app.use(observability.metricsMiddleware);
+
   // 限流统一走 MySQL 共享存储（rate_limits 表）：多实例部署共享计数，
   // 单实例下计数也不再随重启清零；存储故障时 fail-open 放行（见 utils/rateLimitStore.js）
   const MySQLStore = require('./utils/rateLimitStore');
@@ -233,6 +238,11 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     }
     if (db === 'down') return res.status(503).json({ status: 'degraded', db, time: localTime });
     res.json({ status: 'ok', db, time: localTime });
+  });
+
+  // Prometheus metrics 端点（可观测性：HTTP QPS / P95 延迟 / 登录失败 / 卡密激活 / webhook 状态）
+  app.get('/metrics', (req, res) => {
+    res.type('text/plain').send(observability.prometheusMetrics());
   });
 
   // 客户端卡密 API 限流（挂载在根路径，不被 /api/public 限流覆盖）
