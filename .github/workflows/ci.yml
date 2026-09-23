@@ -139,17 +139,6 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: e2e-test
 
-      - name: 预置测试管理员
-        run: |
-          node e2e-test/admin-seed.js create
-          node e2e-test/admin-seed.js create-normal
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: 3306
-          DB_USER: root
-          DB_PASSWORD: e2e_test_root
-          DB_NAME: auth-system
-
       - name: 启动后端
         run: |
           cd server
@@ -164,6 +153,18 @@ jobs:
             sleep 1
           done
           curl -sf http://localhost:3100/health > /dev/null || (cat /tmp/server.log && exit 1)
+
+      # 预置管理员需在启动后端之后：auth 中间件依赖的 admin_sessions 表由迁移创建
+      - name: 预置测试管理员
+        run: |
+          node e2e-test/admin-seed.js create
+          node e2e-test/admin-seed.js create-normal
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: e2e_test_root
+          DB_NAME: auth-system
 
       # 每个套件末尾的登出会清空种子 token，因此套件间重新种子
       - name: 运行 UI 冒烟套件
