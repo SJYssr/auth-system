@@ -27,19 +27,28 @@ const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
   });
   // 显式回显目标库：环境变量未传时会回退读 server/.env（可能指向远程库），避免静默写错库
   console.log(`[admin-seed] 目标数据库 ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
+  // a854792 起 auth 中间件只认 admin_sessions 表（admins.token 已废弃），
+  // 确定性 token 需同步写入一条未过期的会话行，供 Playwright 注入 localStorage 使用
+  const seedSession = (adminId, token) => conn.execute(
+    'INSERT INTO admin_sessions (admin_id, token_hash, device_name, ip, user_agent, idle_expires_at, absolute_expires_at) ' +
+    "VALUES (?, ?, 'seed', '127.0.0.1', 'admin-seed', NOW() + INTERVAL 24 HOUR, NOW() + INTERVAL 7 DAY)",
+    [adminId, sha256(token)]
+  );
   if (mode === 'create') {
     await conn.execute('DELETE FROM admins WHERE username = ?', [NAME]);
-    await conn.execute(
+    const [r] = await conn.execute(
       'INSERT INTO admins (username, email, password, is_superuser, status, token) VALUES (?, ?, ?, 1, ?, ?)',
       [NAME, 'e2e-test@example.com', bcrypt.hashSync('E2eTest@2026', 10), 'enabled', sha256(UI_TOKEN_SUPER)]
     );
+    await seedSession(r.insertId, UI_TOKEN_SUPER);
     console.log('seeded', NAME);
   } else if (mode === 'create-normal') {
     await conn.execute('DELETE FROM admins WHERE username = ?', [NAME_NORMAL]);
-    await conn.execute(
+    const [r] = await conn.execute(
       'INSERT INTO admins (username, email, password, is_superuser, status, token) VALUES (?, ?, ?, 0, ?, ?)',
       [NAME_NORMAL, 'e2e-normal@example.com', bcrypt.hashSync('E2eTest@2026', 10), 'enabled', sha256(UI_TOKEN_NORMAL)]
     );
+    await seedSession(r.insertId, UI_TOKEN_NORMAL);
     console.log('seeded normal admin', NAME_NORMAL);
   } else if (mode === 'delete') {
     const [r] = await conn.execute('DELETE FROM admins WHERE username IN (?, ?)', [NAME, NAME_NORMAL]);

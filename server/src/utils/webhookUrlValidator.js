@@ -4,7 +4,8 @@
  * 防止管理员配置内网地址作为 Webhook 投递目标，避免 SSRF 攻击。
  *
  * 校验流程：
- *   1. 仅允许 https（生产环境强制加密；开发环境可用 WEBHOOK_ALLOW_HTTP=true 放行 http）
+ *   1. 仅允许 https（生产环境强制加密；开发环境可设 WEBHOOK_ALLOW_HTTP=true，
+ *      同时放行 http 与内网/回环目标，仅供本地开发和 e2e 测试使用）
  *   2. 解析 URL，禁止 IP 字面量（如 http://127.0.0.1/）——必须用域名
  *   3. DNS 解析域名为 IP
  *   4. 检查 IP 是否属于内网/保留地址段，属于则拒绝
@@ -118,7 +119,7 @@ function isIPBlocked(ip) {
   return true; // 未知格式，拒绝
 }
 
-/** 是否允许 http（开发环境可能需要） */
+/** 开发/测试放行：同时放行 http、IP 字面量与内网/回环目标（仅供本地与 e2e 使用） */
 function allowHttp() {
   return process.env.WEBHOOK_ALLOW_HTTP === 'true';
 }
@@ -169,15 +170,20 @@ async function validateUrl(urlStr) {
 
   const hostname = parsed.hostname;
 
-  // 禁止 IP 字面量（必须用域名，避免直接写 127.0.0.1）
-  if (net.isIP(hostname)) {
-    throw new Error('Webhook URL 不允许使用 IP 地址，请使用域名');
+  // 禁止 IP 字面量（必须用域名，避免直接写 127.0.0.1）；开发/测试放行
+  if (net.isIP(hostname) && !allowHttp()) {
+    throw new Error('Webhook URL 不允许使用 IP 地址，请使用域名（开发环境可设 WEBHOOK_ALLOW_HTTP=true 放行）');
   }
 
   // 域名白名单检查
   const allowlist = getDomainAllowlist();
   if (!isDomainAllowed(hostname, allowlist)) {
     throw new Error(`域名 ${hostname} 不在 Webhook 允许列表中`);
+  }
+
+  // 开发/测试放行时跳过 DNS 与内网段校验（e2e 接收器固定是回环地址）
+  if (allowHttp()) {
+    return { url: parsed.href, hostname, ips: [] };
   }
 
   // DNS 解析
@@ -219,10 +225,13 @@ async function validateForDelivery(urlStr) {
     const hostname = parsed.hostname;
     if (net.isIP(hostname)) {
       // 投递时允许 IP（已在创建时校验过域名，可能是历史数据）
-      // 但仍然检查是否内网
-      if (isIPBlocked(hostname)) return '目标地址为内网/保留地址';
+      // 但仍然检查是否内网；开发/测试放行
+      if (!allowHttp() && isIPBlocked(hostname)) return '目标地址为内网/保留地址';
       return null;
     }
+
+    // 开发/测试放行时跳过 DNS 与内网段校验
+    if (allowHttp()) return null;
 
     let addresses;
     try {

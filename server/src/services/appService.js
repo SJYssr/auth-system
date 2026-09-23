@@ -175,7 +175,7 @@ async function create(data, ownerId = null, conn = pool) {
     ? null : parseInt(data.category_id, 10);
   const [result] = await conn.execute(
     'INSERT INTO apps (softid, app_name, description, version, version_name, developer, ' +
-    'is_free, icon_url, download_url, usage_guide, purchase_url, announcement, force_update, status, owner_id, category_id) ' +
+    'is_free, icon_url, download_url, usage_guide, purchase_url, announcement, force_update, min_supported_version, status, owner_id, category_id) ' +
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [softid, data.app_name, data.description || null, data.version || '1.0.0',
      data.version_name || null, data.developer || null, data.is_free !== undefined ? data.is_free : 1,

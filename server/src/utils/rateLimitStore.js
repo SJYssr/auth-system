@@ -33,13 +33,14 @@ class MySQLStore {
         [namespaced]
       );
       const row = rows[0] || {};
+      // express-rate-limit v7+ 的 store 接口字段是 totalHits（v6 为 currentCount，v8 起严格校验）
       return {
-        currentCount: Number(row.rl_count || 1),
+        totalHits: Number(row.rl_count || 1),
         resetTime: row.rl_reset_at ? new Date(row.rl_reset_at) : undefined
       };
     } catch (err) {
       console.error(`[ratelimit] 共享存储读写失败（fail-open 放行）: ${err.message}`);
-      return { currentCount: 0, resetTime: undefined };
+      return { totalHits: 1, resetTime: undefined };
     }
   }
 

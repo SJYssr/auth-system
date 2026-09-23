@@ -48,8 +48,8 @@ router.post('/login', async (req, res) => {
     // 统一用 express 的 req.ip（trust proxy 已配置，自动处理 XFF），
     // 避免直接信任可伪造的 x-forwarded-for 头首项
     const ip = (req.ip || '').replace(/^::ffff:/, '');
-    const token = await clientAuthService.cardLogin(Softid, Card, Mac, Version, ip);
-    res.json({ token });
+    const { token, license } = await clientAuthService.cardLogin(Softid, Card, Mac, Version, ip);
+    res.json({ token, license });
   } catch (err) {
     res.json({ errcode: err.message || '-1009' });
   }

@@ -81,6 +81,7 @@ jobs:
             DB_PASSWORD=e2e_test_root DB_NAME=auth-system \
             CARD_PEPPER=c2a9f1e2d3c4b5a6978877665544332211ffeeddccbbaa9988776655443322110 \
             INITIAL_ADMIN_USERNAME=e2e_admin INITIAL_ADMIN_PASSWORD=e2e-admin-password-2026 \
+            WEBHOOK_ALLOW_HTTP=true \
             nohup node src/index.js > /tmp/server.log 2>&1 &
           for i in $(seq 1 30); do
             curl -sf http://localhost:3100/health && break
@@ -156,6 +157,7 @@ jobs:
             DB_PASSWORD=e2e_test_root DB_NAME=auth-system \
             CARD_PEPPER=c2a9f1e2d3c4b5a6978877665544332211ffeeddccbbaa9988776655443322110 \
             INITIAL_ADMIN_USERNAME=e2e_admin INITIAL_ADMIN_PASSWORD=e2e-admin-password-2026 \
+            WEBHOOK_ALLOW_HTTP=true \
             nohup node src/index.js > /tmp/server.log 2>&1 &
           for i in $(seq 1 30); do
             curl -sf http://localhost:3100/health && break

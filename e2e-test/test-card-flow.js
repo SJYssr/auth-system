@@ -43,11 +43,17 @@ let db, superAuth, normalAuth, appId, softid, normalAppId, normalSoftid;
 
 async function seedAdmin(username, token, isSuper) {
   await db.execute('DELETE FROM admins WHERE username = ?', [username]);
-  await db.execute(
+  const [r] = await db.execute(
     'INSERT INTO admins (username, email, password, is_superuser, status, token, max_apps, max_card_activations) ' +
     'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [username, `${username}@e2e.test`, '$2a$10$bZHV5mHWBkXQgdyLCYBOvOgOKlappkY/rN.zlkLWr.SbMvNQixeIu',
      isSuper ? 1 : 0, 'enabled', sha256(token), isSuper ? -1 : 2, isSuper ? -1 : 2]
+  );
+  // a854792 起 auth 中间件只认 admin_sessions 表，静态 token 需同步建会话行
+  await db.execute(
+    'INSERT INTO admin_sessions (admin_id, token_hash, device_name, ip, user_agent, idle_expires_at, absolute_expires_at) ' +
+    "VALUES (?, ?, 'seed', '127.0.0.1', 'test-card-flow', NOW() + INTERVAL 24 HOUR, NOW() + INTERVAL 7 DAY)",
+    [r.insertId, sha256(token)]
   );
 }
 
