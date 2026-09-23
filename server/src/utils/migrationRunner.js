@@ -51,9 +51,11 @@ function splitSql(sql) {
     const ch = sql[i];
     const next = sql[i + 1];
 
-    // 行注释 --
+    // 行注释 --：整行丢弃，避免注释文本混入语句块
+    // （此前注释被并入 current，导致"注释开头"的语句块被 startsWith('--') 整段静默丢弃）
     if (!inString && ch === '-' && next === '-') {
       inComment = true;
+      continue;
     }
     if (inComment && ch === '\n') {
       inComment = false;
@@ -61,7 +63,6 @@ function splitSql(sql) {
       continue;
     }
     if (inComment) {
-      current += ch;
       continue;
     }
 
@@ -90,6 +91,35 @@ function splitSql(sql) {
     statements.push(last);
   }
   return statements;
+}
+
+async function columnExists(conn, table, column) {
+  const [rows] = await conn.execute(
+    'SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1',
+    [table, column]
+  );
+  return rows.length > 0;
+}
+
+async function indexExists(conn, table, index) {
+  const [rows] = await conn.execute(
+    'SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? LIMIT 1',
+    [table, index]
+  );
+  return rows.length > 0;
+}
+
+/**
+ * 语句目标对象是否已存在：全新部署用 schema.sql 建库后重放迁移会撞到
+ * 重复列/重复索引（MySQL 8 不支持 ADD COLUMN IF NOT EXISTS），此处预检跳过
+ */
+async function statementTargetExists(conn, stmt) {
+  const s = stmt.replace(/`/g, '').replace(/\s+/g, ' ').trim();
+  let m = s.match(/^ALTER TABLE (\w+) ADD COLUMN (\w+)/i);
+  if (m) return columnExists(conn, m[1], m[2]);
+  m = s.match(/^ALTER TABLE (\w+) ADD (?:UNIQUE )?(?:INDEX|KEY) (\w+)/i);
+  if (m) return indexExists(conn, m[1], m[2]);
+  return false;
 }
 
 /**
@@ -121,6 +151,10 @@ async function runMigrations() {
     try {
       await conn.beginTransaction();
       for (const stmt of statements) {
+        if (await statementTargetExists(conn, stmt)) {
+          console.log(`   ↳ 跳过已存在的对象: ${stmt.replace(/\s+/g, ' ').slice(0, 60)}...`);
+          continue;
+        }
         await conn.query(stmt);
       }
       await conn.execute('INSERT INTO schema_migrations (version) VALUES (?)', [version]);
