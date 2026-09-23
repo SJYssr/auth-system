@@ -15,7 +15,7 @@
  */
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const pool = require('./config/db');
+const pool = require('../config/db');
 
 /**
  * 环境变量方式：在服务启动时调用，admins 为空则创建第一个超管

@@ -33,7 +33,7 @@ async function createLicense({ app_id, card_id, plan_id, device_id }) {
   const expiresAt = plan ? licensePlanService.planExpiry(plan, now) : null;
   const features = plan?.features || null;
 
-  const [result] = await pool.execute(
+  await pool.execute(
     `INSERT INTO licenses
      (id, app_id, card_id, plan_id, device_id, status, issued_at, expires_at, features)
      VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)`,

@@ -5,7 +5,6 @@
  * 每个方案定义时长、设备限制、并发限制、离线天数、特性列表等。
  */
 const pool = require('../config/db');
-const { escapeLike } = require('../utils/response');
 
 /**
  * 计算方案到期时间

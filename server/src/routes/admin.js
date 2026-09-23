@@ -6,7 +6,6 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
 const authMiddleware = require('../middleware/auth');
-const { requirePermission } = require('../middleware/rbac');
 const authService = require('../services/authService');
 const adminService = require('../services/adminService');
 const dashboardService = require('../services/dashboardService');

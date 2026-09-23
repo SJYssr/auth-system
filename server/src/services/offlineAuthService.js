@@ -12,8 +12,6 @@
  */
 
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 
 let privateKey = null;
 let publicKey = null;

@@ -4,8 +4,6 @@
 const pool = require('../config/db');
 const crypto = require('crypto');
 const cardService = require('./cardService');
-const licenseService = require('./licenseService');
-const licensePlanService = require('./licensePlanService');
 
 /** 生成订单号（20 位） */
 function generateOrderNo() {

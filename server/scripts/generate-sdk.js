@@ -31,7 +31,7 @@ function toPascalCase(s) {
 }
 
 /** 从 OpenAPI 操作中提取方法名 */
-function methodName(pathKey, method) {
+function methodName(pathKey, _method) {
   // /login → login, /heartbeat → heartbeat
   const clean = pathKey.replace(/^\//, '').replace(/[{}]/g, '');
   return toPascalCase(clean) || 'Index';

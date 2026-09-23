@@ -189,7 +189,7 @@ async function validateUrl(urlStr) {
     try {
       addresses = await dns.resolve6(hostname);
     } catch (e6) {
-      throw new Error(`域名 ${hostname} DNS 解析失败`);
+      throw new Error(`域名 ${hostname} DNS 解析失败`, { cause: e6 });
     }
   }
 

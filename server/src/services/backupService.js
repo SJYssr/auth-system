@@ -51,7 +51,7 @@ function performBackup() {
     // mysqldump | gzip > file
     const cmd = `mysqldump -h ${dbHost} -P ${dbPort} -u ${dbUser} ${dbPass ? `-p${dbPass}` : ''} --single-transaction --routines --triggers ${dbName} | gzip > ${filepath}`;
 
-    exec(cmd, { timeout: 120000 }, (err, stdout, stderr) => {
+    exec(cmd, { timeout: 120000 }, (err, _stdout, _stderr) => {
       if (err) {
         console.error('数据库备份失败:', err.message);
         return resolve({ ok: false, error: err.message });
