@@ -11,6 +11,7 @@ const adminService = require('../services/adminService');
 const dashboardService = require('../services/dashboardService');
 const appService = require('../services/appService');
 const cardService = require('../services/cardService');
+const cardRenewalService = require('../services/cardRenewalService');
 const versionService = require('../services/versionService');
 const siteDataService = require('../services/siteDataService');
 const logService = require('../services/logService');
@@ -410,7 +411,10 @@ router.get('/cards', async (req, res) => {
     if (req.query.card || req.query.card_content) filters.card = req.query.card || req.query.card_content;
     if (req.query.status) filters.status = req.query.status;
     if (req.query.card_type) filters.card_type = req.query.card_type;
-    if (req.query.is_activated !== undefined) filters.is_activated = parseInt(req.query.is_activated);
+    if (req.query.is_activated !== undefined && req.query.is_activated !== '') {
+      if (!['0', '1'].includes(req.query.is_activated)) return res.status(400).json(error('激活状态必须为0或1'));
+      filters.is_activated = Number(req.query.is_activated);
+    }
     if (req.query.card_remark) filters.card_remark = req.query.card_remark;
     if (req.query.is_expired === '1') filters.is_expired = 1;
     else if (req.query.is_expired === '0') filters.is_expired = 0;
@@ -433,6 +437,27 @@ router.get('/cards/:id', async (req, res) => {
   } catch (err) {
     console.error('获取卡密:', err.message);
     res.json(error('获取卡密失败'));
+  }
+});
+
+// 续费已激活卡密（request_id 必须由客户端生成并在重试时复用）
+router.post('/cards/:id/renew', async (req, res) => {
+  try {
+    const card = await cardService.getById(req.params.id);
+    if (!card) return res.json(error('卡密不存在'));
+    if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
+    const result = await cardRenewalService.renew(card.id, req.body, req.currentUser);
+    if (!result.replayed) await logService.log({
+      user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'renew_card', module: 'cards', target_type: 'card', target_id: card.id,
+      description: `卡密续费 ${result.duration_days} 天`, ip_address: req.ip
+    });
+    res.json(success(result, result.replayed ? '该笔续费已处理' : '续费成功'));
+  } catch (err) {
+    console.error('卡密续费:', err.message);
+    const known = ['续费天数必须为1到3650的整数', '续费请求编号格式不正确', '备注不能超过255字', '卡密不存在',
+      '无权操作该卡密', '同一续费请求编号不能更改内容', '禁用卡密不能续费', '仅支持已激活的限时卡密续费', '授权已封禁或暂停，不能续费'];
+    res.json(error(known.includes(err.message) ? err.message : '续费失败'));
   }
 });
 
@@ -496,7 +521,7 @@ router.put('/cards/:id', async (req, res) => {
     const card = await cardService.getById(req.params.id);
     if (!card) return res.json(error('卡密不存在'));
     if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
-    await cardService.update(req.params.id, req.body);
+    await cardService.update(req.params.id, req.body, req.currentUser);
     await logService.log({
       user_id: req.currentUser.id, username: req.currentUser.username,
       action: 'update', module: 'cards', target_type: 'card', target_id: card.id,
@@ -506,7 +531,8 @@ router.put('/cards/:id', async (req, res) => {
     res.json(success(null, '更新成功'));
   } catch (err) {
     console.error('更新卡密:', err.message);
-    res.json(error('更新卡密失败'));
+    const known = ['卡密状态无效', '机器码格式不正确', '到期时间格式不正确', '已激活卡密请使用设备换绑或解绑功能'];
+    res.json(error(known.includes(err.message) ? err.message : '更新卡密失败'));
   }
 });
 
@@ -515,7 +541,7 @@ router.delete('/cards/:id', async (req, res) => {
     const card = await cardService.getById(req.params.id);
     if (!card) return res.json(error('卡密不存在'));
     if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
-    await cardService.remove(req.params.id);
+    await cardService.remove(req.params.id, req.currentUser);
     await logService.log({
       user_id: req.currentUser.id, username: req.currentUser.username,
       action: 'delete', module: 'cards', target_type: 'card', target_id: card.id,
@@ -1052,7 +1078,10 @@ router.delete('/sessions/all', async (req, res) => {
 router.get('/license-plans', async (req, res) => {
   try {
     const { page, pageSize } = parsePagination(req.query);
-    const filters = { app_id: parseInt(req.query.app_id) };
+    const appId = Number(req.query.app_id);
+    if (!Number.isSafeInteger(appId) || appId <= 0) return res.status(400).json(error('应用ID必须为正整数'));
+    if (!await getOwnApp(req, res, appId)) return;
+    const filters = { app_id: appId };
     if (req.query.status) filters.status = req.query.status;
     const result = await licensePlanService.getList(filters, page, pageSize);
     res.json(paginated(result.rows, result.pagination));
@@ -1144,6 +1173,28 @@ router.get('/cards/:id/device-history', async (req, res) => {
   }
 });
 
+const deviceChangeMessages = {
+  not_found: '卡密或授权不存在', forbidden: '无权操作该卡密', invalid_device: '设备ID需为1到128字的文本',
+  same_device: '新旧设备不能相同', stale_device: '设备已发生变化，请刷新后重试',
+  not_active: '仅支持启用且未到期的已激活授权', blacklisted: '目标设备已被封禁',
+  transfer_not_allowed: '该授权方案不允许换绑', transfer_limit_reached: '换绑次数已达上限'
+};
+
+// 解绑后旧会话立即失效，下次成功登录重新绑定设备。
+router.post('/cards/:id/unbind', async (req, res) => {
+  try {
+    const card = await cardService.getById(req.params.id);
+    if (!card) return res.json(error('卡密不存在'));
+    if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
+    const result = await licenseService.changeCardDevice(card.id, req.body.old_device_id, null, { ...req.currentUser, type: 'admin' }, 'manual_unbind');
+    if (!result.ok) return res.json(error(deviceChangeMessages[result.reason] || '解绑失败'));
+    await logService.log({ user_id: req.currentUser.id, username: req.currentUser.username,
+      action: 'unbind', module: 'licenses', target_type: 'card', target_id: card.id,
+      description: '解绑设备并撤销当前会话', ip_address: req.ip });
+    res.json(success(null, '已解绑，原会话已失效'));
+  } catch (err) { console.error('解绑设备:', err.message); res.json(error('解绑失败')); }
+});
+
 // 换绑设备
 router.post('/cards/:id/rebind', async (req, res) => {
   try {
@@ -1152,12 +1203,10 @@ router.post('/cards/:id/rebind', async (req, res) => {
     if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
     const { old_device_id, new_device_id } = req.body;
     if (!old_device_id || !new_device_id) return res.json(error('需提供旧设备ID和新设备ID'));
-    const [licenseRows] = await pool.execute('SELECT id FROM licenses WHERE card_id = ?', [card.id]);
-    if (licenseRows.length === 0) return res.json(error('卡密未关联授权'));
-    const operator = { type: 'admin', id: req.currentUser.id };
-    const result = await licenseService.rebindDevice(licenseRows[0].id, old_device_id, new_device_id, operator);
+    const operator = { ...req.currentUser, type: 'admin' };
+    const result = await licenseService.changeCardDevice(card.id, old_device_id, new_device_id, operator);
     if (!result.ok) {
-      const messages = { not_found: '授权不存在', transfer_limit_reached: '换绑次数已达上限' };
+      const messages = deviceChangeMessages;
       return res.json(error(messages[result.reason] || '换绑失败'));
     }
     await logService.log({
@@ -1179,13 +1228,8 @@ router.put('/cards/:id/ban', async (req, res) => {
     const card = await cardService.getById(req.params.id);
     if (!card) return res.json(error('卡密不存在'));
     if (!ensureOwner(res, req.currentUser, card.owner_id, '卡密')) return;
-    // 通过 card 的关联 license 设置状态
-    const [licenseRows] = await pool.execute('SELECT id FROM licenses WHERE card_id = ?', [card.id]);
-    if (licenseRows.length > 0) {
-      await pool.execute('UPDATE licenses SET status = ? WHERE id = ?', [banned ? 'banned' : 'active', licenseRows[0].id]);
-    }
-    // 同时更新卡密自身状态
-    await cardService.update(req.params.id, { status: banned ? 'disabled' : 'enabled' });
+    if (typeof banned !== 'boolean') return res.status(400).json(error('banned必须为布尔值'));
+    await cardService.update(req.params.id, { status: banned ? 'disabled' : 'enabled' }, req.currentUser);
     await logService.log({
       user_id: req.currentUser.id, username: req.currentUser.username,
       action: banned ? 'ban' : 'unban', module: 'cards', target_type: 'card', target_id: card.id,
@@ -1201,6 +1245,9 @@ router.put('/cards/:id/ban', async (req, res) => {
 // License 设备绑定列表
 router.get('/licenses/:id/bindings', async (req, res) => {
   try {
+    const [licenses] = await pool.execute('SELECT app_id FROM licenses WHERE id = ?', [req.params.id]);
+    if (!licenses.length) return res.json(error('授权不存在'));
+    if (!await getOwnApp(req, res, licenses[0].app_id)) return;
     const [rows] = await pool.execute(
       'SELECT * FROM license_device_bindings WHERE license_id = ? ORDER BY bound_at DESC',
       [req.params.id]
@@ -1295,7 +1342,12 @@ router.put('/rbac/admins/:id/roles', requireSuperuser, async (req, res) => {
 router.get('/products', async (req, res) => {
   try {
     const { page, pageSize } = parsePagination(req.query);
-    const result = await orderService.getProducts({ app_id: req.query.app_id ? parseInt(req.query.app_id) : null }, page, pageSize);
+    const filters = { app_id: req.query.app_id ? Number(req.query.app_id) : null };
+    if (req.query.app_id && (!Number.isSafeInteger(filters.app_id) || filters.app_id <= 0)) {
+      return res.status(400).json(error('应用ID必须为正整数'));
+    }
+    if (!req.isSuperuser) filters.owner_id = req.currentUser.id;
+    const result = await orderService.getProducts(filters, page, pageSize);
     res.json(paginated(result.rows, result.pagination));
   } catch (err) {
     console.error('产品列表:', err.message);
@@ -1310,6 +1362,7 @@ router.get('/orders', async (req, res) => {
     const filters = {};
     if (req.query.status) filters.status = req.query.status;
     if (req.query.order_no) filters.order_no = req.query.order_no;
+    if (!req.isSuperuser) filters.owner_id = req.currentUser.id;
     const result = await orderService.getList(filters, page, pageSize);
     res.json(paginated(result.rows, result.pagination));
   } catch (err) {
@@ -1323,6 +1376,7 @@ router.get('/orders/:id', async (req, res) => {
   try {
     const order = await orderService.getById(parseInt(req.params.id));
     if (!order) return res.json(error('订单不存在'));
+    if (!await getOwnApp(req, res, order.app_id)) return;
     res.json(success(order));
   } catch (err) {
     console.error('订单详情:', err.message);
@@ -1334,7 +1388,10 @@ router.get('/orders/:id', async (req, res) => {
 router.post('/orders/:id/fulfill', async (req, res) => {
   try {
     const { pay_method, transaction_id } = req.body;
-    const result = await orderService.fulfillOrder(parseInt(req.params.id), pay_method || 'manual', transaction_id || null);
+    const [orders] = await pool.execute('SELECT app_id FROM orders WHERE id = ?', [req.params.id]);
+    if (!orders.length) return res.json(error('订单不存在'));
+    if (!await getOwnApp(req, res, orders[0].app_id)) return;
+    const result = await orderService.fulfillOrder(parseInt(req.params.id), pay_method || 'manual', transaction_id || null, req.currentUser);
     await logService.log({
       user_id: req.currentUser.id, username: req.currentUser.username,
       action: 'fulfill_order', module: 'orders', target_type: 'order', target_id: parseInt(req.params.id),
@@ -1400,7 +1457,7 @@ router.get('/license-public-key', async (req, res) => {
 /** ===== SDK 自动生成（超管触发，从 OpenAPI 规范生成多语言客户端 SDK） ===== */
 router.post('/sdk/generate', requireSuperuser, async (req, res) => {
   try {
-    const { generateAll } = require('../scripts/generate-sdk');
+    const { generateAll } = require('../../scripts/generate-sdk');
     const results = generateAll();
     await logService.log({
       user_id: req.currentUser.id, username: req.currentUser.username,

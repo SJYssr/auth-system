@@ -24,7 +24,8 @@ function initSigningKey() {
   const keyEnv = process.env.LICENSE_SIGNING_KEY;
   if (keyEnv) {
     try {
-      privateKey = crypto.createPrivateKey(keyEnv.startsWith('-----BEGIN') ? keyEnv : Buffer.from(keyEnv, 'hex'));
+      privateKey = crypto.createPrivateKey(keyEnv.startsWith('-----BEGIN') ? keyEnv : { key: Buffer.from(keyEnv, 'hex'), format: 'der', type: 'pkcs8' });
+      if (privateKey.asymmetricKeyType !== 'ed25519') throw new Error('必须使用 Ed25519 密钥');
       publicKey = crypto.createPublicKey(privateKey);
       console.log('✅ License 签名密钥已从环境变量加载');
       return;
@@ -94,10 +95,28 @@ function verifyLicense(license, signature, publicKeyB64) {
 /**
  * 检查离线授权是否在有效期内
  */
-function isLicenseValid(license, signature, publicKeyB64) {
-  if (!verifyLicense(license, signature, publicKeyB64)) return false;
-  if (license.expires_at && new Date(license.expires_at) < new Date()) return false;
+function isLicenseValid(license, signature, publicKeyB64, expected = {}) {
+  if (!license || !verifyLicense(license, signature, publicKeyB64)) return false;
+  const now = Date.now();
+  const issuedAt = Date.parse(license.issued_at);
+  const expiresAt = Date.parse(license.expires_at);
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt)) return false;
+  if (issuedAt > now || expiresAt <= now || expiresAt <= issuedAt) return false;
+  if (expected.app_id !== undefined && license.app_id !== expected.app_id) return false;
+  if (expected.device_id !== undefined && license.device_id !== expected.device_id) return false;
   return true;
+}
+
+/** 旧版卡密离线能力默认关闭，开启后最多 24 小时，且不能超过卡密自身到期。 */
+function issueCardLicense(payload) {
+  const hours = Number(process.env.CARD_OFFLINE_HOURS || 0);
+  if (hours === 0) return null;
+  if (!Number.isFinite(hours) || hours < 0 || hours > 24) throw new Error('CARD_OFFLINE_HOURS 必须在0到24之间');
+  const now = Date.now();
+  const cardExpiry = new Date(payload.expires_at).getTime();
+  if (!Number.isFinite(cardExpiry) || cardExpiry <= now) return null;
+  return signLicense({ ...payload, issued_at: new Date(now).toISOString(),
+    expires_at: new Date(Math.min(cardExpiry, now + hours * 3600000)).toISOString() });
 }
 
 /** 导出公钥（Base64 DER），用于客户端 SDK 内置 */
@@ -109,6 +128,7 @@ function getPublicKeyBase64() {
 module.exports = {
   initSigningKey,
   signLicense,
+  issueCardLicense,
   verifyLicense,
   isLicenseValid,
   getPublicKeyBase64

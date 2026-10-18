@@ -57,3 +57,19 @@ assert hmac.compare_digest(expected, received_signature)
 ```
 
 事件类型：`card.activated`（首激）、`card.disabled`、`card.enabled`、`card.deleted`，payload 为 `{event, timestamp, data}`。
+
+
+## Node.js 离线验签
+
+在线登录的 `license` 字段形如 `{ license: { ... }, signature: "..." }`；服务端 `CARD_OFFLINE_HOURS=0` 时返回 `null`。启用后最长24小时，且不超过卡密到期时间。公钥由发行商从已认证的管理接口 `/api/admin/license-public-key` 获取后，随客户端发布并固定信任；不要使用待验证响应提供的公钥。
+
+```js
+const { verifyOfflineLicense } = require('./node/offline_license');
+const valid = verifyOfflineLicense(loginResult.license, embeddedPublicKeyBase64, {
+  app_id: yourNumericAppId,
+  device_id: yourLocalDeviceId
+});
+if (!valid) throw new Error('需要联网重新验证授权');
+```
+
+该模块无第三方依赖，验证签名、应用、设备、签发及到期时间。公钥为 Base64 DER SPKI；私钥只保存在服务端。离线状态无法立即接收封禁，客户端系统时钟回拨防护仍需接入方制定可信时间策略。Python/C#/Java/Go SDK 当前尚未集成此离线模块。

@@ -18,7 +18,7 @@ cd client  && npm ci && npm run dev  # Vite 5173，/api 代理到 3000
 cp .env.docker.example .env && docker compose up -d --build
 ```
 
-数据库结构见 `server/schema.sql`：直接导入即可获得完整表结构 + 默认超管（admin，首次部署后立即改密）+ 错误码字典等种子数据。已有旧库只执行文件末尾对应版本的「增量升级」段落。
+数据库结构见 `server/schema.sql`。首次管理员使用 `INITIAL_ADMIN_*` 环境变量创建，没有默认管理员。启动自动运行 `server/migrations/` 中未应用的迁移，升级前先备份。
 
 ## 测试体系
 
@@ -26,7 +26,7 @@ cp .env.docker.example .env && docker compose up -d --build
 
 | 文件 | 覆盖 |
 |---|---|
-| `e2e-test/test-card-flow.js` | 卡密全链路 56 断言：首激→复登→异设备 -1011→登出→机器码绑定 -1010→到期查询→会话/踢下线→Webhook 投递与 HMAC 验签→配额 -1012→归属隔离→文档读写→公开字段白名单→产品分类→配额校验→日志清理→删管理员资源转移 |
+| `e2e-test/test-card-flow.js` | 卡密全链路 65 断言：首激→复登→异设备 -1011→登出→机器码绑定 -1010→到期查询→会话/踢下线→Webhook 投递与 HMAC 验签→配额 -1012→归属隔离→文档读写→公开字段白名单→产品分类→配额校验→日志清理→删管理员资源转移 |
 | `e2e-test/test-api.js` | 公开 API、鉴权拦截、404、限流窗口、公开分类等 19 断言 |
 | `e2e-test/test-public.js` 等 | Playwright UI 冒烟 4 套件（CI 的 ui-smoke job 自动运行；本地运行需先 `npx playwright install chromium`） |
 
@@ -88,3 +88,16 @@ CI（GitHub Actions，`.github/workflows/ci.yml`）：每次 push/PR 自动起 M
 `/heartbeat` 与 `/expiry` 均要求应用和卡密启用、Token 匹配且会话未过期；应用停用返回 `-1007`、卡密停用返回 `-1006`、会话失效返回 `-1002`、卡密到期返回 `-1005`。`/logout` 仅清除请求 Token 对应的当前会话，旧 Token 不得清除并发重新登录产生的新会话。
 
 `server/test/card-session.test.js` 覆盖会话状态及读写间 Token 轮换；`e2e-test/test-card-flow.js` 使用实际 MySQL 和 HTTP 验证停用、到期、Token 轮换与恢复链路。心跳失败后的诊断读取不得追加仅按卡密 ID 的无条件续期写入。
+
+## 商业授权验收
+
+独立数据库、事务回滚、跨管理员隔离、离线凭证和后台续费的验收方法见 [商业授权落地路线](commercial-readiness.md)。`npm --prefix e2e-test run test:commercial` 自动创建并删除专用 MySQL 容器；`E2E_COMMERCIAL_UI=1` 同时覆盖续费、设备操作与刷新持久化；`E2E_LEGACY_SCHEMA=1` 验证历史数据迁移；`E2E_FULL_FLOW=1` 启动完整服务执行65项原有业务回归。
+
+
+## 卡密授权生命周期约定
+
+涉及激活、续费、编辑、删除、换绑和解绑的事务依次锁卡密行、授权行，再处理设备和绑定。不要在只更新 `licenses` 或 `cards` 后另开事务补另一张表。已激活卡编辑设备必须通过 `licenseService.changeCardDevice`，同时清除旧会话并记录历史。显式解绑后仅允许在下一次登录事务内重新绑定。
+
+登录、心跳、到期查询和在线会话列表应共同执行应用/卡密启用、授权 active、卡密与授权期限、当前设备绑定及黑名单检查。不得在失效诊断后恢复令牌。续费在卡行锁下以请求编号保证幂等，期限写入卡密和授权；暂停或封禁不能通过续费绕过。离线凭证的撤销延迟由离线窗口约束。
+
+迁移013保留存量卡密的实际期限和明确解绑状态。历史重复授权或重复有效设备绑定须先在数据库副本中核对；迁移不会自动丢弃这些数据。

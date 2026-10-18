@@ -70,16 +70,20 @@
           "license": {
             "type": "object",
             "nullable": true,
-            "description": "离线授权凭证（Ed25519 签名），客户端可离线验证",
+            "description": "离线授权凭证；CARD_OFFLINE_HOURS=0 时为 null。使用内置公钥并校验应用、设备及到期时间。",
             "properties": {
-              "license_id": { "type": "string" },
-              "app_id": { "type": "integer" },
-              "device_id": { "type": "string" },
-              "features": { "type": "array", "items": { "type": "string" } },
-              "issued_at": { "type": "string", "format": "date-time" },
-              "expires_at": { "type": "string", "format": "date-time", "nullable": true },
-              "signature": { "type": "string", "description": "Ed25519 签名（Base64）" },
-              "public_key": { "type": "string", "description": "签发公钥标识" }
+              "license": {
+                "type": "object",
+                "properties": {
+                  "license_id": { "type": "string" },
+                  "app_id": { "type": "integer" },
+                  "device_id": { "type": "string" },
+                  "features": { "type": "array", "items": { "type": "string" } },
+                  "issued_at": { "type": "string", "format": "date-time" },
+                  "expires_at": { "type": "string", "format": "date-time" }
+                }
+              },
+              "signature": { "type": "string", "description": "Ed25519 签名（Base64）" }
             }
           }
         }

@@ -9,6 +9,7 @@ const semver = require('../utils/semver');
 const webhookService = require('./webhookService');
 const cardCrypto = require('../utils/cardCrypto');
 const offlineAuthService = require('./offlineAuthService');
+const licenseService = require('./licenseService');
 
 /** 生成16位加密安全随机Token */
 function generateToken() {
@@ -85,6 +86,7 @@ async function cardLogin(softid, card, mac, version, ip) {
 
     const now = new Date();
     let token;
+    let effectiveExpiresAt = cardData.expires_at;
 
     if (cardData.is_activated === 0) {
       // 首次激活：校验生成者管理员的激活配额（含临时套餐，超管/历史数据不受限）
@@ -112,6 +114,7 @@ async function cardLogin(softid, card, mac, version, ip) {
       // 首次激活
       token = generateToken();
       const expiresAt = expireTime(cardData.card_type, cardData.points, now);
+      effectiveExpiresAt = expiresAt;
       await conn.execute(
         'UPDATE cards SET is_activated = 1, mac = ?, activation_ip = ?, token = ?, token_expires_at = NOW() + INTERVAL 24 HOUR, ' +
         'activated_at = ?, expires_at = ?, login_count = login_count + 1, ' +
@@ -142,51 +145,47 @@ async function cardLogin(softid, card, mac, version, ip) {
             'WHERE id = ?',
             [hashCardToken(token), now, ip, cardData.id]
           );
-          await conn.commit();
-          return { token, license: null };
+          // 各登录分支统一签发有期限的离线凭证。
         } else {
           throw new Error('-1011'); // 卡密已在其他设备登录
         }
+      } else {
+        // Token 已过期：正常流程
+        // 校验机器码
+        if (cardData.mac && cardData.mac.toLowerCase() !== mac.toLowerCase()) {
+          throw new Error('-1010'); // 机器码不匹配
+        }
+        // 校验卡密是否过期
+        if (cardData.expires_at && new Date(cardData.expires_at) < now) {
+          throw new Error('-1005'); // 卡密已过期
+        }
+        // 生成新 token（24小时有效期）
+        token = generateToken();
+        await conn.execute(
+          'UPDATE cards SET token = ?, token_expires_at = NOW() + INTERVAL 24 HOUR, login_count = login_count + 1, ' +
+          'last_login_time = ?, last_login_ip = ?, version = version + 1 ' +
+          'WHERE id = ?',
+          [hashCardToken(token), now, ip, cardData.id]
+        );
       }
-
-      // Token 已过期：正常流程
-      // 校验机器码
-      if (cardData.mac && cardData.mac.toLowerCase() !== mac.toLowerCase()) {
-        throw new Error('-1010'); // 机器码不匹配
-      }
-      // 校验卡密是否过期
-      if (cardData.expires_at && new Date(cardData.expires_at) < now) {
-        throw new Error('-1005'); // 卡密已过期
-      }
-      // 生成新 token（24小时有效期）
-      token = generateToken();
-      await conn.execute(
-        'UPDATE cards SET token = ?, token_expires_at = NOW() + INTERVAL 24 HOUR, login_count = login_count + 1, ' +
-        'last_login_time = ?, last_login_ip = ?, version = version + 1 ' +
-        'WHERE id = ?',
-        [hashCardToken(token), now, ip, cardData.id]
-      );
     }
+
+    const license = await licenseService.authorizeLogin(conn, {
+      ...cardData, is_activated: 1, mac: cardData.is_activated ? cardData.mac : mac,
+      expires_at: effectiveExpiresAt
+    }, mac);
+
+    // 旧版卡密未配置离线策略时只提供在线授权。离线窗口与卡密到期取较早值。
+    const licenseCredential = offlineAuthService.issueCardLicense({
+      license_id: String(license.id), app_id: app.id, device_id: mac,
+      expires_at: license.expires_at && effectiveExpiresAt
+        ? new Date(Math.min(new Date(license.expires_at).getTime(), new Date(effectiveExpiresAt).getTime()))
+        : license.expires_at || effectiveExpiresAt
+    });
 
     await conn.commit();
     if (activatedPayload) {
       webhookService.emit('card.activated', activatedPayload);
-    }
-
-    // 签发离线授权凭证（Ed25519 签名），客户端可离线验证授权有效性
-    let licenseCredential = null;
-    try {
-      licenseCredential = offlineAuthService.signLicense({
-        license_id: String(cardData.id),
-        app_id: app.id,
-        device_id: mac,
-        features: [],
-        issued_at: new Date().toISOString(),
-        expires_at: cardData.expires_at ? new Date(cardData.expires_at).toISOString() : null
-      });
-    } catch (e) {
-      // 签名密钥未初始化时不阻断登录（开发环境可能未配置）
-      console.error('离线授权签名失败:', e.message);
     }
 
     return { token, license: licenseCredential };
@@ -209,19 +208,29 @@ async function heartbeat(softid, card, token) {
   const cardHash = cardCrypto.hashCard(card);
   const [upd] = await pool.execute(
     'UPDATE cards c JOIN apps a ON c.app_id = a.id ' +
-    'SET c.token_expires_at = NOW() + INTERVAL 24 HOUR ' +
+    'JOIN licenses l ON l.card_id = c.id AND l.app_id = c.app_id ' +
+    'JOIN license_device_bindings b ON b.license_id = l.id AND b.device_id = c.mac AND b.unbound_at IS NULL ' +
+    'LEFT JOIN devices d ON d.device_id = c.mac ' +
+    'SET l.last_heartbeat_at = NOW(), c.token_expires_at = NOW() + INTERVAL 24 HOUR ' +
     'WHERE a.softid = ? AND c.card_hash = ? AND c.token = ? AND c.token_expires_at IS NOT NULL ' +
     "AND c.token_expires_at > NOW() AND c.status = 'enabled' AND a.status = 'enabled' " +
-    'AND (c.expires_at IS NULL OR c.expires_at > NOW())',
+    'AND (c.expires_at IS NULL OR c.expires_at > NOW()) ' +
+    "AND l.status = 'active' AND (l.expires_at IS NULL OR l.expires_at > NOW()) " +
+    'AND l.device_id = c.mac AND COALESCE(d.is_blacklisted, 0) = 0',
     [softid, cardHash, hashCardToken(token)]
   );
-  if (upd.affectedRows === 1) return;
+  if (upd.affectedRows > 0) return;
 
   // 慢路径：定位失败原因
   const [rows] = await pool.execute(
     'SELECT c.id, c.token, c.token_expires_at, c.expires_at, c.status, a.status AS app_status, ' +
-    '(c.token_expires_at > NOW()) AS session_valid, (c.expires_at > NOW()) AS card_valid ' +
+    '(c.token_expires_at > NOW()) AS session_valid, (c.expires_at > NOW()) AS card_valid, ' +
+    "l.id AS license_id, l.status AS license_status, l.expires_at AS license_expires_at, (l.expires_at IS NULL OR l.expires_at > NOW()) AS license_valid, " +
+    '(b.id IS NOT NULL AND l.device_id = c.mac) AS binding_valid, COALESCE(d.is_blacklisted, 0) AS device_blacklisted ' +
     'FROM cards c JOIN apps a ON c.app_id = a.id ' +
+    'LEFT JOIN licenses l ON l.card_id = c.id AND l.app_id = c.app_id ' +
+    'LEFT JOIN license_device_bindings b ON b.license_id = l.id AND b.device_id = c.mac AND b.unbound_at IS NULL ' +
+    'LEFT JOIN devices d ON d.device_id = c.mac ' +
     'WHERE a.softid = ? AND c.card_hash = ?',
     [softid, cardHash]
   );
@@ -232,6 +241,7 @@ async function heartbeat(softid, card, token) {
   if (!row.token || row.token !== hashCardToken(token)) throw new Error('-1002');
   if (!row.session_valid) throw new Error('-1002');
   if (row.expires_at && !row.card_valid) throw new Error('-1005');
+  assertLicenseSession(row);
   // 同一秒内重复心跳可能没有实际变更。只诊断，不再按 id 无条件续期：
   // 读取后可能发生登出、踢下线或 token 轮换，所有写入必须保留原子校验。
 }
@@ -263,8 +273,13 @@ async function getExpiry(softid, card, token) {
   const cardHash = cardCrypto.hashCard(card);
   const [rows] = await pool.execute(
     'SELECT c.expires_at, c.token, c.status, a.status AS app_status, ' +
-    '(c.token_expires_at > NOW()) AS session_valid, (c.expires_at > NOW()) AS card_valid ' +
+    '(c.token_expires_at > NOW()) AS session_valid, (c.expires_at > NOW()) AS card_valid, ' +
+    "l.id AS license_id, l.status AS license_status, l.expires_at AS license_expires_at, (l.expires_at IS NULL OR l.expires_at > NOW()) AS license_valid, " +
+    '(b.id IS NOT NULL AND l.device_id = c.mac) AS binding_valid, COALESCE(d.is_blacklisted, 0) AS device_blacklisted ' +
     'FROM cards c JOIN apps a ON c.app_id = a.id ' +
+    'LEFT JOIN licenses l ON l.card_id = c.id AND l.app_id = c.app_id ' +
+    'LEFT JOIN license_device_bindings b ON b.license_id = l.id AND b.device_id = c.mac AND b.unbound_at IS NULL ' +
+    'LEFT JOIN devices d ON d.device_id = c.mac ' +
     'WHERE a.softid = ? AND c.card_hash = ? AND c.is_activated = 1',
     [softid, cardHash]
   );
@@ -275,9 +290,20 @@ async function getExpiry(softid, card, token) {
     throw new Error('-1002'); // 未登录/Token 无效或过期
   }
   if (rows[0].expires_at && !rows[0].card_valid) throw new Error('-1005');
-  const expiresAt = rows[0].expires_at;
+  assertLicenseSession(rows[0]);
+  const expiresAt = rows[0].expires_at && rows[0].license_expires_at
+    ? new Date(Math.min(new Date(rows[0].expires_at).getTime(), new Date(rows[0].license_expires_at).getTime()))
+    : rows[0].expires_at || rows[0].license_expires_at;
   if (!expiresAt) throw new Error('-1004');
   return expiresAt;
+}
+
+function assertLicenseSession(row) {
+  if (!row.license_id) throw new Error('-1002');
+  if (row.license_status === 'expired' || !row.license_valid) throw new Error('-1005');
+  if (row.license_status !== 'active') throw new Error('-1006');
+  if (row.device_blacklisted) throw new Error('-1003');
+  if (!row.binding_valid) throw new Error('-1002');
 }
 
 module.exports = { cardLogin, cardLogout, heartbeat, getExpiry, generateToken, expireTime, hashCardToken };

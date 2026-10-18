@@ -12,6 +12,7 @@ const { heartbeat, cardLogout, getExpiry, hashCardToken } = require('../src/serv
 const token = 'original-token';
 const active = () => ({
   id: 1, token: hashCardToken(token), status: 'enabled', app_status: 'enabled',
+  license_id: 1, license_status: 'active', license_valid: 1, binding_valid: 1, device_blacklisted: 0,
   session_valid: 1, card_valid: 1, expires_at: new Date('2099-01-01')
 });
 
@@ -21,7 +22,13 @@ for (const [name, changes, code] of [
   ['rotated token', { token: hashCardToken('new-token') }, '-1002'],
   ['revoked token', { token: null }, '-1002'],
   ['expired or missing session deadline', { session_valid: 0 }, '-1002'],
-  ['expired card', { card_valid: 0 }, '-1005']
+  ['expired card', { card_valid: 0 }, '-1005'],
+  ['missing license', { license_id: null }, '-1002'],
+  ['banned license', { license_status: 'banned' }, '-1006'],
+  ['suspended license', { license_status: 'suspended' }, '-1006'],
+  ['expired license', { license_valid: 0 }, '-1005'],
+  ['unbound device', { binding_valid: 0 }, '-1002'],
+  ['blacklisted device', { device_blacklisted: 1 }, '-1003']
 ]) {
   test(`heartbeat and expiry reject ${name}`, async (t) => {
     t.mock.method(pool, 'execute', async (sql) => {

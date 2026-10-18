@@ -5,13 +5,13 @@
 ```bash
 git clone --depth 1 https://github.com/SJYssr/auth-system.git
 cd auth-system
-cp .env.docker.example .env   # 修改数据库密码与端口
+cp .env.docker.example .env   # 配置数据库密码、INITIAL_ADMIN_*、CARD_PEPPER、LICENSE_SIGNING_KEY
 docker compose up -d --build
 
 curl --fail http://localhost:3000/health   # {"status":"ok"} 即就绪
 ```
 
-首次启动时 `server/schema.sql` 由 MySQL 官方镜像的初始化机制自动导入（建库、建表、默认超管、错误码字典、API 文档种子数据）。数据持久化在名为 `auth-system_db-data` 的 Docker 卷中。
+首次启动时 `server/schema.sql` 由 MySQL 官方镜像的初始化机制自动导入（建库、建表、错误码字典、API 文档种子数据）。初始管理员由 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` 创建，没有默认密码。数据持久化在名为 `auth-system_db-data` 的 Docker 卷中。
 
 | 服务 | 说明 |
 |---|---|
@@ -56,10 +56,14 @@ server {
 
 同源部署无需为前端单独配置；若前后端分域部署，必须把前端域名加入 `CORS_ORIGINS`。
 
-## 可选环境变量
+## 环境变量
 
 | 变量 | 说明 |
 |---|---|
+| `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` | 首次启动创建管理员，密码至少8位 |
+| `CARD_PEPPER` | 卡密查询与加密的服务端密钥，需持久保存 |
+| `LICENSE_SIGNING_KEY` | 生产必填，Ed25519 PKCS8 DER hex 或 PEM；密钥轮换须同步客户端可信公钥 |
+| `CARD_OFFLINE_HOURS` | 0=只允许在线授权；大于0且不超过24=离线窗口小时数 |
 | `CORS_ORIGINS` | 额外允许跨域的来源（逗号分隔） |
 | `TRUST_PROXY` | 信任的反代层数，默认 `1`；进程直接暴露公网务必设 `false` |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | SMTP 服务（三项 host/user/pass 同时配置后启用邮件功能） |
@@ -78,7 +82,7 @@ server {
 
 1. **备份**（见下节）。
 2. `git pull` 到目标版本（版本记录见 [CHANGELOG](../CHANGELOG.md)）。
-3. **执行 schema 增量段落**：打开 `server/schema.sql` 末尾的「增量升级」注释段落，逐条执行与目标版本相关的语句（`CREATE TABLE IF NOT EXISTS` 等幂等语句可放心执行）。Docker 部署的存量库**不会**自动重跑初始化脚本，增量语句同样需手动执行。
+3. 确认保留 `CARD_PEPPER` / `LICENSE_SIGNING_KEY`，检查 `server/migrations/` 待执行变更。服务启动时自动应用未执行迁移，存量库不会重跑 schema 初始化脚本。
 4. `docker compose up -d --build`（或源码部署则 `npm ci && npm run build` 后重启）。
 5. 访问 `/health` 确认就绪，用管理员账号验证登录与核心流程。
 

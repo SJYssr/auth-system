@@ -48,19 +48,21 @@ async function getInitData(token) {
   }
 
   // 网站配置（任何人可见）
-  const [siteData] = await pool.execute('SELECT * FROM datas WHERE status = ? ORDER BY id LIMIT 1', ['enabled']);
+  const [siteData] = await pool.execute('SELECT id, site_name, site_title, keywords, description, logo_url, favicon_url, login_bg_url, icp_number, contact_email, contact_phone, contact_address, copyright, copyright_since, status FROM datas WHERE status = ? ORDER BY id LIMIT 1', ['enabled']);
 
   // 应用列表和统计仅登录后可见
   let apps = [];
   let stats = { total_apps: 0, total_cards: 0 };
   if (isLoggedIn) {
+    const scope = user.is_superuser === 1 ? '' : ' AND owner_id = ?';
+    const values = user.is_superuser === 1 ? ['enabled'] : ['enabled', user.id];
     const [appRows] = await pool.execute(
-      'SELECT id, app_name, description, icon_url, version, is_free FROM apps WHERE status = ?',
-      ['enabled']
+      'SELECT id, app_name, description, icon_url, version, is_free FROM apps WHERE status = ?' + scope,
+      values
     );
     apps = appRows;
-    const [appCount] = await pool.execute('SELECT COUNT(*) as total FROM apps WHERE status = ?', ['enabled']);
-    const [cardCount] = await pool.execute('SELECT COUNT(*) as total FROM cards');
+    const [appCount] = await pool.execute('SELECT COUNT(*) as total FROM apps WHERE status = ?' + scope, values);
+    const [cardCount] = await pool.execute('SELECT COUNT(*) as total FROM cards' + (user.is_superuser === 1 ? '' : ' WHERE owner_id = ?'), user.is_superuser === 1 ? [] : [user.id]);
     stats = {
       total_apps: appCount[0].total,
       total_cards: cardCount[0].total

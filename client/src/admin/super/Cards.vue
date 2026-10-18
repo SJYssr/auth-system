@@ -165,9 +165,12 @@
         </el-table-column>
         <el-table-column prop="activated_at" label="激活时间" width="160" />
         <el-table-column prop="expires_at" label="过期时间" width="160" />
-        <el-table-column label="操作" width="160">
+        <el-table-column prop="mac" label="绑定设备" min-width="140" show-overflow-tooltip />
+        <el-table-column label="操作" width="310">
           <template #default="{ row }">
             <el-button-group>
+              <el-button size="small" :disabled="!row.is_activated" @click="openDevice(row)">设备</el-button>
+              <el-button type="success" size="small" :disabled="!row.is_activated || row.status !== 'enabled'" @click="openRenewal(row)">续费</el-button>
               <el-button type="primary" size="small" :icon="Edit" @click="handleEdit(row)">编辑</el-button>
               <el-button type="danger" size="small" :icon="Delete" @click="handleDelete(row)">删除</el-button>
             </el-button-group>
@@ -219,7 +222,8 @@
           <span class="form-hint" v-if="!isEdit">1积分 = {{ pointUnit }}</span>
         </el-form-item>
         <el-form-item label="机器码" prop="mac" v-if="isEdit">
-          <el-input v-model="form.mac" placeholder="机器码（可选）" />
+          <el-input v-model="form.mac" placeholder="机器码（可选）" :disabled="!!form.is_activated" />
+          <span class="form-hint" v-if="form.is_activated">请通过列表中的“设备”操作办理换绑。</span>
         </el-form-item>
         <el-form-item label="已登陆次数" prop="login_count" v-if="isEdit">
           <el-input-number v-model="form.login_count" :min="0" disabled placeholder="已登陆次数" />
@@ -260,6 +264,48 @@
         </div>
       </template>
     </el-drawer>
+
+    <el-dialog v-model="renewalVisible" title="卡密续费" width="460px" :close-on-click-modal="!renewalLoading" :show-close="!renewalLoading">
+      <el-form label-width="90px">
+        <el-form-item label="卡密"><span>{{ renewal.card }}</span></el-form-item>
+        <el-form-item label="当前到期"><span>{{ formatTime(renewal.expires_at) }}</span></el-form-item>
+        <el-form-item label="续费天数"><el-input-number v-model="renewal.duration_days" :min="1" :max="3650" :precision="0" :disabled="renewalLoading" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="renewal.remark" maxlength="255" :disabled="renewalLoading" /></el-form-item>
+        <p>未到期从原到期时间延长；已到期从当前时间延长。续费不会解除封禁。</p>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="renewalLoading" @click="renewalVisible = false">取消</el-button>
+        <el-button type="primary" :loading="renewalLoading" @click="submitRenewal">确认续费</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="deviceVisible" title="设备管理" width="720px" :close-on-click-modal="!deviceLoading" :close-on-press-escape="!deviceLoading" :show-close="!deviceLoading">
+      <el-form label-width="90px">
+        <el-form-item label="卡密"><span>{{ deviceForm.card }}</span></el-form-item>
+        <el-form-item label="当前设备"><span>{{ deviceForm.old_device_id || '未绑定，下次登录时绑定设备' }}</span></el-form-item>
+        <el-form-item label="操作">
+          <el-radio-group v-model="deviceForm.mode" :disabled="deviceLoading">
+            <el-radio-button value="rebind">更换设备</el-radio-button>
+            <el-radio-button value="unbind">解除绑定</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="deviceForm.mode === 'rebind'" label="新设备ID">
+          <el-input v-model="deviceForm.new_device_id" maxlength="128" :disabled="deviceLoading" placeholder="输入新设备的软件机器码" />
+        </el-form-item>
+        <p>操作后原在线会话立即失效。解除绑定后，下次成功登录会绑定设备；已离线的设备将在离线授权到期后失效。</p>
+      </el-form>
+      <p>设备操作记录</p>
+      <el-table :data="deviceHistory" v-loading="deviceHistoryLoading" max-height="220" empty-text="暂无操作记录">
+        <el-table-column prop="old_device_id" label="原设备" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="new_device_id" label="新设备" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="reason" label="原因" width="120" />
+        <el-table-column prop="created_at" label="时间" min-width="160" />
+      </el-table>
+      <template #footer>
+        <el-button :disabled="deviceLoading" @click="deviceVisible = false">取消</el-button>
+        <el-button type="primary" :loading="deviceLoading" :disabled="!deviceForm.old_device_id" @click="submitDevice">{{ deviceForm.mode === 'unbind' ? '确认解绑' : '确认换绑' }}</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 生成结果弹窗 -->
     <el-dialog v-model="resultVisible" title="生成卡密" width="500px">
@@ -317,6 +363,66 @@ const formRef = ref(null)
 const selectedRows = ref([])
 const resultVisible = ref(false)
 const resultCards = ref([])
+
+const renewalVisible = ref(false)
+const renewalLoading = ref(false)
+const renewal = reactive({ id: null, card: '', expires_at: '', duration_days: 30, remark: '', request_id: '' })
+const openRenewal = (row) => {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  const requestId = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')
+  Object.assign(renewal, { id: row.id, card: row.card, expires_at: row.expires_at, duration_days: 30, remark: '', request_id: requestId })
+  renewalVisible.value = true
+}
+const submitRenewal = async () => {
+  if (renewalLoading.value) return
+  renewalLoading.value = true
+  try {
+    const response = await superCardService.renew(renewal.id, {
+      duration_days: renewal.duration_days, remark: renewal.remark, request_id: renewal.request_id
+    })
+    ElMessage.success(response.message || '续费成功')
+    renewalVisible.value = false
+    await fetchData()
+  } catch (error) {
+    ElMessage.error(error.message || '续费失败，请重试')
+  } finally { renewalLoading.value = false }
+}
+
+const deviceVisible = ref(false)
+const deviceLoading = ref(false)
+const deviceHistoryLoading = ref(false)
+const deviceHistory = ref([])
+const deviceForm = reactive({ id: null, card: '', old_device_id: '', new_device_id: '', mode: 'rebind' })
+const openDevice = async (row) => {
+  Object.assign(deviceForm, { id: row.id, card: row.card, old_device_id: row.mac || '', new_device_id: '', mode: 'rebind' })
+  deviceHistory.value = []
+  deviceVisible.value = true
+  deviceHistoryLoading.value = true
+  const cardId = row.id
+  try {
+    const response = await superCardService.deviceHistory(cardId)
+    if (deviceForm.id === cardId) deviceHistory.value = response.data || []
+  } catch (error) { ElMessage.error(error.message || '获取操作记录失败') }
+  finally { if (deviceForm.id === cardId) deviceHistoryLoading.value = false }
+}
+const submitDevice = async () => {
+  if (deviceLoading.value) return
+  if (deviceForm.mode === 'rebind' && !deviceForm.new_device_id.trim()) {
+    ElMessage.warning('请输入新设备ID')
+    return
+  }
+  deviceLoading.value = true
+  try {
+    const body = { old_device_id: deviceForm.old_device_id }
+    const response = deviceForm.mode === 'unbind'
+      ? await superCardService.unbind(deviceForm.id, body)
+      : await superCardService.rebind(deviceForm.id, { ...body, new_device_id: deviceForm.new_device_id.trim() })
+    ElMessage.success(response.message)
+    deviceVisible.value = false
+    await fetchData()
+  } catch (error) { ElMessage.error(error.message || '设备操作失败，请刷新后重试') }
+  finally { deviceLoading.value = false }
+}
 
 const form = ref({
   id: null,
@@ -433,6 +539,7 @@ const handleAdd = () => {
 const handleEdit = (row) => {
   form.value = {
     id: row.id,
+    is_activated: row.is_activated,
     app_id: row.app_id,
     count: 1,
     card: row.card || '',

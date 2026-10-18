@@ -6,7 +6,8 @@
   "scripts": {
     "test:api": "node test-api.js",
     "test:flow": "node test-card-flow.js",
-    "test:ui": "node test-public.js && node test-admin.js && node test-admins-page.js && node test-permissions.js"
+    "test:ui": "node test-public.js && node test-admin.js && node test-admins-page.js && node test-permissions.js",
+    "test:commercial": "node run-commercial.js"
   },
   "license": "ISC",
   "type": "commonjs",

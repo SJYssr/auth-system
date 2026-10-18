@@ -34,26 +34,20 @@
 ```bash
 git clone --depth 1 https://github.com/SJYssr/auth-system.git
 cd auth-system
-cp .env.docker.example .env   # 修改数据库密码与端口
+cp .env.docker.example .env   # 配置数据库密码、初始管理员、CARD_PEPPER、LICENSE_SIGNING_KEY
 docker compose up -d --build
 
 curl --fail http://localhost:3000/health   # {"status":"ok"} 即就绪
 ```
 
-打开 `http://localhost:3000`，使用默认超管登录：
-
-| 账号 | 密码 |
-|---|---|
-| `admin` | `Admin@123456` |
-
-**首次登录后立即在后台修改密码**。详细的代理配置、备份恢复、升级与排障见 [docs/deployment.md](docs/deployment.md)。
+打开 `http://localhost:3000`，使用 `.env` 中配置的 `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` 登录。系统不提供默认管理员账号。签名私钥应持久保存，不能每次重启重新生成。详细的代理配置、备份恢复、升级与排障见 [docs/deployment.md](docs/deployment.md)。
 
 ### 方式二：源码部署
 
 环境要求：Node.js ≥ 18、MySQL ≥ 8.0。
 
 ```bash
-# 1. 初始化数据库（含表结构、默认超管、错误码字典等种子数据）
+# 1. 初始化数据库（含表结构、错误码字典等种子数据；初始超管通过环境变量创建）
 #    --default-character-set 必须指定：客户端默认 latin1 时中文会被双重编码入库
 mysql -h <DB_HOST> -u <DB_USER> -p --default-character-set=utf8mb4 < server/schema.sql
 
@@ -65,9 +59,11 @@ npm ci && npm start                 # 默认 3000
 cd client && npm ci && npm run build
 ```
 
-已有旧版库需增量升级时，参照 `server/schema.sql` 末尾的「增量升级」段落手动执行。
+服务启动时自动执行 `server/migrations/` 中未应用的迁移；升级前先备份数据库。
 
 ## 文档导航
+
+- [商业授权落地路线与验收](docs/commercial-readiness.md)：本批已实现能力、独立 MySQL/浏览器验收和未完成的发布条件。
 
 - [部署与升级](docs/deployment.md)：Docker/源码部署、反向代理、备份恢复、升级迁移、排障。
 - [开发指南](docs/development.md)：本地启动、测试体系、代码不变量、新接口 Checklist。
