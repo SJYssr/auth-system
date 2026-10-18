@@ -102,6 +102,11 @@ async function cleanup() {
     r = await j('POST', '/heartbeat', { Softid: softid, Card: c1, Token: token1 });
     record('旧token心跳→-1002', r.data?.errcode === '-1002', `errcode=${r.data?.errcode}`);
 
+    r = await j('POST', '/logout', { Softid: softid, Card: c1, Token: token1 });
+    record('旧token登出→-1002', r.data?.errcode === '-1002');
+    r = await j('POST', '/heartbeat', { Softid: softid, Card: c1, Token: token1b });
+    record('旧token登出不影响新会话', r.data?.result === '1');
+
     // ===== 异设备：-1011 =====
     r = await j('POST', '/login', { Softid: softid, Card: c1, Mac: MAC_B });
     record('异设备登录被拒-1011', r.data?.errcode === '-1011', `errcode=${r.data?.errcode}`);
@@ -127,6 +132,26 @@ async function cleanup() {
     r = await j('POST', '/heartbeat', { Softid: softid, Card: c1, Token: 'bad-token' });
     record('心跳错误token→-1002', r.data?.errcode === '-1002', `errcode=${r.data?.errcode}`);
 
+    // 应用停用后，已签发的会话不能续期或查询；恢复应用后仍可使用。
+    await db.execute("UPDATE apps SET status = 'disabled' WHERE id = ?", [appId]);
+    const [[beforeDisabled]] = await db.execute('SELECT token_expires_at FROM cards WHERE token = ?', [sha256(token2)]);
+    for (const endpoint of ['/heartbeat', '/expiry']) {
+      r = await j('POST', endpoint, { Softid: softid, Card: c1, Token: token2 });
+      record(`应用停用${endpoint}→-1007`, r.data?.errcode === '-1007');
+    }
+    const [[afterDisabled]] = await db.execute('SELECT token_expires_at FROM cards WHERE token = ?', [sha256(token2)]);
+    record('停用应用心跳未写入续期', +beforeDisabled.token_expires_at === +afterDisabled.token_expires_at);
+    await db.execute("UPDATE apps SET status = 'enabled' WHERE id = ?", [appId]);
+
+    await db.execute('UPDATE cards SET token_expires_at = NOW() - INTERVAL 1 SECOND WHERE token = ?', [sha256(token2)]);
+    for (const endpoint of ['/heartbeat', '/expiry']) {
+      r = await j('POST', endpoint, { Softid: softid, Card: c1, Token: token2 });
+      record(`过期会话${endpoint}→-1002`, r.data?.errcode === '-1002');
+    }
+    await db.execute('UPDATE cards SET token_expires_at = NOW() + INTERVAL 24 HOUR WHERE token = ?', [sha256(token2)]);
+    r = await j('POST', '/heartbeat', { Softid: softid, Card: c1, Token: token2 });
+    record('应用恢复后有效会话可续期', r.data?.result === '1');
+
     // ===== 过期卡拦截：expires_at 已过的卡，未过期会话也不能续命（-1005） =====
     r = await j('POST', '/api/admin/cards/batch', { app_id: appId, count: 1, card_type: '天卡', points: 1 }, superAuth);
     const expCard = r.data?.data?.cards?.[0]?.card;
@@ -146,6 +171,8 @@ async function cleanup() {
     record('把测试卡改为已过期', r.data?.success === true, JSON.stringify(r.data).slice(0, 60));
     r = await j('POST', '/heartbeat', { Softid: softid, Card: expCard, Token: expToken });
     record('过期卡心跳→-1005', r.data?.errcode === '-1005', `errcode=${r.data?.errcode}`);
+    r = await j('POST', '/expiry', { Softid: softid, Card: expCard, Token: expToken });
+    record('过期卡到期查询→-1005', r.data?.errcode === '-1005');
     r = await j('POST', '/login', { Softid: softid, Card: expCard, Mac: MAC_A });
     record('过期卡重登→-1005', r.data?.errcode === '-1005', `errcode=${r.data?.errcode}`);
 

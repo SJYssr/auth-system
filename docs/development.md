@@ -82,3 +82,9 @@ CI（GitHub Actions，`.github/workflows/ci.yml`）：每次 push/PR 自动起 M
 - [ ] 写操作记录审计日志（`logService.log`），敏感字段自动脱敏
 - [ ] 涉及归属的资源过 `ensureOwner`；列表查询为非超管注入 `owner_id` 过滤
 - [ ] 为核心链路补充 `test-card-flow.js` 或 `test-api.js` 断言
+
+## 卡密会话回归约定
+
+`/heartbeat` 与 `/expiry` 均要求应用和卡密启用、Token 匹配且会话未过期；应用停用返回 `-1007`、卡密停用返回 `-1006`、会话失效返回 `-1002`、卡密到期返回 `-1005`。`/logout` 仅清除请求 Token 对应的当前会话，旧 Token 不得清除并发重新登录产生的新会话。
+
+`server/test/card-session.test.js` 覆盖会话状态及读写间 Token 轮换；`e2e-test/test-card-flow.js` 使用实际 MySQL 和 HTTP 验证停用、到期、Token 轮换与恢复链路。心跳失败后的诊断读取不得追加仅按卡密 ID 的无条件续期写入。
