@@ -211,7 +211,7 @@ async function heartbeat(softid, card, token) {
     'UPDATE cards c JOIN apps a ON c.app_id = a.id ' +
     'SET c.token_expires_at = NOW() + INTERVAL 24 HOUR ' +
     'WHERE a.softid = ? AND c.card_hash = ? AND c.token = ? AND c.token_expires_at IS NOT NULL ' +
-    "AND c.token_expires_at > NOW() AND c.status = 'enabled' " +
+    "AND c.token_expires_at > NOW() AND c.status = 'enabled' AND a.status = 'enabled' " +
     'AND (c.expires_at IS NULL OR c.expires_at > NOW())',
     [softid, cardHash, hashCardToken(token)]
   );
@@ -219,20 +219,21 @@ async function heartbeat(softid, card, token) {
 
   // 慢路径：定位失败原因
   const [rows] = await pool.execute(
-    'SELECT c.id, c.token, c.token_expires_at, c.expires_at, c.status FROM cards c JOIN apps a ON c.app_id = a.id ' +
+    'SELECT c.id, c.token, c.token_expires_at, c.expires_at, c.status, a.status AS app_status, ' +
+    '(c.token_expires_at > NOW()) AS session_valid, (c.expires_at > NOW()) AS card_valid ' +
+    'FROM cards c JOIN apps a ON c.app_id = a.id ' +
     'WHERE a.softid = ? AND c.card_hash = ?',
     [softid, cardHash]
   );
   if (rows.length === 0) throw new Error('-1004');
   const row = rows[0];
+  if (row.app_status !== 'enabled') throw new Error('-1007');
   if (row.status !== 'enabled') throw new Error('-1006');
   if (!row.token || row.token !== hashCardToken(token)) throw new Error('-1002');
-  if (!row.token_expires_at || new Date(row.token_expires_at) < new Date()) throw new Error('-1002');
-  if (row.expires_at && new Date(row.expires_at) < new Date()) throw new Error('-1005');
-  await pool.execute(
-    'UPDATE cards SET token_expires_at = NOW() + INTERVAL 24 HOUR WHERE id = ?',
-    [row.id]
-  );
+  if (!row.session_valid) throw new Error('-1002');
+  if (row.expires_at && !row.card_valid) throw new Error('-1005');
+  // 同一秒内重复心跳可能没有实际变更。只诊断，不再按 id 无条件续期：
+  // 读取后可能发生登出、踢下线或 token 轮换，所有写入必须保留原子校验。
 }
 
 /**
@@ -247,7 +248,12 @@ async function cardLogout(softid, card, token) {
   );
   if (rows.length === 0) throw new Error('-1004');
   if (!rows[0].token || rows[0].token !== hashCardToken(token)) throw new Error('-1002');
-  await pool.execute('UPDATE cards SET token = NULL, token_expires_at = NULL WHERE id = ?', [rows[0].id]);
+  // 与登录轮换串行竞争行锁；旧请求不得清除读取之后签发的新会话。
+  const [result] = await pool.execute(
+    'UPDATE cards SET token = NULL, token_expires_at = NULL WHERE id = ? AND token = ?',
+    [rows[0].id, hashCardToken(token)]
+  );
+  if (result.affectedRows !== 1) throw new Error('-1002');
 }
 
 /**
@@ -256,12 +262,19 @@ async function cardLogout(softid, card, token) {
 async function getExpiry(softid, card, token) {
   const cardHash = cardCrypto.hashCard(card);
   const [rows] = await pool.execute(
-    'SELECT c.expires_at, c.token FROM cards c JOIN apps a ON c.app_id = a.id ' +
+    'SELECT c.expires_at, c.token, c.status, a.status AS app_status, ' +
+    '(c.token_expires_at > NOW()) AS session_valid, (c.expires_at > NOW()) AS card_valid ' +
+    'FROM cards c JOIN apps a ON c.app_id = a.id ' +
     'WHERE a.softid = ? AND c.card_hash = ? AND c.is_activated = 1',
     [softid, cardHash]
   );
   if (rows.length === 0) throw new Error('-1004');
-  if (!rows[0].token || rows[0].token !== hashCardToken(token)) throw new Error('-1002'); // 未登录/Token无效
+  if (rows[0].app_status !== 'enabled') throw new Error('-1007');
+  if (rows[0].status !== 'enabled') throw new Error('-1006');
+  if (!rows[0].token || rows[0].token !== hashCardToken(token) || !rows[0].session_valid) {
+    throw new Error('-1002'); // 未登录/Token 无效或过期
+  }
+  if (rows[0].expires_at && !rows[0].card_valid) throw new Error('-1005');
   const expiresAt = rows[0].expires_at;
   if (!expiresAt) throw new Error('-1004');
   return expiresAt;
