@@ -74,7 +74,9 @@
         </el-table-column>
         <el-table-column prop="version" label="版本号" width="100" />
         <el-table-column prop="developer" label="开发者" width="100" />
-        <el-table-column prop="created_at" label="创建时间" width="160" />
+        <el-table-column label="创建时间" width="210">
+          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="80">
           <template #default="{ row }">
             <el-tag :type="row.status === 'enabled' ? 'success' : 'info'">
@@ -227,6 +229,8 @@
 
 <script setup>
 // 导入
+import { formatDateTime } from '@/utils/datetime'
+
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'

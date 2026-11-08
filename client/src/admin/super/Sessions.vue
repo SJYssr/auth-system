@@ -34,10 +34,10 @@
         <el-table-column prop="last_login_ip" label="登录IP" width="130">
           <template #default="{ row }">{{ row.last_login_ip || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="last_login_time" label="最后登录" width="170">
+        <el-table-column prop="last_login_time" label="最后登录" width="210">
           <template #default="{ row }">{{ formatTime(row.last_login_time) }}</template>
         </el-table-column>
-        <el-table-column prop="token_expires_at" label="会话到期" width="170">
+        <el-table-column prop="token_expires_at" label="会话到期" width="210">
           <template #default="{ row }">{{ formatTime(row.token_expires_at) }}</template>
         </el-table-column>
         <el-table-column prop="login_count" label="登录次数" width="90" align="center" />
@@ -62,24 +62,21 @@
 </template>
 
 <script setup>
+import { formatDateTime } from '@/utils/datetime'
+
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { superSessionService, superAppService } from '@/utils/service'
+
+// 统一时间格式：2026年11月08日 19:20:04（见 utils/datetime.js）
+const formatTime = formatDateTime
 
 const sessions = ref([])
 const tableLoading = ref(true)
 const appOptions = ref([])
 const searchForm = reactive({ keyword: '', app_id: null })
 const pagination = ref({ page: 1, per_page: 20, total_records: 0 })
-
-const formatTime = (input) => {
-  if (!input) return '-'
-  const date = new Date(input)
-  if (isNaN(date.getTime())) return String(input)
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-}
 
 const fetchSessions = async () => {
   try {

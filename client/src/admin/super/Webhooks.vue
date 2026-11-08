@@ -27,7 +27,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="170">
+        <el-table-column prop="created_at" label="创建时间" width="210">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="290" fixed="right">
@@ -102,10 +102,10 @@
         <el-table-column prop="last_error" label="最后错误" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ row.last_error || '-' }}</template>
         </el-table-column>
-        <el-table-column label="创建时间" width="160">
+        <el-table-column label="创建时间" width="210">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="成功时间" width="160">
+        <el-table-column label="成功时间" width="210">
           <template #default="{ row }">{{ row.delivered_at ? formatTime(row.delivered_at) : '-' }}</template>
         </el-table-column>
         <el-table-column label="操作" width="90" fixed="right">
@@ -126,10 +126,15 @@
 </template>
 
 <script setup>
+import { formatDateTime } from '@/utils/datetime'
+
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { superWebhookService, superAppService } from '@/utils/service'
+
+// 统一时间格式：2026年11月08日 19:20:04（见 utils/datetime.js）
+const formatTime = formatDateTime
 
 const allEvents = ['card.activated', 'card.disabled', 'card.enabled', 'card.deleted']
 
@@ -144,14 +149,6 @@ const form = reactive({ id: null, app_id: null, url: '', events: [], secret: '',
 
 const parseEvents = (json) => {
   try { return JSON.parse(json || '[]') } catch { return [] }
-}
-
-const formatTime = (input) => {
-  if (!input) return '-'
-  const d = new Date(input)
-  if (isNaN(d.getTime())) return String(input)
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 const fetchList = async () => {

@@ -15,6 +15,13 @@
 - **备份脚本去 shell 拼接**：`mysqldump` / `gzip` 改为 `spawn` + 参数数组，口令走 `MYSQL_PWD` 环境变量（不再出现在命令行/`ps`），备份文件 `0600`、目录 `0700`；恢复演练改为流式统计表数。
 - **限流存储 fail-open 升级告警**：连续 3 次不可用时输出 `[SECURITY ALERT]`，避免"DB 抖动 → 限流失效 → 被爆破"全程静默。
 
+### 修复（时间展示统一）
+
+- **全站时间统一为 `2026年11月08日 19:20:04`**：新增 `client/src/utils/datetime.js`（`formatDateTime` / `formatDate` / `parseDateTime`），删除 6 处各自重复的本地 formatter（卡密、版本、会话、Webhook、仪表盘、管理员、文档面板），列表列、详情弹窗、日志详情、CSV 导出全部走同一格式。
+- **时区解析统一**：后端 ISO 字符串按 UTC 换算本地时区；`YYYY-MM-DD HH:mm:ss` 形式按本地时间解析（旧版 Safari 直接 `new Date()` 会得到 Invalid Date），并校验 13 月/99 日这类非法值不再被顺延成别的日期。
+- **日期选择器显示格式**同步为 `YYYY年MM月DD日 HH:mm:ss`（`value-format` 仍保留 `YYYY-MM-DD HH:mm:ss` 供后端消费）。
+- 顺带修掉 `isExpired` 的判断：统一走 `parseDateTime`，避免 Safari 下过期卡密判定失效；CSV 文件名改用本地日期（原先 `toISOString()` 在凌晨 0-8 点会差一天）。
+
 ### 修复（后台列表页）
 
 - **卡密管理 / 版本管理未选应用时永久转圈**：`useListPage` 的 `loading` 初值由 `true` 改为 `false`，页面挂载时无条件走一次数据流（未选应用由 fetcher 直接返回空集），空态正常显示「请选择应用」。

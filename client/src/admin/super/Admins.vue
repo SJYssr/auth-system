@@ -28,7 +28,7 @@
             <span v-if="row.is_superuser === 1" style="color:#909399">永不过期</span>
             <span v-else-if="!row.expires_at" style="color:#909399">未设置</span>
             <el-tag v-else :type="isExpired(row.expires_at) ? 'danger' : 'success'" size="small">
-              {{ row.expires_at }}
+              {{ formatTime(row.expires_at) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -50,7 +50,9 @@
             </template>
           </template>
         </el-table-column>
-        <el-table-column prop="last_login" label="最后登录" width="170" />
+        <el-table-column label="最后登录" width="210">
+          <template #default="{ row }">{{ formatTime(row.last_login) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="450" fixed="right">
           <template #default="{ row }">
             <el-button-group>
@@ -99,7 +101,7 @@
               v-model="form.expires_at"
               type="datetime"
               placeholder="留空表示永不到期"
-              format="YYYY-MM-DD HH:mm:ss"
+              format="YYYY年MM月DD日 HH:mm:ss"
               value-format="YYYY-MM-DD HH:mm:ss"
               style="width:100%"
             />
@@ -131,7 +133,7 @@
             v-model="limitsForm.expires_at"
             type="datetime"
             placeholder="留空表示永不到期"
-            format="YYYY-MM-DD HH:mm:ss"
+            format="YYYY年MM月DD日 HH:mm:ss"
             value-format="YYYY-MM-DD HH:mm:ss"
             style="width:100%"
             clearable
@@ -252,7 +254,7 @@
         </el-form-item>
         <el-form-item label="当前到期">
           <span v-if="renewForm.current_expires" :style="{color: isExpired(renewForm.current_expires) ? '#f56c6c' : '#67c23a'}">
-            {{ renewForm.current_expires }}
+            {{ formatTime(renewForm.current_expires) }}
           </span>
           <span v-else style="color:#909399">未设置</span>
         </el-form-item>
@@ -279,10 +281,15 @@
 </template>
 
 <script setup>
+import { formatDateTime, parseDateTime } from '@/utils/datetime'
+
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import { superAdminService, publicInitService } from '@/utils/service'
+
+// 统一时间格式：2026年11月08日 19:20:04（见 utils/datetime.js）
+const formatTime = formatDateTime
 
 const list = ref([])
 const loading = ref(false)
@@ -353,16 +360,11 @@ const renewForm = reactive({
 
 /** 判断是否已过期 */
 function isExpired(dateStr) {
-  if (!dateStr) return false
-  return new Date(dateStr) < new Date()
+  const expires = parseDateTime(dateStr)
+  return expires ? expires < new Date() : false
 }
 
 /** 格式化时间 */
-function formatTime(dateStr) {
-  if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN', { hour12: false })
-}
-
 const fetchList = async () => {
   try {
     loading.value = true

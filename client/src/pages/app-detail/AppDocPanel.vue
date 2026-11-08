@@ -4,7 +4,7 @@
       <header class="doc-header">
         <h2 class="doc-title">{{ doc.title }}</h2>
         <div class="doc-meta">
-          <span class="meta-tag">最后更新：{{ formatDate(doc.created_at) }}</span>
+          <span class="meta-tag">最后更新：{{ formatDateTime(doc.created_at) }}</span>
         </div>
       </header>
       <div class="doc-body" v-html="safeContent"></div>
@@ -18,6 +18,7 @@
 </template>
 
 <script setup>
+import { formatDateTime } from '@/utils/datetime'
 import { computed } from 'vue'
 import DOMPurify from 'dompurify'
 
@@ -40,17 +41,6 @@ const sanitize = (html) => {
 // v-html 内容不经过 Vue 编译器，必须在渲染前消毒（服务端保存时已消毒，此处双保险）
 const safeContent = computed(() => sanitize(props.doc?.content))
 
-const formatDate = (dateString) => {
-  if (!dateString) return ''
-  const date = new Date(dateString)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 </script>
 
 <style scoped>

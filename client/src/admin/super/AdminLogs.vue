@@ -56,6 +56,7 @@
           range-separator="至"
           start-placeholder="开始日期"
           end-placeholder="结束日期"
+          format="YYYY年MM月DD日"
           value-format="YYYY-MM-DD"
           style="width: 240px; margin-right: 10px;"
           @change="handleDateChange"
@@ -101,7 +102,9 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="时间" width="160" />
+        <el-table-column label="时间" width="210">
+          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="80">
           <template #default="{ row }">
             <el-button type="primary" size="small" text @click="showLogDetail(row)">
@@ -173,7 +176,7 @@
         </div>
         <div class="detail-row">
           <span class="detail-label">时间：</span>
-          <span class="detail-value">{{ selectedLog.created_at }}</span>
+          <span class="detail-value">{{ formatDateTime(selectedLog.created_at) }}</span>
         </div>
         <div v-if="selectedLog.details" class="detail-row">
           <span class="detail-label">详细信息：</span>
@@ -223,6 +226,8 @@
 </template>
 
 <script setup>
+import { formatDateTime } from '@/utils/datetime'
+
 import { ref, computed, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Delete, Refresh } from '@element-plus/icons-vue'

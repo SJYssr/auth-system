@@ -138,6 +138,8 @@
 </template>
 
 <script setup>
+import { formatDateTime } from '@/utils/datetime'
+
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 // 按需引入 ECharts（仪表盘只用柱状图），避免全量打包拖大主 chunk
 import { init as echartsInit, use } from 'echarts/core'
@@ -148,6 +150,9 @@ import { CanvasRenderer } from 'echarts/renderers'
 use([BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 import { useBusinessStore } from '@/stores/modules/business'
+
+// 统一时间格式：2026年11月08日 19:20:04（见 utils/datetime.js）
+const formatTime = formatDateTime
 
 // store
 const businessStore = useBusinessStore()
@@ -178,24 +183,6 @@ const recentLogins = computed(() => {
 })
 
 // time formatter
-function formatTime(input) {
-  if (!input) return ''
-  try {
-    const normalized = String(input).replace(/-/g, '/').replace('T', ' ').replace(/\.\d+Z?$/, '')
-    const date = new Date(normalized)
-    if (isNaN(date.getTime())) return String(input)
-    const y = date.getFullYear()
-    const m = String(date.getMonth() + 1).padStart(2, '0')
-    const d = String(date.getDate()).padStart(2, '0')
-    const hh = String(date.getHours()).padStart(2, '0')
-    const mm = String(date.getMinutes()).padStart(2, '0')
-    const ss = String(date.getSeconds()).padStart(2, '0')
-    return `${y}-${m}-${d} ${hh}:${mm}:${ss}`
-  } catch (e) {
-    return String(input)
-  }
-}
-
 // init charts
 const initBarChart = () => {
   if (!barChart.value) return

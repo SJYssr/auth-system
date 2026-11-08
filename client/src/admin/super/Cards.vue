@@ -163,8 +163,12 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="activated_at" label="激活时间" width="160" />
-        <el-table-column prop="expires_at" label="过期时间" width="160" />
+        <el-table-column label="激活时间" width="210">
+          <template #default="{ row }">{{ formatTime(row.activated_at) }}</template>
+        </el-table-column>
+        <el-table-column label="过期时间" width="210">
+          <template #default="{ row }">{{ formatTime(row.expires_at) }}</template>
+        </el-table-column>
         <el-table-column prop="mac" label="绑定设备" min-width="140" show-overflow-tooltip />
         <el-table-column label="操作" width="310">
           <template #default="{ row }">
@@ -239,7 +243,7 @@
         </el-form-item>
         <el-form-item label="到期时间" prop="expires_at" v-if="isEdit">
           <el-date-picker v-model="form.expires_at" type="datetime" placeholder="选择到期时间（可选）"
-            format="YYYY-MM-DD HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%;" />
+            format="YYYY年MM月DD日 HH:mm:ss" value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%;" />
         </el-form-item>
         <el-form-item label="上次登陆时间" prop="last_login_time" v-if="isEdit">
           <el-input :model-value="formatTime(form.last_login_time)" disabled placeholder="上次登陆时间" />
@@ -299,7 +303,9 @@
         <el-table-column prop="old_device_id" label="原设备" min-width="140" show-overflow-tooltip />
         <el-table-column prop="new_device_id" label="新设备" min-width="140" show-overflow-tooltip />
         <el-table-column prop="reason" label="原因" width="120" />
-        <el-table-column prop="created_at" label="时间" min-width="160" />
+        <el-table-column label="时间" min-width="210">
+          <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+        </el-table-column>
       </el-table>
       <template #footer>
         <el-button :disabled="deviceLoading" @click="deviceVisible = false">取消</el-button>
@@ -322,6 +328,8 @@
 </template>
 
 <script setup>
+import { formatDateTime, parseDateTime } from '@/utils/datetime'
+
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -329,6 +337,9 @@ import { Search, Plus, Edit, Delete, Refresh, ArrowLeft, Check, Download } from 
 import { useBusinessStore } from '@/stores/modules/business'
 import { useListPage } from '@/composables/useListPage'
 import { superCardService } from '@/utils/service'
+
+// 统一时间格式：2026年11月08日 19:20:04（见 utils/datetime.js）
+const formatTime = formatDateTime
 
 const router = useRouter()
 const route = useRoute()
@@ -450,22 +461,6 @@ const rules = {
   points: [{ required: true, message: '请输入积分数量', trigger: 'blur' }]
 }
 
-const formatTime = (input) => {
-  if (!input) return ''
-  try {
-    const s = String(input).replace(/-/g, '/').replace('T', ' ').replace(/\.\d+Z?$/, '')
-    const d = new Date(s)
-    if (isNaN(d.getTime())) return String(input)
-    const y = d.getFullYear()
-    const m = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    const hh = String(d.getHours()).padStart(2, '0')
-    const mm = String(d.getMinutes()).padStart(2, '0')
-    const ss = String(d.getSeconds()).padStart(2, '0')
-    return `${y}-${m}-${day} ${hh}:${mm}:${ss}`
-  } catch { return String(input) }
-}
-
 const pointUnit = computed(() => {
   const map = { '小时卡': '1小时', '天卡': '1天', '周卡': '1周', '月卡': '1月', '年卡': '1年' }
   return map[form.value.card_type] || ''
@@ -478,8 +473,8 @@ const cardTypeColor = (type) => {
 }
 
 const isExpired = (row) => {
-  if (!row.expires_at) return false
-  return new Date(row.expires_at) < new Date()
+  const expires = parseDateTime(row.expires_at)
+  return expires ? expires < new Date() : false
 }
 
 const goBack = () => {
@@ -712,13 +707,16 @@ const handleExport = () => {
     csv.push([
       r.id, r.card || '', r.app_name || '', r.card_type || '',
       r.points || 0, r.card_remark || '', r.is_activated ? '已激活' : '未激活',
-      r.status === 'enabled' ? '启用' : '禁用', r.expires_at || '', r.created_at || ''
+      r.status === 'enabled' ? '启用' : '禁用', formatTime(r.expires_at, ''), formatTime(r.created_at, '')
     ].map(sanitizeCsvCell).join(','))
   })
   const blob = new Blob(['﻿' + csv.join('\n')], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
-  link.download = '卡密导出_' + new Date().toISOString().slice(0, 10) + '.csv'
+  // 用本地日期而不是 toISOString()：UTC 日期在凌晨 0-8 点会差一天
+  const now = new Date()
+  const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  link.download = '卡密导出_' + stamp + '.csv'
   link.click()
   ElMessage.success('导出成功')
 }
