@@ -191,8 +191,8 @@ const initBarChart = () => {
   if (!barChartInstance) barChartInstance = echartsInit(barChart.value)
   const option = {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    legend: { data: cardTypes },
-    grid: { top: '15%', left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    legend: { data: cardTypes, top: 0, itemHeight: 8, itemWidth: 12, textStyle: { fontSize: 12 } },
+    grid: { top: '22%', left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: { type: 'category', data: x, axisTick: { alignWithLabel: true } },
     yAxis: { type: 'value', minInterval: 1 },
     series: cardTypes.map((ct, i) => ({
@@ -215,8 +215,8 @@ const initRevenueChart = () => {
   if (!lineChartInstance) lineChartInstance = echartsInit(lineChart.value)
   const option = {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    legend: { data: cardTypes },
-    grid: { top: '15%', left: '3%', right: '4%', bottom: '3%', containLabel: true },
+    legend: { data: cardTypes, top: 0, itemHeight: 8, itemWidth: 12, textStyle: { fontSize: 12 } },
+    grid: { top: '22%', left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: { type: 'category', data: x, axisTick: { alignWithLabel: true } },
     yAxis: { type: 'value', name: '收入(元)', minInterval: 1 },
     series: cardTypes.map((ct, i) => ({
