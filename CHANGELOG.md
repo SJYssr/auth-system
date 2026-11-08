@@ -2,6 +2,24 @@
 
 所有对外可见的变更都记录在本文件。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### 安全（上线前阻断项修复）
+
+- **移除 `GET /api/setup`**：该接口在 `admins` 表为空时会向匿名请求返回超管创建凭据，等于给了任何人接管机会。现在唯一入口是带外口令 `POST /api/setup`（校验服务端 `SETUP_TOKEN`，恒定时间比较，未配置即整体关闭），并在事务内 `SELECT COUNT(*) ... FOR UPDATE` 防并发抢注。
+- **卡密明文不再落库**：`cards.card` 列改为恒为 NULL（迁移 `014_null_card_plaintext.sql`），创建/查询/展示全部改走 `card_hash`(HMAC) + `card_ciphertext`(AES-256-GCM)；列表搜索改为整卡 HMAC 精确匹配 + 后四位后缀模糊匹配；操作日志 `target_name` 只记掩码。
+- **验证码只存摘要**：`captchas.captcha_code` 改为 HMAC-SHA256 摘要（迁移 `015_captcha_hash.sql`），校验用 `timingSafeEqual`，存量验证码作废。
+- **依赖漏洞清零（生产依赖）**：`express` 升 4.22.3（修复 `qs` DoS）、`sanitize-html` 与 `dompurify` 升级（修复 XSS 绕过）、`nodemailer` 升 10.4.0；`client` 侧 `vite`/`rollup`/`follow-redirects`/`vitest` 同步升级。`npm audit --omit=dev` 现为 0 漏洞。
+- **`TRUST_PROXY` 默认改为 `false`**（失败关闭）：未显式声明代理拓扑时不再信任 `X-Forwarded-For`，按 IP 的登录防爆破限流无法被伪造头绕过；反代部署需显式设 `TRUST_PROXY=1`。
+- **`/metrics` 加鉴权**：配置 `METRICS_TOKEN` 时要求 Bearer；未配置时只允许回环地址访问。
+- **备份脚本去 shell 拼接**：`mysqldump` / `gzip` 改为 `spawn` + 参数数组，口令走 `MYSQL_PWD` 环境变量（不再出现在命令行/`ps`），备份文件 `0600`、目录 `0700`；恢复演练改为流式统计表数。
+- **限流存储 fail-open 升级告警**：连续 3 次不可用时输出 `[SECURITY ALERT]`，避免"DB 抖动 → 限流失效 → 被爆破"全程静默。
+
+### 升级说明
+
+- 升级到本版本后首次启动会自动执行 014 / 015 两个迁移：清空 `cards.card` 明文、作废存量验证码（用户重新点一次验证码即可）。无需停机，但建议先跑一次备份。
+- 若此前依赖 `/api/setup` 引导页初始化，请改用 `INITIAL_ADMIN_*` 环境变量，或配置 `SETUP_TOKEN` 后 `curl -X POST /api/setup`。
+
 ## [1.2.0] - 2026-09-20
 
 ### 新增

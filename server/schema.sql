@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS apps (
 CREATE TABLE IF NOT EXISTS cards (
     id INT AUTO_INCREMENT PRIMARY KEY,
     app_id INT NOT NULL,
-    card VARCHAR(128) NULL COMMENT '卡密明文（存量兼容，迁移后逐步废弃）',
+    card VARCHAR(128) NULL COMMENT '已废弃：明文卡号不再写入（014 迁移起恒为 NULL），仅保留列以兼容旧库',
     card_hash CHAR(64) NULL COMMENT 'HMAC-SHA256(pepper, card)，用于登录查询',
     card_ciphertext TEXT NULL COMMENT 'AES-256-GCM 密文，用于后台可逆展示',
     card_suffix VARCHAR(8) NULL COMMENT '后4位，用于列表显示 ****MNOP',
@@ -257,7 +257,7 @@ CREATE TABLE IF NOT EXISTS rate_limits (
 -- 图形验证码存储（多实例部署共享，替代进程内存）
 CREATE TABLE IF NOT EXISTS captchas (
     captcha_key CHAR(36) PRIMARY KEY,
-    captcha_code VARCHAR(16) NOT NULL,
+    captcha_code VARCHAR(64) NOT NULL COMMENT '验证码 HMAC-SHA256 摘要（不再存明文）',
     expires_at DATETIME NOT NULL,
     INDEX idx_captcha_expiry (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -281,7 +281,7 @@ CREATE TABLE IF NOT EXISTS admin_plans (
 
 -- 不再在 schema.sql 中创建默认管理员账号。
 -- 首次启动时通过 INITIAL_ADMIN_USERNAME / INITIAL_ADMIN_PASSWORD / INITIAL_ADMIN_EMAIL
--- 环境变量注入，或通过 /api/setup 引导页创建第一个超级管理员。
+-- 环境变量注入，或配置 SETUP_TOKEN 后调 POST /api/setup 创建第一个超级管理员。
 -- 参见 src/utils/bootstrap.js
 
 INSERT IGNORE INTO datas (id, site_name, site_title, keywords, description, logo_url, favicon_url, icp_number, contact_email, contact_phone, contact_address, copyright, copyright_since, status)

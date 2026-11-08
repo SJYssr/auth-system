@@ -65,7 +65,9 @@ server {
 | `LICENSE_SIGNING_KEY` | 生产必填，Ed25519 PKCS8 DER hex 或 PEM；密钥轮换须同步客户端可信公钥 |
 | `CARD_OFFLINE_HOURS` | 0=只允许在线授权；大于0且不超过24=离线窗口小时数 |
 | `CORS_ORIGINS` | 额外允许跨域的来源（逗号分隔） |
-| `TRUST_PROXY` | 信任的反代层数，默认 `1`；进程直接暴露公网务必设 `false` |
+| `TRUST_PROXY` | 信任的反代层数，默认 `false`（失败关闭）；部署在单层 OpenResty/Nginx 之后请设 `1`，否则按 IP 限流会把所有请求看成同一个内网地址 |
+| `METRICS_TOKEN` | `/metrics` 的 Bearer token；未配置时仅允许回环地址访问 |
+| `SETUP_TOKEN` | 首次初始化的带外口令；未配置时 `POST /api/setup` 整体关闭 |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | SMTP 服务（三项 host/user/pass 同时配置后启用邮件功能） |
 | `SMTP_FROM` / `SMTP_SECURE` | 发件人（默认 SMTP_USER）；是否隐式 TLS（默认按端口 465 判断） |
 | `ADMIN_EXPIRY_REMIND_DAYS` | 管理员到期前 N 天开始邮件提醒，默认 7，每 24 小时至多一次 |

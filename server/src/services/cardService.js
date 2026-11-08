@@ -32,19 +32,20 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
   const CHUNK = 50; // 单条语句批量插入的行数
   let attempts = 0;
   const maxAttempts = count * 3 + 3;
-  const INSERT_COLUMNS = 'app_id, card, card_hash, card_ciphertext, card_suffix, card_type, price, points, card_remark, owner_id';
+  // 明文卡号不再落库：只写 HMAC 索引 / AES-GCM 密文 / 后四位后缀
+  const INSERT_COLUMNS = 'app_id, card_hash, card_ciphertext, card_suffix, card_type, price, points, card_remark, owner_id';
 
   while (cards.length < count && attempts < maxAttempts) {
     attempts++;
     const codes = Array.from({ length: Math.min(count - cards.length, CHUNK) }, () => generateCardCode(prefix));
     const values = codes.flatMap(code => [
-      appId, code, cardCrypto.hashCard(code), cardCrypto.encryptCard(code), cardCrypto.cardSuffix(code),
+      appId, cardCrypto.hashCard(code), cardCrypto.encryptCard(code), cardCrypto.cardSuffix(code),
       cardType, price, points, remark || null, ownerId
     ]);
     try {
       // 多行 INSERT：100 张卡从 100 次往返降为 2 次
       await conn.execute(
-        `INSERT INTO cards (${INSERT_COLUMNS}) VALUES ${codes.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+        `INSERT INTO cards (${INSERT_COLUMNS}) VALUES ${codes.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
         values
       );
       cards.push(...codes);
@@ -54,8 +55,8 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
       for (const code of codes) {
         try {
           await conn.execute(
-            `INSERT INTO cards (${INSERT_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [appId, code, cardCrypto.hashCard(code), cardCrypto.encryptCard(code), cardCrypto.cardSuffix(code),
+            `INSERT INTO cards (${INSERT_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [appId, cardCrypto.hashCard(code), cardCrypto.encryptCard(code), cardCrypto.cardSuffix(code),
              cardType, price, points, remark || null, ownerId]
           );
           cards.push(code);
@@ -70,9 +71,24 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
 
 /** 卡密列表/详情返回的字段：不回 SELECT *，剔除会话凭据 token / token_expires_at，
  *  避免后台接口把客户端的活跃会话凭据下发到前端 */
-const CARD_FIELDS = 'c.id, c.app_id, c.card, c.card_hash, c.card_ciphertext, c.card_suffix, c.card_type, c.price, c.points, c.card_remark, c.status, ' +
+const CARD_FIELDS = 'c.id, c.app_id, c.card_ciphertext, c.card_suffix, c.card_type, c.price, c.points, c.card_remark, c.status, ' +
   'c.is_activated, c.activated_at, c.expires_at, c.mac, c.login_count, c.activation_ip, ' +
   'c.last_login_time, c.last_login_ip, c.version, c.owner_id, c.created_at, c.updated_at';
+
+/** 单值解密（容错：密文损坏或 Pepper 轮换时返回 null） */
+function safeDecrypt(ciphertext) {
+  try { return cardCrypto.decryptCard(ciphertext); } catch (err) { return null; }
+}
+
+/** 把密文列解密为 card 字段下发，并剔除密文（前端不需要，也不该拿到密文） */
+function decorateCard(row) {
+  if (!row) return row;
+  const { card_ciphertext, ...rest } = row;
+  let card = null;
+  // Pepper 轮换或密文损坏时不影响列表可用性，仅该行 card 为空
+  try { card = cardCrypto.decryptCard(card_ciphertext); } catch (err) { /* 保持 null */ }
+  return { ...rest, card, card_masked: card ? cardCrypto.maskCard(card) : '' };
+}
 
 /** 卡密列表（分页），支持 app_id / card / card_remark / status / card_type / is_activated / is_expired 过滤 */
 async function getList(filters = {}, page = 1, pageSize = 20) {
@@ -80,7 +96,11 @@ async function getList(filters = {}, page = 1, pageSize = 20) {
   const values = [];
 
   if (filters.app_id) { conds.push('c.app_id = ?'); values.push(filters.app_id); }
-  if (filters.card) { conds.push('c.card LIKE ?'); values.push(`%${escapeLike(filters.card)}%`); }
+  // 明文列已废弃：整卡精确匹配走 HMAC 索引，其余按后四位后缀模糊匹配
+  if (filters.card) {
+    conds.push('(c.card_hash = ? OR c.card_suffix LIKE ?)');
+    values.push(cardCrypto.hashCard(filters.card), `%${escapeLike(filters.card)}%`);
+  }
   if (filters.card_remark) { conds.push('c.card_remark LIKE ?'); values.push(`%${escapeLike(filters.card_remark)}%`); }
   if (filters.status) { conds.push('c.status = ?'); values.push(filters.status); }
   if (filters.card_type) { conds.push('c.card_type = ?'); values.push(filters.card_type); }
@@ -99,7 +119,7 @@ async function getList(filters = {}, page = 1, pageSize = 20) {
   );
   const [countRes] = await pool.execute(`SELECT COUNT(*) as total FROM cards c${whereSql}`, values);
 
-  return { rows, pagination: { page, pageSize, total: countRes[0].total } };
+  return { rows: rows.map(decorateCard), pagination: { page, pageSize, total: countRes[0].total } };
 }
 
 /** 获取单个卡密 */
@@ -108,7 +128,7 @@ async function getById(id) {
     `SELECT ${CARD_FIELDS}, a.app_name FROM cards c LEFT JOIN apps a ON c.app_id = a.id WHERE c.id = ?`,
     [id]
   );
-  return rows[0] || null;
+  return rows[0] ? decorateCard(rows[0]) : null;
 }
 
 /** 更新卡密（仅允许白名单字段）。
@@ -151,7 +171,7 @@ async function update(id, data, operator) {
     }
     if (data.status !== undefined && data.status !== card.status) event = {
       name: data.status === 'disabled' ? 'card.disabled' : 'card.enabled',
-      payload: { app_id: card.app_id, card: card.card, status: data.status }
+      payload: { app_id: card.app_id, card: safeDecrypt(card.card_ciphertext), status: data.status }
     };
     await conn.commit();
   } catch (err) { await conn.rollback().catch(() => {}); throw err; }
@@ -172,27 +192,27 @@ async function listSessions(filters = {}, page = 1, pageSize = 20) {
   if (filters.owner_id) { conds.push('c.owner_id = ?'); values.push(filters.owner_id); }
   if (filters.app_id) { conds.push('c.app_id = ?'); values.push(filters.app_id); }
   if (filters.keyword) {
-    conds.push('(c.card LIKE ? OR c.mac LIKE ?)');
+    conds.push('(c.card_hash = ? OR c.card_suffix LIKE ? OR c.mac LIKE ?)');
     const kw = `%${escapeLike(filters.keyword)}%`;
-    values.push(kw, kw);
+    values.push(cardCrypto.hashCard(filters.keyword), kw, kw);
   }
   const whereSql = ` WHERE ${conds.join(' AND ')}`;
   const offset = (page - 1) * pageSize;
   const [rows] = await pool.execute(
-    'SELECT c.id, c.card, c.app_id, a.app_name, c.mac, c.last_login_time, c.last_login_ip, ' +
+    'SELECT c.id, c.card_ciphertext, c.card_suffix, c.app_id, a.app_name, c.mac, c.last_login_time, c.last_login_ip, ' +
     'c.token_expires_at, c.login_count, c.is_activated, c.expires_at, c.owner_id ' +
     `FROM cards c LEFT JOIN apps a ON c.app_id = a.id${whereSql}` +
     ' ORDER BY c.last_login_time DESC LIMIT ? OFFSET ?',
     [...values, String(pageSize), String(offset)]
   );
   const [countRes] = await pool.execute(`SELECT COUNT(*) as total FROM cards c${whereSql}`, values);
-  return { rows, pagination: { page, pageSize, total: countRes[0].total } };
+  return { rows: rows.map(decorateCard), pagination: { page, pageSize, total: countRes[0].total } };
 }
 
 /** 踢下线（远程 kill switch）：清空会话使该卡密 token 立即失效。
  *  返回 false 表示会话已不存在或无权操作；成功返回 true。 */
 async function kickSession(id, operator = { is_superuser: false, id: null }) {
-  const [rows] = await pool.execute('SELECT id, card, owner_id, token FROM cards WHERE id = ?', [id]);
+  const [rows] = await pool.execute('SELECT id, card_ciphertext, owner_id, token FROM cards WHERE id = ?', [id]);
   if (rows.length === 0) return { ok: false, reason: 'not_found' };
   const card = rows[0];
   if (!operator.is_superuser && Number(card.owner_id) !== Number(operator.id)) {
@@ -200,7 +220,7 @@ async function kickSession(id, operator = { is_superuser: false, id: null }) {
   }
   if (!card.token) return { ok: false, reason: 'no_session' };
   await pool.execute('UPDATE cards SET token = NULL, token_expires_at = NULL WHERE id = ?', [id]);
-  return { ok: true, card: card.card };
+  return { ok: true, card: safeDecrypt(card.card_ciphertext) };
 }
 
 /** 删除卡密（删除后推送 card.deleted） */
@@ -216,7 +236,7 @@ async function remove(id, operator) {
     await conn.execute('DELETE FROM cards WHERE id = ?', [id]);
     await conn.commit();
   } finally { await conn.rollback().catch(() => {}); conn.release(); }
-  if (card) webhookService.emit('card.deleted', { app_id: card.app_id, card: card.card });
+  if (card) webhookService.emit('card.deleted', { app_id: card.app_id, card: safeDecrypt(card.card_ciphertext) });
 }
 
 module.exports = { createCards, getList, getById, update, remove, generateCardCode, listSessions, kickSession };

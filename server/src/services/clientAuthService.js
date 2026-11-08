@@ -74,7 +74,7 @@ async function cardLogin(softid, card, mac, version, ip) {
 
     // 行锁查卡密（通过 HMAC 哈希查询，不明文查找）
     const [cards] = await conn.execute(
-      'SELECT id, app_id, card, status, is_activated, points, card_type, mac, expires_at, token_expires_at, login_count, token, version, owner_id ' +
+      'SELECT id, app_id, card_ciphertext, status, is_activated, points, card_type, mac, expires_at, token_expires_at, login_count, token, version, owner_id ' +
       'FROM cards WHERE card_hash = ? AND app_id = ? FOR UPDATE',
       [cardCrypto.hashCard(card), app.id]
     );
@@ -122,7 +122,7 @@ async function cardLogin(softid, card, mac, version, ip) {
         'WHERE id = ?',
         [mac, ip, hashCardToken(token), now, expiresAt, now, ip, cardData.id]
       );
-      activatedPayload = { app_id: app.id, card: cardData.card, mac, ip, expires_at: expiresAt };
+      activatedPayload = { app_id: app.id, card, mac, ip, expires_at: expiresAt };
     } else {
       // 再次登录
       // token 或过期时间任一缺失都视为「当前无有效会话」（登出后二者被置 NULL，

@@ -525,7 +525,7 @@ router.put('/cards/:id', async (req, res) => {
     await logService.log({
       user_id: req.currentUser.id, username: req.currentUser.username,
       action: 'update', module: 'cards', target_type: 'card', target_id: card.id,
-      target_name: card.card, description: `更新卡密（字段: ${Object.keys(req.body || {}).join(', ') || '-'}）`,
+      target_name: card.card_masked || card.card, description: `更新卡密（字段: ${Object.keys(req.body || {}).join(', ') || '-'}）`,
       ip_address: req.ip, request_data: JSON.stringify(req.body || {})
     });
     res.json(success(null, '更新成功'));
@@ -545,7 +545,7 @@ router.delete('/cards/:id', async (req, res) => {
     await logService.log({
       user_id: req.currentUser.id, username: req.currentUser.username,
       action: 'delete', module: 'cards', target_type: 'card', target_id: card.id,
-      target_name: card.card, description: `删除卡密（${card.is_activated ? '已激活' : '未激活'}）`,
+      target_name: card.card_masked || card.card, description: `删除卡密（${card.is_activated ? '已激活' : '未激活'}）`,
       ip_address: req.ip
     });
     res.json(success(null, '删除成功'));
