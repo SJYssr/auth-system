@@ -15,6 +15,11 @@
 - **备份脚本去 shell 拼接**：`mysqldump` / `gzip` 改为 `spawn` + 参数数组，口令走 `MYSQL_PWD` 环境变量（不再出现在命令行/`ps`），备份文件 `0600`、目录 `0700`；恢复演练改为流式统计表数。
 - **限流存储 fail-open 升级告警**：连续 3 次不可用时输出 `[SECURITY ALERT]`，避免"DB 抖动 → 限流失效 → 被爆破"全程静默。
 
+### 修复（仪表盘统计）
+
+- **仪表盘 KPI 恒为 0、最近激活记录显示「未知类型 / -」**：`dashboardService.getStats` 把 `pool.execute()` 返回的 `[rows, fields]` 外壳当成了行数组——`overview` 取到 `undefined` 计数、`recent_cards` 甚至把 field 元数据当成一条记录返回。改为各查询统一取 `[0]`（`scalar()` 辅助函数），并为该形状补 3 条回归测试 `server/test/dashboard.test.js`。
+- 顺带把两个 ECharts 图例从默认底部移到顶部，避免与 x 轴应用名重叠。
+
 ### 修复（时间展示统一）
 
 - **全站时间统一为 `2026年11月08日 19:20:04`**：新增 `client/src/utils/datetime.js`（`formatDateTime` / `formatDate` / `parseDateTime`），删除 6 处各自重复的本地 formatter（卡密、版本、会话、Webhook、仪表盘、管理员、文档面板），列表列、详情弹窗、日志详情、CSV 导出全部走同一格式。

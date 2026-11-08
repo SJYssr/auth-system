@@ -82,21 +82,28 @@ async function getStats(adminId = null, isSuperuser = false) {
     )
   ]);
 
+  // pool.execute 的结果是 [rows, fields]：COUNT 查询要再取一层 [0] 才拿到行对象
+  const scalar = (result, key) => result[0][0]?.[key] ?? 0;
+
   return {
     overview: {
-      apps: { total: appCount[0].total, active: appCount[0].total },
-      cards: { total: cardCount[0].total, activated: activeCardCount[0].total, expired: expiredCardCount[0].total },
-      online: { count: onlineCardCount[0].total }
+      apps: { total: scalar(appCount, 'total'), active: scalar(appCount, 'total') },
+      cards: {
+        total: scalar(cardCount, 'total'),
+        activated: scalar(activeCardCount, 'total'),
+        expired: scalar(expiredCardCount, 'total')
+      },
+      online: { count: scalar(onlineCardCount, 'total') }
     },
-    // 卡密明文只做密文存储：此处解密用于最近激活展示，并剔除密文列
-    recent_cards: recentCards.map(({ card_ciphertext, ...rest }) => {
+    // pool.execute 返回 [rows, fields]，这里必须只取 rows，否则会把 fields 元数据当成一行返回
+    recent_cards: recentCards[0].map(({ card_ciphertext, ...rest }) => {
       let card = null;
       try { card = cardCrypto.decryptCard(card_ciphertext); } catch (err) { /* 保持 null */ }
       return { ...rest, card };
     }),
-    recent_logs: recentLogs,
-    app_distribution: appDistribution,
-    revenue: revenue
+    recent_logs: recentLogs[0],
+    app_distribution: appDistribution[0],
+    revenue: revenue[0]
   };
 }
 
