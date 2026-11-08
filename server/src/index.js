@@ -9,19 +9,21 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const http = require('http');
 const path = require('path');
+const crypto = require('crypto');
 const observability = require('./utils/observability');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 信任代理以获取真实客户端IP。
-// 默认 1（适配文档部署形态：单层 OpenResty/Nginx 反代）。
-// ⚠ 进程直接暴露公网时必须设 TRUST_PROXY=false，否则客户端可伪造
-//   X-Forwarded-For 让每个请求变成“新IP”，按 IP 的限流（登录防爆破）会被绕过。
+// 默认 false（失败关闭）：未显式声明代理拓扑时一律使用 socket 地址，
+// 任何人都无法通过 X-Forwarded-For 伪造“新 IP”来绕过按 IP 的限流（登录防爆破）。
+// 部署在单层 OpenResty/Nginx 反代之后时，请显式设置 TRUST_PROXY=1。
 // 取值：数字=信任的代理层数；'true'/'false'；逗号分隔的 IP/网段（如 'loopback,10.0.0.0/8'）
 const trustProxyEnv = process.env.TRUST_PROXY;
 if (trustProxyEnv === undefined) {
-  app.set('trust proxy', 1);
+  app.set('trust proxy', false);
+  console.warn('[security] TRUST_PROXY 未设置，默认不信任 X-Forwarded-For；若部署在反向代理之后请设置 TRUST_PROXY=1');
 } else if (trustProxyEnv === 'true' || trustProxyEnv === 'false') {
   app.set('trust proxy', trustProxyEnv === 'true');
 } else if (!isNaN(Number(trustProxyEnv)) && trustProxyEnv.trim() !== '') {
@@ -243,8 +245,22 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     res.json({ status: 'ok', db, time: localTime });
   });
 
-  // Prometheus metrics 端点（可观测性：HTTP QPS / P95 延迟 / 登录失败 / 卡密激活 / webhook 状态）
+  // Prometheus metrics 端点（HTTP QPS / P95 延迟 / 登录失败 / 卡密激活 / webhook 状态）
+  // 鉴权：配置 METRICS_TOKEN 时要求 Bearer；未配置时仅允许回环地址访问（反代场景请配置 token）。
   app.get('/metrics', (req, res) => {
+    const expected = process.env.METRICS_TOKEN;
+    if (expected) {
+      const got = String(req.get('authorization') || '').replace(/^Bearer\s+/i, '') || String(req.get('x-metrics-token') || '');
+      const a = Buffer.from(got, 'utf8');
+      const b = Buffer.from(String(expected), 'utf8');
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+        return res.status(401).type('text/plain').send('unauthorized');
+      }
+    } else {
+      const remote = req.socket.remoteAddress || '';
+      const loopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+      if (!loopback) return res.status(404).type('text/plain').send('Not Found');
+    }
     res.type('text/plain').send(observability.prometheusMetrics());
   });
 
@@ -268,28 +284,24 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     handler: (req, res) => res.status(429).json({ errcode: '-1009' })
   }));
 
-  // 引导页 API：检查是否需要初始化（无需认证）
-  app.get('/api/setup', async (req, res) => {
-    try {
-      const { getSetupToken } = require('./utils/bootstrap');
-      const result = await getSetupToken();
-      if (!result) return res.json({ success: false, message: '系统已初始化' });
-      res.json({ success: true, ...result });
-    } catch (err) {
-      console.error('引导页检查:', err.message);
-      res.status(500).json({ success: false, message: '服务器内部错误' });
-    }
-  });
-
-  app.post('/api/setup', async (req, res) => {
+  // 超管初始化接口：仅接受带外 SETUP_TOKEN（服务端环境变量），
+  // 不再提供任何“查询/下发 setup token”的 GET 接口——token 绝不进 HTTP 响应。
+  // 未配置 SETUP_TOKEN 时该接口整体关闭。
+  app.post('/api/setup', rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    store: new MySQLStore('setup'),
+    keyGenerator: (req) => req.ip,
+    handler: (req, res) => res.status(429).json({ success: false, message: '请求过于频繁' })
+  }), async (req, res) => {
     try {
       const { createFirstAdmin } = require('./utils/bootstrap');
-      const { setup_token, username, email, password } = req.body;
+      const { setup_token, username, email, password } = req.body || {};
       await createFirstAdmin(setup_token, username, email, password);
       res.json({ success: true, message: '超级管理员创建成功，请使用新账号登录' });
     } catch (err) {
-      console.error('引导页创建管理员:', err.message);
-      const known = ['参数不完整', '密码长度至少 8 位', '邮箱格式不正确', '引导 token 无效或已过期', '系统已存在管理员，引导页不可用'];
+      console.error('引导创建管理员:', err.message);
+      const known = ['初始化接口未开启', '参数不完整', '引导 token 无效', '密码长度至少 8 位', '邮箱格式不正确', '系统已存在管理员，引导页不可用'];
       res.json({ success: false, message: known.includes(err.message) ? err.message : '创建失败' });
     }
   });

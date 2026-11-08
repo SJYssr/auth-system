@@ -6,6 +6,7 @@ const pool = require('../config/db');
 const { escapeLike } = require('../utils/response');
 const webhookService = require('./webhookService');
 const cardCrypto = require('../utils/cardCrypto');
+const licenseService = require('./licenseService');
 
 /** 生成卡密：可选前缀 + 14位随机段（无模偏差） */
 function generateCardCode(prefix = '') {
@@ -22,7 +23,7 @@ function generateCardCode(prefix = '') {
 }
 
 /** 批量生成卡密 */
-async function createCards(appId, count = 1, cardType = '天卡', price = 0, points = 1, remark = '', prefix = '', ownerId = null) {
+async function createCards(appId, count = 1, cardType = '天卡', price = 0, points = 1, remark = '', prefix = '', ownerId = null, conn = pool) {
   // 库里有 CHECK 约束兜底，这里给出可读的业务错误
   if (isNaN(Number(price)) || Number(price) < 0) throw new Error('面值必须为 >= 0 的数字');
   if (!Number.isInteger(Number(points)) || Number(points) < 0) throw new Error('点数必须为 >= 0 的整数');
@@ -31,19 +32,20 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
   const CHUNK = 50; // 单条语句批量插入的行数
   let attempts = 0;
   const maxAttempts = count * 3 + 3;
-  const INSERT_COLUMNS = 'app_id, card, card_hash, card_ciphertext, card_suffix, card_type, price, points, card_remark, owner_id';
+  // 明文卡号不再落库：只写 HMAC 索引 / AES-GCM 密文 / 后四位后缀
+  const INSERT_COLUMNS = 'app_id, card_hash, card_ciphertext, card_suffix, card_type, price, points, card_remark, owner_id';
 
   while (cards.length < count && attempts < maxAttempts) {
     attempts++;
     const codes = Array.from({ length: Math.min(count - cards.length, CHUNK) }, () => generateCardCode(prefix));
     const values = codes.flatMap(code => [
-      appId, code, cardCrypto.hashCard(code), cardCrypto.encryptCard(code), cardCrypto.cardSuffix(code),
+      appId, cardCrypto.hashCard(code), cardCrypto.encryptCard(code), cardCrypto.cardSuffix(code),
       cardType, price, points, remark || null, ownerId
     ]);
     try {
       // 多行 INSERT：100 张卡从 100 次往返降为 2 次
-      await pool.execute(
-        `INSERT INTO cards (${INSERT_COLUMNS}) VALUES ${codes.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+      await conn.execute(
+        `INSERT INTO cards (${INSERT_COLUMNS}) VALUES ${codes.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
         values
       );
       cards.push(...codes);
@@ -52,9 +54,9 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
       // 批量语句遇卡号唯一冲突会整批失败：该批退回逐条插入，冲突卡号跳过
       for (const code of codes) {
         try {
-          await pool.execute(
-            `INSERT INTO cards (${INSERT_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [appId, code, cardCrypto.hashCard(code), cardCrypto.encryptCard(code), cardCrypto.cardSuffix(code),
+          await conn.execute(
+            `INSERT INTO cards (${INSERT_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [appId, cardCrypto.hashCard(code), cardCrypto.encryptCard(code), cardCrypto.cardSuffix(code),
              cardType, price, points, remark || null, ownerId]
           );
           cards.push(code);
@@ -69,9 +71,24 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
 
 /** 卡密列表/详情返回的字段：不回 SELECT *，剔除会话凭据 token / token_expires_at，
  *  避免后台接口把客户端的活跃会话凭据下发到前端 */
-const CARD_FIELDS = 'c.id, c.app_id, c.card, c.card_hash, c.card_ciphertext, c.card_suffix, c.card_type, c.price, c.points, c.card_remark, c.status, ' +
+const CARD_FIELDS = 'c.id, c.app_id, c.card_ciphertext, c.card_suffix, c.card_type, c.price, c.points, c.card_remark, c.status, ' +
   'c.is_activated, c.activated_at, c.expires_at, c.mac, c.login_count, c.activation_ip, ' +
   'c.last_login_time, c.last_login_ip, c.version, c.owner_id, c.created_at, c.updated_at';
+
+/** 单值解密（容错：密文损坏或 Pepper 轮换时返回 null） */
+function safeDecrypt(ciphertext) {
+  try { return cardCrypto.decryptCard(ciphertext); } catch (err) { return null; }
+}
+
+/** 把密文列解密为 card 字段下发，并剔除密文（前端不需要，也不该拿到密文） */
+function decorateCard(row) {
+  if (!row) return row;
+  const { card_ciphertext, ...rest } = row;
+  let card = null;
+  // Pepper 轮换或密文损坏时不影响列表可用性，仅该行 card 为空
+  try { card = cardCrypto.decryptCard(card_ciphertext); } catch (err) { /* 保持 null */ }
+  return { ...rest, card, card_masked: card ? cardCrypto.maskCard(card) : '' };
+}
 
 /** 卡密列表（分页），支持 app_id / card / card_remark / status / card_type / is_activated / is_expired 过滤 */
 async function getList(filters = {}, page = 1, pageSize = 20) {
@@ -79,7 +96,11 @@ async function getList(filters = {}, page = 1, pageSize = 20) {
   const values = [];
 
   if (filters.app_id) { conds.push('c.app_id = ?'); values.push(filters.app_id); }
-  if (filters.card) { conds.push('c.card LIKE ?'); values.push(`%${escapeLike(filters.card)}%`); }
+  // 明文列已废弃：整卡精确匹配走 HMAC 索引，其余按后四位后缀模糊匹配
+  if (filters.card) {
+    conds.push('(c.card_hash = ? OR c.card_suffix LIKE ?)');
+    values.push(cardCrypto.hashCard(filters.card), `%${escapeLike(filters.card)}%`);
+  }
   if (filters.card_remark) { conds.push('c.card_remark LIKE ?'); values.push(`%${escapeLike(filters.card_remark)}%`); }
   if (filters.status) { conds.push('c.status = ?'); values.push(filters.status); }
   if (filters.card_type) { conds.push('c.card_type = ?'); values.push(filters.card_type); }
@@ -98,7 +119,7 @@ async function getList(filters = {}, page = 1, pageSize = 20) {
   );
   const [countRes] = await pool.execute(`SELECT COUNT(*) as total FROM cards c${whereSql}`, values);
 
-  return { rows, pagination: { page, pageSize, total: countRes[0].total } };
+  return { rows: rows.map(decorateCard), pagination: { page, pageSize, total: countRes[0].total } };
 }
 
 /** 获取单个卡密 */
@@ -107,85 +128,91 @@ async function getById(id) {
     `SELECT ${CARD_FIELDS}, a.app_name FROM cards c LEFT JOIN apps a ON c.app_id = a.id WHERE c.id = ?`,
     [id]
   );
-  return rows[0] || null;
+  return rows[0] ? decorateCard(rows[0]) : null;
 }
 
 /** 更新卡密（仅允许白名单字段）。
  *  机器码(mac) / 到期时间(expires_at) 允许修改：
  *  - expires_at 传空字符串按 null 处理（表示不限/清除到期时间）
- *  - 对已激活卡修改 mac（换绑）时同时清空 token，使旧设备的会话立即失效 */
-async function update(id, data) {
+ *  - 已激活卡的机器码必须通过专用换绑/解绑操作修改，状态和期限同步到授权。 */
+async function update(id, data, operator) {
   const allowedFields = ['card_type', 'price', 'points', 'card_remark', 'status', 'mac', 'expires_at'];
   const keys = allowedFields.filter(k => data[k] !== undefined);
   if (keys.length === 0) return;
-
-  // 换绑机器码时清空会话，避免旧机器继续用有效 token 登入
-  let clearSession = false;
-  if (keys.includes('mac')) {
-    const [rows] = await pool.execute('SELECT mac, is_activated FROM cards WHERE id = ?', [id]);
-    if (rows.length && rows[0].is_activated === 1 && String(rows[0].mac || '') !== String(data.mac || '')) {
-      clearSession = true;
+  if (data.status !== undefined && !['enabled', 'disabled'].includes(data.status)) throw new Error('卡密状态无效');
+  if (data.mac !== undefined && (typeof data.mac !== 'string' || data.mac.length > 128)) throw new Error('机器码格式不正确');
+  if (data.expires_at && !Number.isFinite(new Date(data.expires_at).getTime())) throw new Error('到期时间格式不正确');
+  const conn = await pool.getConnection();
+  let event = null;
+  try {
+    await conn.beginTransaction();
+    const [[card]] = await conn.execute('SELECT * FROM cards WHERE id = ? FOR UPDATE', [id]);
+    if (!card) throw new Error('卡密不存在');
+    if (!operator || (operator.is_superuser !== 1 && Number(card.owner_id) !== Number(operator.id))) throw new Error('无权操作该卡密');
+    if (card.is_activated && data.mac !== undefined && String(data.mac || '').toLowerCase() !== String(card.mac || '').toLowerCase()) {
+      throw new Error('已激活卡密请使用设备换绑或解绑功能');
     }
-  }
-
-  // 状态变化时推送 webhook（禁用/启用），先取旧状态与应用归属
-  let statusEvent = null;
-  let statusChangedCard = null;
-  if (keys.includes('status')) {
-    const [rows] = await pool.execute('SELECT card, app_id, status FROM cards WHERE id = ?', [id]);
-    if (rows.length && rows[0].status !== data.status) {
-      statusChangedCard = rows[0];
-      statusEvent = data.status === 'disabled' ? 'card.disabled' : 'card.enabled';
+    const license = card.is_activated ? await licenseService.ensureForCard(conn, card) : null;
+    const fields = keys.map(key => `${key} = ?`);
+    const values = keys.map(key => key === 'expires_at' && data[key] === '' ? null : data[key]);
+    if (data.status !== undefined) fields.push('token = NULL', 'token_expires_at = NULL');
+    fields.push('version = version + 1');
+    await conn.execute(`UPDATE cards SET ${fields.join(', ')} WHERE id = ?`, [...values, id]);
+    if (license) {
+      const [[current]] = await conn.execute('SELECT * FROM cards WHERE id = ?', [id]);
+      let status = license.status;
+      const licenseExpiry = data.expires_at !== undefined ? current.expires_at : license.expires_at;
+      const expired = (current.expires_at && new Date(current.expires_at) <= new Date())
+        || (licenseExpiry && new Date(licenseExpiry) <= new Date());
+      if (current.status !== 'enabled') status = 'banned';
+      else if (data.status === 'enabled') status = expired ? 'expired' : 'active';
+      else if (!['banned', 'suspended'].includes(status)) status = expired ? 'expired' : 'active';
+      await conn.execute('UPDATE licenses SET expires_at = ?, status = ? WHERE id = ?', [licenseExpiry, status, license.id]);
     }
-  }
-
-  const fields = [];
-  const values = [];
-  for (const key of keys) {
-    fields.push(`${key} = ?`);
-    values.push(key === 'expires_at' && data[key] === '' ? null : data[key]);
-  }
-  if (clearSession) {
-    fields.push('token = NULL');
-    fields.push('token_expires_at = NULL');
-  }
-  values.push(id);
-  await pool.execute(`UPDATE cards SET ${fields.join(', ')} WHERE id = ?`, values);
-
-  if (statusEvent && statusChangedCard) {
-    webhookService.emit(statusEvent, { app_id: statusChangedCard.app_id, card: statusChangedCard.card, status: data.status });
-  }
+    if (data.status !== undefined && data.status !== card.status) event = {
+      name: data.status === 'disabled' ? 'card.disabled' : 'card.enabled',
+      payload: { app_id: card.app_id, card: safeDecrypt(card.card_ciphertext), status: data.status }
+    };
+    await conn.commit();
+  } catch (err) { await conn.rollback().catch(() => {}); throw err; }
+  finally { conn.release(); }
+  if (event) webhookService.emit(event.name, event.payload);
 }
 
-/** 在线会话列表（分页）：token 未过期即视为在线，支持卡密/机器码关键词与应用过滤。
+/** 在线会话列表（分页）：会话及其实际授权均有效才视为在线，支持卡密/机器码关键词与应用过滤。
  *  非超管只能看到自己名下卡密的会话（owner_id 隔离，与卡密列表同规则） */
 async function listSessions(filters = {}, page = 1, pageSize = 20) {
-  const conds = ['c.token IS NOT NULL', 'c.token_expires_at IS NOT NULL', 'c.token_expires_at > NOW()'];
+  const conds = ['c.token IS NOT NULL', 'c.token_expires_at IS NOT NULL', 'c.token_expires_at > NOW()',
+    "c.status = 'enabled'", '(c.expires_at IS NULL OR c.expires_at > NOW())',
+    "EXISTS (SELECT 1 FROM apps enabled_app WHERE enabled_app.id = c.app_id AND enabled_app.status = 'enabled')",
+    `EXISTS (SELECT 1 FROM licenses l JOIN license_device_bindings b ON b.license_id = l.id AND b.device_id = c.mac AND b.unbound_at IS NULL
+      LEFT JOIN devices d ON d.device_id = c.mac WHERE l.card_id = c.id AND l.app_id = c.app_id AND l.device_id = c.mac
+      AND l.status = 'active' AND (l.expires_at IS NULL OR l.expires_at > NOW()) AND COALESCE(d.is_blacklisted, 0) = 0)`];
   const values = [];
   if (filters.owner_id) { conds.push('c.owner_id = ?'); values.push(filters.owner_id); }
   if (filters.app_id) { conds.push('c.app_id = ?'); values.push(filters.app_id); }
   if (filters.keyword) {
-    conds.push('(c.card LIKE ? OR c.mac LIKE ?)');
+    conds.push('(c.card_hash = ? OR c.card_suffix LIKE ? OR c.mac LIKE ?)');
     const kw = `%${escapeLike(filters.keyword)}%`;
-    values.push(kw, kw);
+    values.push(cardCrypto.hashCard(filters.keyword), kw, kw);
   }
   const whereSql = ` WHERE ${conds.join(' AND ')}`;
   const offset = (page - 1) * pageSize;
   const [rows] = await pool.execute(
-    'SELECT c.id, c.card, c.app_id, a.app_name, c.mac, c.last_login_time, c.last_login_ip, ' +
+    'SELECT c.id, c.card_ciphertext, c.card_suffix, c.app_id, a.app_name, c.mac, c.last_login_time, c.last_login_ip, ' +
     'c.token_expires_at, c.login_count, c.is_activated, c.expires_at, c.owner_id ' +
     `FROM cards c LEFT JOIN apps a ON c.app_id = a.id${whereSql}` +
     ' ORDER BY c.last_login_time DESC LIMIT ? OFFSET ?',
     [...values, String(pageSize), String(offset)]
   );
   const [countRes] = await pool.execute(`SELECT COUNT(*) as total FROM cards c${whereSql}`, values);
-  return { rows, pagination: { page, pageSize, total: countRes[0].total } };
+  return { rows: rows.map(decorateCard), pagination: { page, pageSize, total: countRes[0].total } };
 }
 
 /** 踢下线（远程 kill switch）：清空会话使该卡密 token 立即失效。
  *  返回 false 表示会话已不存在或无权操作；成功返回 true。 */
 async function kickSession(id, operator = { is_superuser: false, id: null }) {
-  const [rows] = await pool.execute('SELECT id, card, owner_id, token FROM cards WHERE id = ?', [id]);
+  const [rows] = await pool.execute('SELECT id, card_ciphertext, owner_id, token FROM cards WHERE id = ?', [id]);
   if (rows.length === 0) return { ok: false, reason: 'not_found' };
   const card = rows[0];
   if (!operator.is_superuser && Number(card.owner_id) !== Number(operator.id)) {
@@ -193,16 +220,23 @@ async function kickSession(id, operator = { is_superuser: false, id: null }) {
   }
   if (!card.token) return { ok: false, reason: 'no_session' };
   await pool.execute('UPDATE cards SET token = NULL, token_expires_at = NULL WHERE id = ?', [id]);
-  return { ok: true, card: card.card };
+  return { ok: true, card: safeDecrypt(card.card_ciphertext) };
 }
 
 /** 删除卡密（删除后推送 card.deleted） */
-async function remove(id) {
-  const [rows] = await pool.execute('SELECT card, app_id FROM cards WHERE id = ?', [id]);
-  await pool.execute('DELETE FROM cards WHERE id = ?', [id]);
-  if (rows.length > 0) {
-    webhookService.emit('card.deleted', { app_id: rows[0].app_id, card: rows[0].card });
-  }
+async function remove(id, operator) {
+  const conn = await pool.getConnection();
+  let card;
+  try {
+    await conn.beginTransaction();
+    [[card]] = await conn.execute('SELECT * FROM cards WHERE id = ? FOR UPDATE', [id]);
+    if (!card) return;
+    if (!operator || (operator.is_superuser !== 1 && Number(card.owner_id) !== Number(operator.id))) throw new Error('无权操作该卡密');
+    await conn.execute('DELETE FROM licenses WHERE card_id = ?', [id]);
+    await conn.execute('DELETE FROM cards WHERE id = ?', [id]);
+    await conn.commit();
+  } finally { await conn.rollback().catch(() => {}); conn.release(); }
+  if (card) webhookService.emit('card.deleted', { app_id: card.app_id, card: safeDecrypt(card.card_ciphertext) });
 }
 
 module.exports = { createCards, getList, getById, update, remove, generateCardCode, listSessions, kickSession };

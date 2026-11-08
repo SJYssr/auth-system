@@ -72,6 +72,10 @@ const superCardService = {
     getAll: (params = {}) => request.get('/admin/cards', { params }),
     create: (data) => request.post('/admin/cards', data),
     batchCreate: (data) => request.post('/admin/cards/batch', data),
+    renew: (id, data) => request.post(`/admin/cards/${id}/renew`, data),
+    rebind: (id, data) => request.post(`/admin/cards/${id}/rebind`, data),
+    unbind: (id, data) => request.post(`/admin/cards/${id}/unbind`, data),
+    deviceHistory: (id) => request.get(`/admin/cards/${id}/device-history`),
     update: (id, data) => request.put(`/admin/cards/${id}`, data),
     delete: (id) => request.delete(`/admin/cards/${id}`)
 }

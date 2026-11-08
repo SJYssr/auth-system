@@ -5,6 +5,27 @@
  */
 const pool = require('../config/db');
 
+/** fail-open 计数：连续失败达到阈值时升级为一条明确的安全告警，
+ *  避免“DB 抖动 → 限流失效 → 被爆破”全程静默。 */
+const failState = { consecutive: 0, lastAlertAt: 0, total: 0 };
+const ALERT_THRESHOLD = 3;
+const ALERT_INTERVAL_MS = 5 * 60 * 1000;
+
+function noteStorageFailure(err) {
+  failState.consecutive += 1;
+  failState.total += 1;
+  const now = Date.now();
+  if (failState.consecutive >= ALERT_THRESHOLD && now - failState.lastAlertAt > ALERT_INTERVAL_MS) {
+    failState.lastAlertAt = now;
+    console.error(
+      `[SECURITY ALERT] 限流共享存储连续 ${failState.consecutive} 次不可用，按 IP 的限流当前处于 fail-open（放行）状态，` +
+      `累计失败 ${failState.total} 次：${err.message}`
+    );
+  } else {
+    console.error(`[ratelimit] 共享存储读写失败（fail-open 放行）: ${err.message}`);
+  }
+}
+
 class MySQLStore {
   /** @param {string} prefix 每个限流器独立前缀，避免同 IP 在不同限流器之间串计数 */
   constructor(prefix) {
@@ -32,6 +53,7 @@ class MySQLStore {
         'SELECT rl_count, rl_reset_at FROM rate_limits WHERE rl_key = ?',
         [namespaced]
       );
+      failState.consecutive = 0;
       const row = rows[0] || {};
       // express-rate-limit v7+ 的 store 接口字段是 totalHits（v6 为 currentCount，v8 起严格校验）
       return {
@@ -39,7 +61,7 @@ class MySQLStore {
         resetTime: row.rl_reset_at ? new Date(row.rl_reset_at) : undefined
       };
     } catch (err) {
-      console.error(`[ratelimit] 共享存储读写失败（fail-open 放行）: ${err.message}`);
+      noteStorageFailure(err);
       return { totalHits: 1, resetTime: undefined };
     }
   }

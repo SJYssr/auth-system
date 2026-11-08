@@ -8,6 +8,19 @@ const pool = require('../config/db');
 
 const TTL_MINUTES = 2;
 
+/** 验证码只存 HMAC 摘要：库泄露无法直接读出可用验证码，也无法反推。
+ *  密钥优先 CAPTCHA_SECRET，其次复用 CARD_PEPPER（生产启动时已强制配置）。 */
+function hashCode(code) {
+  const secret = process.env.CAPTCHA_SECRET || process.env.CARD_PEPPER || 'auth-system-captcha';
+  return crypto.createHmac('sha256', secret).update(String(code).toLowerCase()).digest('hex');
+}
+
+/** 恒定时间比较十六进制摘要 */
+function safeEqualHex(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'));
+}
+
 /**
  * 生成验证码
  * @returns {Promise<{ key: string, image: string }>} key用于校验，image是SVG base64
@@ -26,7 +39,7 @@ async function generate() {
   const key = crypto.randomUUID();
   await pool.execute(
     'INSERT INTO captchas (captcha_key, captcha_code, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? MINUTE))',
-    [key, captcha.text.toLowerCase(), TTL_MINUTES]
+    [key, hashCode(captcha.text), TTL_MINUTES]
   );
 
   return {
@@ -49,7 +62,7 @@ async function verify(key, code) {
   );
   await pool.execute('DELETE FROM captchas WHERE captcha_key = ?', [String(key)]);
   if (rows.length === 0) return false;
-  return rows[0].captcha_code === String(code).toLowerCase();
+  return safeEqualHex(rows[0].captcha_code, hashCode(code));
 }
 
 /** 清理过期验证码（由入口的定时任务周期调用） */

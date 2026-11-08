@@ -20,6 +20,7 @@
 ## 安全设计基线
 
 - 管理员与卡密的会话 token 均以 SHA-256 哈希入库，数据库泄露不等于会话泄露
+- 卡密明文不落库：仅保存 HMAC-SHA256 索引（`card_hash`）与 AES-256-GCM 密文（`card_ciphertext`），列表展示所需原文由服务端解密后下发
 - 全部 SQL 参数化、LIKE 转义；应用文档保存时服务端 sanitize-html 消毒
 - 管理端/客户端 API 分级限流（计数落 MySQL 共享存储）；CSP 禁止内联脚本
 - Webhook 投递 HMAC-SHA256 签名 + 失败自动重试 + 投递记录可审计

@@ -12,7 +12,17 @@ const clientAuthService = require('../services/clientAuthService');
 const SOFTID_RE = /^[A-Za-z0-9]{18}$/;
 
 function validateSoftid(softid) {
-  return softid && SOFTID_RE.test(softid);
+  return typeof softid === 'string' && SOFTID_RE.test(softid);
+}
+
+function validText(value, max) {
+  return typeof value === 'string' && value.length > 0 && value.length <= max;
+}
+
+function clientError(err) {
+  if (/^-10(?:0[1-9]|1[0-2])$/.test(err.message)) return err.message;
+  console.error('客户端授权请求失败:', err.message);
+  return '-1009';
 }
 
 /** 获取公告 */
@@ -23,7 +33,7 @@ router.post('/announcement', async (req, res) => {
     const announcement = await appService.getAnnouncement(softid);
     res.type('text').send(announcement);
   } catch (err) {
-    res.type('text').send(err.message || '-1009');
+    res.type('text').send(clientError(err));
   }
 });
 
@@ -35,7 +45,7 @@ router.post('/version', async (req, res) => {
     const version = await appService.getLatestVersion(softid);
     res.json({ version });
   } catch (err) {
-    res.json({ errcode: err.message || '-1009' });
+    res.json({ errcode: clientError(err) });
   }
 });
 
@@ -43,7 +53,7 @@ router.post('/version', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { Softid, Card, Mac, Version } = req.body;
-    if (!Softid || !Card || !Mac) return res.json({ errcode: '-1001' });
+    if (!validText(Card, 128) || !validText(Mac, 128) || (Version !== undefined && !validText(Version, 64))) return res.json({ errcode: '-1001' });
     if (!validateSoftid(Softid)) return res.json({ errcode: '-1001' });
     // 统一用 express 的 req.ip（trust proxy 已配置，自动处理 XFF），
     // 避免直接信任可伪造的 x-forwarded-for 头首项
@@ -51,7 +61,7 @@ router.post('/login', async (req, res) => {
     const { token, license } = await clientAuthService.cardLogin(Softid, Card, Mac, Version, ip);
     res.json({ token, license });
   } catch (err) {
-    res.json({ errcode: err.message || '-1009' });
+    res.json({ errcode: clientError(err) });
   }
 });
 
@@ -59,12 +69,12 @@ router.post('/login', async (req, res) => {
 router.post('/logout', async (req, res) => {
   try {
     const { Softid, Card, Token } = req.body;
-    if (!Softid || !Card || !Token) return res.json({ errcode: '-1001' });
+    if (!validText(Card, 128) || !validText(Token, 128)) return res.json({ errcode: '-1001' });
     if (!validateSoftid(Softid)) return res.json({ errcode: '-1001' });
     await clientAuthService.cardLogout(Softid, Card, Token);
     res.json({ result: '1' });
   } catch (err) {
-    res.json({ errcode: err.message || '-1009' });
+    res.json({ errcode: clientError(err) });
   }
 });
 
@@ -76,7 +86,7 @@ router.post('/download', async (req, res) => {
     const url = await appService.getDownloadUrl(softid);
     res.json({ url });
   } catch (err) {
-    res.json({ errcode: err.message || '-1009' });
+    res.json({ errcode: clientError(err) });
   }
 });
 
@@ -88,7 +98,7 @@ router.post('/usage', async (req, res) => {
     const url = await appService.getUsageGuide(softid);
     res.json({ url });
   } catch (err) {
-    res.json({ errcode: err.message || '-1009' });
+    res.json({ errcode: clientError(err) });
   }
 });
 
@@ -100,7 +110,7 @@ router.post('/purchase', async (req, res) => {
     const url = await appService.getPurchaseUrl(softid);
     res.json({ url });
   } catch (err) {
-    res.json({ errcode: err.message || '-1009' });
+    res.json({ errcode: clientError(err) });
   }
 });
 
@@ -108,12 +118,12 @@ router.post('/purchase', async (req, res) => {
 router.post('/heartbeat', async (req, res) => {
   try {
     const { Softid, Card, Token } = req.body;
-    if (!Softid || !Card || !Token) return res.json({ errcode: '-1001' });
+    if (!validText(Card, 128) || !validText(Token, 128)) return res.json({ errcode: '-1001' });
     if (!validateSoftid(Softid)) return res.json({ errcode: '-1001' });
     await clientAuthService.heartbeat(Softid, Card, Token);
     res.json({ result: '1' });
   } catch (err) {
-    res.json({ errcode: err.message || '-1009' });
+    res.json({ errcode: clientError(err) });
   }
 });
 
@@ -127,13 +137,13 @@ function toLocalStr(d) {
 router.post('/expiry', async (req, res) => {
   try {
     const { Softid, Card, Token } = req.body;
-    if (!Softid || !Card || !Token) return res.json({ errcode: '-1001' });
+    if (!validText(Card, 128) || !validText(Token, 128)) return res.json({ errcode: '-1001' });
     if (!validateSoftid(Softid)) return res.json({ errcode: '-1001' });
     const expiresAt = await clientAuthService.getExpiry(Softid, Card, Token);
     const d = expiresAt instanceof Date ? expiresAt : new Date(expiresAt);
     res.json({ expires_at: toLocalStr(d) });
   } catch (err) {
-    res.json({ errcode: err.message || '-1009' });
+    res.json({ errcode: clientError(err) });
   }
 });
 

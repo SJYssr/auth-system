@@ -4,6 +4,7 @@
  * 应用按 owner_id、卡密按卡密生成者 owner_id、日志按 user_id。
  */
 const pool = require('../config/db');
+const cardCrypto = require('../utils/cardCrypto');
 
 /**
  * @param {number|null} adminId - 当前管理员ID
@@ -44,7 +45,7 @@ async function getStats(adminId = null, isSuperuser = false) {
     ),
     // 卡密类型分布（暂未在仪表盘使用，略去避免无谓的全表聚合）
     pool.execute(
-      'SELECT c.id, c.card, c.card_type, c.points, c.is_activated, c.status, c.activated_at, c.expires_at, c.created_at, a.app_name ' +
+      'SELECT c.id, c.card_ciphertext, c.card_suffix, c.card_type, c.points, c.is_activated, c.status, c.activated_at, c.expires_at, c.created_at, a.app_name ' +
       'FROM cards c LEFT JOIN apps a ON c.app_id = a.id ' +
       `WHERE c.is_activated = 1${scoped ? ' AND c.owner_id = ?' : ''} ORDER BY c.activated_at DESC LIMIT 10`,
       scoped ? [owner] : []
@@ -87,7 +88,12 @@ async function getStats(adminId = null, isSuperuser = false) {
       cards: { total: cardCount[0].total, activated: activeCardCount[0].total, expired: expiredCardCount[0].total },
       online: { count: onlineCardCount[0].total }
     },
-    recent_cards: recentCards,
+    // 卡密明文只做密文存储：此处解密用于最近激活展示，并剔除密文列
+    recent_cards: recentCards.map(({ card_ciphertext, ...rest }) => {
+      let card = null;
+      try { card = cardCrypto.decryptCard(card_ciphertext); } catch (err) { /* 保持 null */ }
+      return { ...rest, card };
+    }),
     recent_logs: recentLogs,
     app_distribution: appDistribution,
     revenue: revenue

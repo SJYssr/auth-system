@@ -2,20 +2,31 @@
  * 首次启动引导：创建第一个超级管理员
  *
  * 两种方式：
- * 1. 环境变量注入（Docker / CI 部署推荐）：
+ * 1. 环境变量注入（推荐，Docker / CI 部署）：
  *    INITIAL_ADMIN_USERNAME=admin
  *    INITIAL_ADMIN_PASSWORD=<密码>
  *    INITIAL_ADMIN_EMAIL=admin@example.com
  *    密码为空则拒绝启动。
  *
- * 2. API 引导页（手动部署）：admins 表为空时自动生成一次性 setup_token，
- *    前端 /setup 页面携带 token 创建超管。
+ * 2. 带外密钥的 API 引导（手动部署）：服务端配置 SETUP_TOKEN 后，
+ *    运维用 curl 携带该 token 调 POST /api/setup 创建超管。
+ *    token 只存在于服务端环境变量，绝不经 HTTP 响应下发，
+ *    因此不存在“匿名请求即可拿到初始化凭据”的路径。
+ *    未配置 SETUP_TOKEN 时该接口整体关闭。
  *
  * 安全校验：admins 表已有数据时跳过（幂等），不会覆盖已有管理员。
  */
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const pool = require('../config/db');
+
+/** 恒定时间比较，避免按字节泄露 token 前缀 */
+function safeEquals(a, b) {
+  const ba = Buffer.from(String(a), 'utf8');
+  const bb = Buffer.from(String(b), 'utf8');
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
 
 /**
  * 环境变量方式：在服务启动时调用，admins 为空则创建第一个超管
@@ -32,7 +43,7 @@ async function bootstrapFromEnv() {
   if (!username || !password) {
     console.error(
       '\n❌ 数据库中尚无管理员账号，且未配置 INITIAL_ADMIN_USERNAME / INITIAL_ADMIN_PASSWORD 环境变量。\n' +
-      '   请在环境变量中设置初始管理员账号密码后重启，或访问 /api/setup 通过引导页创建。\n'
+      '   请在环境变量中设置初始管理员账号密码后重启（手动初始化请配置 SETUP_TOKEN 后调用 POST /api/setup）。\n'
     );
     process.exit(1);
   }
@@ -53,34 +64,25 @@ async function bootstrapFromEnv() {
 }
 
 /**
- * 获取一次性 setup token（admins 为空时生成）
- * @returns {Promise<{setup_token: string}|null>} null 表示已有管理员
- */
-async function getSetupToken() {
-  const [rows] = await pool.execute('SELECT COUNT(*) as cnt FROM admins');
-  if (rows[0].cnt > 0) return null;
-
-  // 生成一次性 token，存入 datas 表的临时字段（复用单行配置表）
-  const token = crypto.randomBytes(16).toString('hex');
-  await pool.execute(
-    'INSERT INTO datas (id, setup_token) VALUES (1, ?) ON DUPLICATE KEY UPDATE setup_token = ?',
-    [token, token]
-  );
-  return { setup_token: token };
-}
-
-/**
- * 通过 setup token 创建第一个超管
- * @param {string} setupToken - 引导页携带的 token
+ * 通过带外 SETUP_TOKEN 创建第一个超管
+ * @param {string} setupToken - 运维从环境变量提供的 token
  * @param {string} username
  * @param {string} email
  * @param {string} password
  * @returns {Promise<boolean>} true 表示创建成功
- * @throws {Error} token 无效 / 已有管理员 / 参数不合法
+ * @throws {Error} token 无效 / 已有管理员 / 参数不合法 / 接口未开启
  */
 async function createFirstAdmin(setupToken, username, email, password) {
+  const expected = process.env.SETUP_TOKEN;
+  if (!expected) {
+    throw new Error('初始化接口未开启');
+  }
   if (!setupToken || !username || !email || !password) {
     throw new Error('参数不完整');
+  }
+  // 先校验凭据，再校验业务前置条件，避免未授权请求探测“是否已初始化”
+  if (!safeEquals(setupToken, expected)) {
+    throw new Error('引导 token 无效');
   }
   if (String(password).length < 8) {
     throw new Error('密码长度至少 8 位');
@@ -89,28 +91,31 @@ async function createFirstAdmin(setupToken, username, email, password) {
     throw new Error('邮箱格式不正确');
   }
 
-  // 校验 token
-  const [rows] = await pool.execute('SELECT setup_token FROM datas WHERE id = 1');
-  if (rows.length === 0 || !rows[0].setup_token || rows[0].setup_token !== setupToken) {
-    throw new Error('引导 token 无效或已过期');
+  // 确认仍无管理员（创建与判断在同一事务内，防止并发抢注）
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [adminRows] = await conn.execute('SELECT COUNT(*) as cnt FROM admins FOR UPDATE');
+    if (adminRows[0].cnt > 0) {
+      throw new Error('系统已存在管理员，引导页不可用');
+    }
+    const hash = await bcrypt.hash(password, 10);
+    await conn.execute(
+      'INSERT INTO admins (username, email, password, is_superuser, status, max_apps, max_card_activations) ' +
+      'VALUES (?, ?, ?, 1, ?, -1, -1)',
+      [username, email, hash, 'enabled']
+    );
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback().catch(() => {});
+    throw err;
+  } finally {
+    conn.release();
   }
 
-  // 确认仍无管理员
-  const [adminRows] = await pool.execute('SELECT COUNT(*) as cnt FROM admins');
-  if (adminRows[0].cnt > 0) {
-    throw new Error('系统已存在管理员，引导页不可用');
-  }
-
-  const hash = await bcrypt.hash(password, 10);
-  await pool.execute(
-    'INSERT INTO admins (username, email, password, is_superuser, status, max_apps, max_card_activations) ' +
-    'VALUES (?, ?, ?, 1, ?, -1, -1)',
-    [username, email, hash, 'enabled']
-  );
-
-  // 立即作废 setup token
-  await pool.execute('UPDATE datas SET setup_token = NULL WHERE id = 1');
+  // 立即作废可能残留的历史 setup_token（004 迁移遗留列，仅清理，不再生成）
+  await pool.execute('UPDATE datas SET setup_token = NULL WHERE id = 1').catch(() => {});
   return true;
 }
 
-module.exports = { bootstrapFromEnv, getSetupToken, createFirstAdmin };
+module.exports = { bootstrapFromEnv, createFirstAdmin };
