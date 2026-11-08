@@ -16,7 +16,8 @@ import { ElMessage } from 'element-plus'
  */
 export function useListPage({ fetcher, filters = {}, perPage = 20 }) {
   const rows = ref([])
-  const loading = ref(true)
+  // 初始必须是 false：页面挂载时若还没发请求（如未选应用），true 会让 v-loading 永久转圈
+  const loading = ref(false)
   const filterState = reactive({ ...filters })
   const pagination = ref({ page: 1, per_page: perPage, total_records: 0 })
 

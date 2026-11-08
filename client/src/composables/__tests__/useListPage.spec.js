@@ -20,7 +20,7 @@ describe('useListPage', () => {
     const fetcher = vi.fn().mockResolvedValue(paginated([{ id: 1 }], 42))
     const { rows, loading, pagination, fetchData } = useListPage({ fetcher })
 
-    expect(loading.value).toBe(true)
+    expect(loading.value).toBe(false)
     await fetchData()
     expect(fetcher).toHaveBeenCalledWith({ page: 1, per_page: 20 })
     expect(rows.value).toEqual([{ id: 1 }])
@@ -61,5 +61,22 @@ describe('useListPage', () => {
     expect(loading.value).toBe(false)
     await fetchData()
     expect(rows.value).toEqual([{ id: 2 }])
+  })
+
+  // 回归：卡密/版本管理页未选应用时不会发请求，loading 初值若为 true 就永久转圈
+  it('未发起请求前不处于加载态（未选应用不会永久 loading）', async () => {
+    const fetcher = vi.fn()
+    const { loading, rows, fetchData } = useListPage({
+      fetcher: (params) => params.app_id ? fetcher(params) : { data: [], pagination: { total_records: 0 } }
+    })
+
+    expect(loading.value).toBe(false)
+    expect(fetcher).not.toHaveBeenCalled()
+
+    // 页面挂载时无条件调用一次：guard 返回空集，加载态保持结束
+    await fetchData()
+    expect(fetcher).not.toHaveBeenCalled()
+    expect(rows.value).toEqual([])
+    expect(loading.value).toBe(false)
   })
 })

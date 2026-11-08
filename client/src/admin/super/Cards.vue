@@ -730,12 +730,14 @@ const initData = async () => {
   appName.value = ''
   searchForm.app_id = appId.value || ''
   await loadAppOptions()
-  // 如果从应用详情页跳转过来，自动加载该应用的卡密
+  // 从应用详情页跳转过来时回显应用名
   if (appId.value) {
     const selected = appOptions.value.find(a => a.id === appId.value)
     appName.value = selected ? selected.app_name : ''
-    await fetchData()
   }
+  // 无条件走一次数据流：未选应用时 fetcher 直接返回空集，用于结束初始加载态，
+  // 避免「不选应用就一直 loading」
+  await fetchData()
 }
 
 onMounted(initData)

@@ -71,7 +71,7 @@ async function createCards(appId, count = 1, cardType = '天卡', price = 0, poi
 
 /** 卡密列表/详情返回的字段：不回 SELECT *，剔除会话凭据 token / token_expires_at，
  *  避免后台接口把客户端的活跃会话凭据下发到前端 */
-const CARD_FIELDS = 'c.id, c.app_id, c.card_ciphertext, c.card_suffix, c.card_type, c.price, c.points, c.card_remark, c.status, ' +
+const CARD_FIELDS = 'c.id, c.app_id, c.card_ciphertext, c.card, c.card_suffix, c.card_type, c.price, c.points, c.card_remark, c.status, ' +
   'c.is_activated, c.activated_at, c.expires_at, c.mac, c.login_count, c.activation_ip, ' +
   'c.last_login_time, c.last_login_ip, c.version, c.owner_id, c.created_at, c.updated_at';
 
@@ -80,13 +80,16 @@ function safeDecrypt(ciphertext) {
   try { return cardCrypto.decryptCard(ciphertext); } catch (err) { return null; }
 }
 
-/** 把密文列解密为 card 字段下发，并剔除密文（前端不需要，也不该拿到密文） */
+/** 把密文列解密为 card 字段下发，并剔除密文（前端不需要，也不该拿到密文）
+ *  兼容历史数据：迁移前生成、card_ciphertext 为空的行回落到已废弃的明文列，
+ *  否则列表里这些卡密的号码会整列空白。 */
 function decorateCard(row) {
   if (!row) return row;
-  const { card_ciphertext, ...rest } = row;
+  const { card_ciphertext, card: legacyCard, ...rest } = row;
   let card = null;
   // Pepper 轮换或密文损坏时不影响列表可用性，仅该行 card 为空
   try { card = cardCrypto.decryptCard(card_ciphertext); } catch (err) { /* 保持 null */ }
+  if (!card && legacyCard) card = legacyCard;
   return { ...rest, card, card_masked: card ? cardCrypto.maskCard(card) : '' };
 }
 

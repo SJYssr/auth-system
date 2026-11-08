@@ -7,6 +7,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+// IPv6 下必须用官方归一化函数，否则同一 /64 前缀可绕过按 IP 限流（express-rate-limit v8 会告警）
+const { ipKeyGenerator } = rateLimit;
 const http = require('http');
 const path = require('path');
 const crypto = require('crypto');
@@ -199,7 +201,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     max: 5,
     store: new MySQLStore('pub-login'),
     message: { success: false, message: '登录尝试过于频繁，请1分钟后再试' },
-    keyGenerator: (req) => req.ip
+    keyGenerator: (req) => ipKeyGenerator(req.ip)
   }));
 
   // 验证码接口限流
@@ -208,7 +210,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     max: 30,
     store: new MySQLStore('captcha'),
     message: { success: false, message: '请求过于频繁，请稍后再试' },
-    keyGenerator: (req) => req.ip
+    keyGenerator: (req) => ipKeyGenerator(req.ip)
   }));
 
   // 客户端 API 限流
@@ -217,7 +219,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     max: 60,
     store: new MySQLStore('pub'),
     message: { success: false, message: '请求过于频繁，请稍后再试' },
-    keyGenerator: (req) => req.ip
+    keyGenerator: (req) => ipKeyGenerator(req.ip)
   }));
 
   // OpenAPI 3.0 规范（客户端卡密 API 的集成契约，供 SDK 与文档工具消费）
@@ -271,7 +273,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
       windowMs: 60 * 1000,
       max: 60,
       store: new MySQLStore('root'),
-      keyGenerator: (req) => req.ip,
+      keyGenerator: (req) => ipKeyGenerator(req.ip),
       handler: (req, res) => res.status(429).json({ errcode: '-1009' })
     })
   );
@@ -280,7 +282,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     windowMs: 60 * 1000,
     max: 10,
     store: new MySQLStore('root-login'),
-    keyGenerator: (req) => req.ip,
+    keyGenerator: (req) => ipKeyGenerator(req.ip),
     handler: (req, res) => res.status(429).json({ errcode: '-1009' })
   }));
 
@@ -291,7 +293,7 @@ app.use(morgan('[:date[iso]] :method :safe-url :status :response-time ms'));
     windowMs: 15 * 60 * 1000,
     max: 10,
     store: new MySQLStore('setup'),
-    keyGenerator: (req) => req.ip,
+    keyGenerator: (req) => ipKeyGenerator(req.ip),
     handler: (req, res) => res.status(429).json({ success: false, message: '请求过于频繁' })
   }), async (req, res) => {
     try {
